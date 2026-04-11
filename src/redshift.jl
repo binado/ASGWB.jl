@@ -77,11 +77,11 @@ function _build_redshift_grid(
 end
 
 function _source_frame_fn(spec::RedshiftPriorSpec, theta)
-    if spec.family == "madau_dickinson"
+    if spec.family == MadauDickinson
         return z -> madau_dickinson_source_frame_distribution(
             z; gamma=theta.gamma, kappa=theta.kappa, z_peak=theta.z_peak,
         )
-    elseif spec.family == "power_law"
+    elseif spec.family == PowerLaw
         return z -> power_law_source_frame_distribution(z; lamb=theta.lamb)
     else
         throw(ArgumentError("unsupported redshift prior family $(spec.family)"))

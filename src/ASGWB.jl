@@ -1,3 +1,12 @@
+"""
+    ASGWB
+
+Astrophysical stochastic gravitational-wave background modeling: importance
+caches, redshift grids, likelihoods, and sampling (AdvancedHMC and Turing).
+
+Use [`importance_sampling_problem`](@ref) to build problems in memory, or
+[`load_cache`](@ref) to read the Julia HDF5 cache format.
+"""
 module ASGWB
 
 include("types.jl")
@@ -13,8 +22,12 @@ include("turing_model.jl")
 
 # Types
 export ImportanceSamplingProblem, ImportanceCache,
+    importance_sampling_problem,
     ProposalData, ObservationConfig,
-    RedshiftPriorSpec, RedshiftGridBundle,
+    RedshiftPriorSpec, RedshiftPriorFamily, MadauDickinson, PowerLaw,
+    parse_redshift_prior_family,
+    HyperParameters,
+    RedshiftGridBundle,
     IntrinsicPriorStrategy, RedshiftOnly, FullBNS,
     ASGWBLogDensity, redshift
 

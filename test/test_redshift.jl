@@ -14,7 +14,7 @@ using Test
             z_peak = Float64(read(group["theta/z_peak"])),
         )
         spec = RedshiftPriorSpec(
-            String(read(group["spec/family"])),
+            parse_redshift_prior_family(String(read(group["spec/family"]))),
             Float64(read(group["spec/z_min"])),
             Float64(read(group["spec/z_max"])),
             Int(read(group["spec/num_interp"])),

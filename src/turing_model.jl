@@ -1,3 +1,5 @@
+using Distributions: MvNormal
+using LinearAlgebra: Diagonal
 using Turing
 
 @model function asgwb_importance_turing_model(

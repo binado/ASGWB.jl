@@ -5,7 +5,6 @@ authors = ["binado <bernardopveronese@gmail.com>"]
 
 [deps]
 AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Bijectors = "76274a88-744f-5084-9051-94815aaf08c4"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
@@ -20,7 +19,6 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [compat]
 AdvancedHMC = "0.8.3"
-BenchmarkTools = "1.7.0"
 Bijectors = "0.15.20"
 Distributions = "0.25.123"
 FiniteDiff = "2.29.0"
@@ -30,7 +28,7 @@ LogDensityProblems = "2.2.0"
 LogDensityProblemsAD = "1.13.1"
 QuadGK = "2.11.3"
 Turing = "0.43.5"
-julia = "1.12"
+julia = "1.10"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

@@ -51,8 +51,9 @@ end
 
 function _read_redshift_prior_spec(group)::RedshiftPriorSpec
     spec_group = _require_child(group, "redshift_prior_spec")
+    family_str = _as_string(read(_require_child(spec_group, "family")))
     return RedshiftPriorSpec(
-        _as_string(read(_require_child(spec_group, "family"))),
+        parse_redshift_prior_family(family_str),
         Float64(read(_require_child(spec_group, "z_min"))),
         Float64(read(_require_child(spec_group, "z_max"))),
         Int(read(_require_child(spec_group, "num_interp"))),
@@ -60,25 +61,34 @@ function _read_redshift_prior_spec(group)::RedshiftPriorSpec
     )
 end
 
-const FULL_BNS_INTRINSIC_ORDER = [
-    "mass_1_source", "mass_2_source", "redshift",
-    "chi_1", "chi_2", "lambda_1", "lambda_2",
-]
+const _CACHE_HYPERPARAMETER_KEYS = ("H0", "Omega_m", "chi0", "chin")
 
-function _resolve_strategy(intrinsic_site_order::Vector{String})::IntrinsicPriorStrategy
-    if intrinsic_site_order == ["redshift"]
-        return RedshiftOnly()
-    elseif intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER
-        return FullBNS()
-    else
-        throw(
-            ArgumentError(
-                "unsupported intrinsic_site_order $(intrinsic_site_order); supported layouts are redshift-only and the full BNS intrinsic prior",
-            ),
-        )
+function _read_hyperparameters(group::HDF5.Group)::HyperParameters
+    for k in _CACHE_HYPERPARAMETER_KEYS
+        haskey(group, k) || throw(ArgumentError("missing hyperparameter $(k)"))
     end
+    for k in keys(group)
+        kn = String(k)
+        kn in _CACHE_HYPERPARAMETER_KEYS ||
+            throw(ArgumentError("unknown hyperparameter $(kn)"))
+    end
+    return HyperParameters(;
+        H0=_read_float_scalar_dataset(group, "H0"),
+        Omega_m=_read_float_scalar_dataset(group, "Omega_m"),
+        chi0=_read_float_scalar_dataset(group, "chi0"),
+        chin=_read_float_scalar_dataset(group, "chin"),
+    )
 end
 
+"""
+    load_cache(path::AbstractString) -> ImportanceSamplingProblem
+
+Read a Julia-native HDF5 importance cache written with format
+`asgwb.julia.importance_cache` and return an [`ImportanceSamplingProblem`](@ref).
+
+This is a convenience wrapper around disk I/O; equivalent in-memory problems can
+be built with [`importance_sampling_problem`](@ref).
+"""
 function load_cache(path::AbstractString)::ImportanceSamplingProblem
     return h5open(path, "r") do file
         attrs = attributes(file)
@@ -133,14 +143,7 @@ function load_cache(path::AbstractString)::ImportanceSamplingProblem
             )
         end
 
-        hyperparameters = Dict{String,Float64}()
-        hyperparameters_group = _require_child(file, "hyperparameters")
-        for key in keys(hyperparameters_group)
-            hyperparameters[String(key)] = _read_float_scalar_dataset(
-                hyperparameters_group,
-                key,
-            )
-        end
+        hyperparameters = _read_hyperparameters(_require_child(file, "hyperparameters"))
 
         redshift_prior_spec = _read_redshift_prior_spec(file)
 
@@ -212,16 +215,13 @@ function load_cache(path::AbstractString)::ImportanceSamplingProblem
             Float64(_read_attr(attrs, "observation_time_yr")),
         )
 
-        strategy = _resolve_strategy(intrinsic_site_order)
-
-        return ImportanceSamplingProblem(
+        return importance_sampling_problem(
             proposal,
             observation,
             redshift_prior_spec,
             Float64(_read_attr(attrs, "local_merger_rate")),
             Float64(_read_attr(attrs, "redshift_integral_fiducial")),
             hyperparameters,
-            strategy,
         )
     end
 end
