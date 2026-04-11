@@ -1,0 +1,26 @@
+{
+  "cache": "test/fixtures/posterior_cache_julia.h5",
+  "priors": {
+    "H0": { "low": 20.0, "high": 140.0 },
+    "Omega_m": { "low": 0.0, "high": 1.0 },
+    "chi0": { "low": 0.0, "high": 2.0 },
+    "chin": { "low": -1.0, "high": 1.0 },
+    "gamma": { "low": 0.0, "high": 5.0 },
+    "kappa": { "low": 0.0, "high": 10.0 },
+    "z_peak": { "low": 0.0, "high": 5.0 }
+  },
+  "init": {
+    "H0": 70.0,
+    "Omega_m": 0.3,
+    "chi0": 1.1,
+    "chin": 0.2,
+    "gamma": 2.9,
+    "kappa": 6.0,
+    "z_peak": 2.2
+  },
+  "sampler": {
+    "n_samples": 4,
+    "n_adapts": 3,
+    "target_acceptance": 0.8
+  }
+}
