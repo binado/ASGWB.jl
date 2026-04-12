@@ -91,6 +91,12 @@ Base.@kwdef struct ProposalFiducialParameters
     Omega_m::Float64
     chi0::Float64
     chin::Float64
+    """Madau–Dickinson population scalars for reconstructing proposal redshift density (format v3)."""
+    gamma::Union{Nothing,Float64} = nothing
+    kappa::Union{Nothing,Float64} = nothing
+    z_peak::Union{Nothing,Float64} = nothing
+    """Power-law redshift index `lamb` when `redshift_prior_spec.family` is `PowerLaw`."""
+    lamb::Union{Nothing,Float64} = nothing
 end
 
 const FULL_BNS_INTRINSIC_ORDER = [

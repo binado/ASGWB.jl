@@ -1,4 +1,89 @@
+using HDF5
 using Test
+
+@testset "load_cache format v3 omits proposal_log_prob and dgw_fid_sq" begin
+    fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
+    ref = load_cache(fixture_path)
+    z = ref.proposal.samples.redshift
+    spec = ref.redshift_prior_spec
+    γ, κ, zp = 2.7, 3.0, 2.5
+    fid = ProposalFiducialParameters(;
+        H0=ref.fiducial_parameters.H0,
+        Omega_m=ref.fiducial_parameters.Omega_m,
+        chi0=ref.fiducial_parameters.chi0,
+        chin=ref.fiducial_parameters.chin,
+        gamma=γ,
+        kappa=κ,
+        z_peak=zp,
+    )
+    d_l = luminosity_distance.(z, fid.H0, fid.Omega_m)
+    d_gw = gravitational_wave_distance.(z, d_l, fid.chi0, fid.chin)
+    scale = (d_l ./ d_gw) .^ 2
+    raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, :, 1)
+    h = HyperParameters(;
+        H0=fid.H0,
+        Omega_m=fid.Omega_m,
+        chi0=fid.chi0,
+        chin=fid.chin,
+        gamma=γ,
+        kappa=κ,
+        z_peak=zp,
+    )
+    bundle = build_redshift_grid_bundle(h, spec)
+    expected_lp = log_prob_from_bundle.(z, Ref(bundle))
+
+    path, io = mktemp()
+    close(io)
+    try
+        h5open(path, "w") do f
+            a = attributes(f)
+            a["format_name"] = "asgwb.julia.importance_cache"
+            a["format_version"] = 3
+            a["local_merger_rate"] = ref.local_merger_rate
+            a["observation_time_sec"] = ref.observation.observation_time_sec
+            a["observation_time_yr"] = ref.observation.observation_time_yr
+            a["redshift_integral_fiducial"] = ref.redshift_integral_fiducial
+
+            write(f, "intrinsic_site_order", ref.proposal.intrinsic_site_order)
+            write(
+                f,
+                "proposal_intrinsic_vector",
+                Matrix(permutedims(ref.proposal.intrinsic_vector)),
+            )
+            write(f, "frequencies", ref.observation.frequencies)
+            write(f, "in_band_mask", Vector{Bool}(ref.observation.in_band_mask))
+            write(f, "fiducial_spectral_density", ref.observation.fiducial_spectral_density)
+            write(f, "covariance", ref.observation.covariance)
+            write(f, "sgwb_scale", ref.observation.sgwb_scale)
+            write(f, "cached_flux", Matrix(permutedims(raw_flux)))
+
+            g = create_group(f, "proposal_samples")
+            write(g, "redshift", z)
+
+            hg = create_group(f, "hyperparameters")
+            write(hg, "H0", fid.H0)
+            write(hg, "Omega_m", fid.Omega_m)
+            write(hg, "chi0", fid.chi0)
+            write(hg, "chin", fid.chin)
+            write(hg, "gamma", γ)
+            write(hg, "kappa", κ)
+            write(hg, "z_peak", zp)
+
+            sg = create_group(f, "redshift_prior_spec")
+            write(sg, "family", "madau_dickinson")
+            write(sg, "z_min", spec.z_min)
+            write(sg, "z_max", spec.z_max)
+            write(sg, "num_interp", spec.num_interp)
+        end
+
+        p = load_cache(path)
+        @test p.proposal.cached_flux_over_dgw2 ≈ ref.proposal.cached_flux_over_dgw2
+        @test p.proposal.dgw_fid_sq ≈ d_gw .^ 2
+        @test p.proposal.log_prob ≈ expected_lp
+    finally
+        rm(path; force=true)
+    end
+end
 
 @testset "importance_sampling_problem matches load_cache fixture" begin
     fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")

@@ -3,6 +3,7 @@ using HDF5
 const JULIA_IMPORTANCE_CACHE_FORMAT_NAME = "asgwb.julia.importance_cache"
 const JULIA_IMPORTANCE_CACHE_FORMAT_VERSION = 1
 const JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2 = 2
+const JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3 = 3
 
 _as_string(value::AbstractString) = String(value)
 _as_string(value::AbstractVector{UInt8}) = String(copy(value))
@@ -63,21 +64,38 @@ function _read_redshift_prior_spec(group)::RedshiftPriorSpec
 end
 
 const _CACHE_FIDUCIAL_KEYS = ("H0", "Omega_m", "chi0", "chin")
+const _CACHE_OPTIONAL_POPULATION_KEYS = ("gamma", "kappa", "z_peak", "lamb")
 
-function _read_proposal_fiducial_parameters(group::HDF5.Group)::ProposalFiducialParameters
+function _read_optional_float_scalar(group::HDF5.Group, key::AbstractString)::Union{Nothing,Float64}
+    haskey(group, key) || return nothing
+    return Float64(read(group[key]))
+end
+
+function _read_proposal_fiducial_parameters(
+    group::HDF5.Group,
+    format_version::Integer,
+)::ProposalFiducialParameters
     for k in _CACHE_FIDUCIAL_KEYS
         haskey(group, k) || throw(ArgumentError("missing hyperparameter $(k)"))
     end
+    allowed = if format_version >= JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3
+        Set{String}(collect(_CACHE_FIDUCIAL_KEYS) ∪ collect(_CACHE_OPTIONAL_POPULATION_KEYS))
+    else
+        Set{String}(collect(_CACHE_FIDUCIAL_KEYS))
+    end
     for k in keys(group)
         kn = String(k)
-        kn in _CACHE_FIDUCIAL_KEYS ||
-            throw(ArgumentError("unknown hyperparameter $(kn)"))
+        kn in allowed || throw(ArgumentError("unknown hyperparameter $(kn)"))
     end
     return ProposalFiducialParameters(;
         H0=_read_float_scalar_dataset(group, "H0"),
         Omega_m=_read_float_scalar_dataset(group, "Omega_m"),
         chi0=_read_float_scalar_dataset(group, "chi0"),
         chin=_read_float_scalar_dataset(group, "chin"),
+        gamma=_read_optional_float_scalar(group, "gamma"),
+        kappa=_read_optional_float_scalar(group, "kappa"),
+        z_peak=_read_optional_float_scalar(group, "z_peak"),
+        lamb=_read_optional_float_scalar(group, "lamb"),
     )
 end
 
@@ -125,6 +143,13 @@ those datasets; in that case pass `detectors` as a vector of [`Detector`](@ref) 
 covariance and per-bin scales are rebuilt from tabulated PSDs and overlap reduction
 functions (requires at least two detectors).
 
+Version `3` stores per-frequency `cached_flux` (flux before multiplying by
+`(D_L / D_gw)^2` with fiducial distances) instead of `cached_flux_over_dgw2`. It may omit
+`proposal_log_prob` and `dgw_fid_sq`; those are then reconstructed from samples,
+[`RedshiftPriorSpec`](@ref), and `hyperparameters` (including population scalars
+`gamma`, `kappa`, `z_peak` for Madau–Dickinson or `lamb` for power-law when
+`proposal_log_prob` is absent).
+
 This is a convenience wrapper around disk I/O; equivalent in-memory problems can
 be built with [`importance_sampling_problem`](@ref).
 """
@@ -142,10 +167,16 @@ function load_cache(
         )
 
         format_version = Int(_read_attr(attrs, "format_version"))
-        if !(format_version in (JULIA_IMPORTANCE_CACHE_FORMAT_VERSION, JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2))
+        if !(
+            format_version in (
+                JULIA_IMPORTANCE_CACHE_FORMAT_VERSION,
+                JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2,
+                JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3,
+            )
+        )
             throw(
                 ArgumentError(
-                    "unsupported cache format version $(format_version), expected $(JULIA_IMPORTANCE_CACHE_FORMAT_VERSION) or $(JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2)",
+                    "unsupported cache format version $(format_version), expected 1, 2, or 3",
                 ),
             )
         end
@@ -153,19 +184,10 @@ function load_cache(
         intrinsic_site_order = _read_string_vector(
             _require_child(file, "intrinsic_site_order"),
         )
-        proposal_log_prob = _read_float_vector(
-            _require_child(file, "proposal_log_prob"),
-            "proposal_log_prob",
-        )
         proposal_intrinsic_vector = _read_float_matrix(
             _require_child(file, "proposal_intrinsic_vector"),
             "proposal_intrinsic_vector",
         )
-        cached_flux_over_dgw2 = _read_float_matrix(
-            _require_child(file, "cached_flux_over_dgw2"),
-            "cached_flux_over_dgw2",
-        )
-        dgw_fid_sq = _read_float_vector(_require_child(file, "dgw_fid_sq"), "dgw_fid_sq")
         frequencies = _read_float_vector(
             _require_child(file, "frequencies"),
             "frequencies",
@@ -181,9 +203,9 @@ function load_cache(
             covariance = _read_float_vector(_require_child(file, "covariance"), "covariance")
             sgwb_scale = _read_float_vector(_require_child(file, "sgwb_scale"), "sgwb_scale")
         else
-            format_version == JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2 || throw(
+            format_version >= JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2 || throw(
                 ArgumentError(
-                    "cache missing covariance/sgwb_scale datasets requires format_version $(JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2)",
+                    "cache missing covariance/sgwb_scale datasets requires format_version ≥ $(JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_2)",
                 ),
             )
             detectors === nothing && throw(
@@ -218,11 +240,60 @@ function load_cache(
 
         fiducial_parameters = _read_proposal_fiducial_parameters(
             _require_child(file, "hyperparameters"),
+            format_version,
         )
 
         redshift_prior_spec = _read_redshift_prior_spec(file)
 
-        n_samples = length(proposal_log_prob)
+        haskey(proposal_samples, "redshift") || throw(
+            ArgumentError("proposal_samples must include a redshift entry"),
+        )
+        n_samples = length(proposal_samples["redshift"])
+        strategy = resolve_intrinsic_strategy(intrinsic_site_order)
+        samples_bundle = bundle_from_hdf5(intrinsic_site_order, proposal_samples)
+
+        proposal_log_prob = if haskey(file, "proposal_log_prob")
+            _read_float_vector(_require_child(file, "proposal_log_prob"), "proposal_log_prob")
+        else
+            format_version >= JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3 || throw(
+                ArgumentError(
+                    "missing proposal_log_prob is only supported for format_version $(JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3)",
+                ),
+            )
+            reconstruct_proposal_log_prob(
+                strategy,
+                samples_bundle,
+                redshift_prior_spec,
+                fiducial_parameters,
+            )
+        end
+
+        cached_flux_over_dgw2 = if format_version >= JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3
+            haskey(file, "cached_flux") || throw(
+                ArgumentError(
+                    "format_version $(JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3) requires dataset cached_flux",
+                ),
+            )
+            reconstruct_cached_flux_over_dgw2(
+                _read_float_matrix(_require_child(file, "cached_flux"), "cached_flux"),
+                proposal_samples["redshift"],
+                fiducial_parameters,
+            )
+        else
+            _read_float_matrix(
+                _require_child(file, "cached_flux_over_dgw2"),
+                "cached_flux_over_dgw2",
+            )
+        end
+
+        dgw_fid_sq = if haskey(file, "dgw_fid_sq")
+            _read_float_vector(_require_child(file, "dgw_fid_sq"), "dgw_fid_sq")
+        elseif format_version >= JULIA_IMPORTANCE_CACHE_FORMAT_VERSION_3
+            reconstruct_dgw_fid_sq(proposal_samples["redshift"], fiducial_parameters)
+        else
+            throw(ArgumentError("missing required HDF5 entry: dgw_fid_sq"))
+        end
+
         length(intrinsic_site_order) == size(proposal_intrinsic_vector, 2) || throw(
             ArgumentError(
                 "proposal_intrinsic_vector column count must match intrinsic_site_order length",
@@ -230,21 +301,24 @@ function load_cache(
         )
         size(proposal_intrinsic_vector, 1) == n_samples || throw(
             ArgumentError(
-                "proposal_intrinsic_vector row count must match proposal_log_prob length",
+                "proposal_intrinsic_vector row count must match redshift / sample count",
             ),
         )
         size(cached_flux_over_dgw2, 1) == n_samples || throw(
             ArgumentError(
-                "cached_flux_over_dgw2 row count must match proposal_log_prob length",
+                "cached flux matrix row count must match redshift / sample count",
             ),
         )
         length(dgw_fid_sq) == n_samples || throw(
-            ArgumentError("dgw_fid_sq length must match proposal_log_prob length"),
+            ArgumentError("dgw_fid_sq length must match redshift / sample count"),
+        )
+        length(proposal_log_prob) == n_samples || throw(
+            ArgumentError("proposal_log_prob length must match redshift / sample count"),
         )
         for key in intrinsic_site_order
             length(proposal_samples[key]) == n_samples || throw(
                 ArgumentError(
-                    "proposal_samples/$(key) length must match proposal_log_prob length",
+                    "proposal_samples/$(key) length must match redshift / sample count",
                 ),
             )
         end
@@ -252,7 +326,7 @@ function load_cache(
         n_frequencies = length(frequencies)
         size(cached_flux_over_dgw2, 2) == n_frequencies || throw(
             ArgumentError(
-                "cached_flux_over_dgw2 column count must match frequencies length",
+                "cached flux column count must match frequencies length",
             ),
         )
         length(covariance) == n_frequencies || throw(
@@ -267,11 +341,6 @@ function load_cache(
         length(fiducial_spectral_density) == n_frequencies || throw(
             ArgumentError("fiducial_spectral_density length must match frequencies length"),
         )
-        haskey(proposal_samples, "redshift") || throw(
-            ArgumentError("proposal_samples must include a redshift entry"),
-        )
-
-        samples_bundle = bundle_from_hdf5(intrinsic_site_order, proposal_samples)
 
         proposal = ProposalData(
             intrinsic_site_order,

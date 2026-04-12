@@ -5,9 +5,11 @@ Astrophysical stochastic gravitational-wave background modeling: importance
 caches, redshift grids, likelihoods, and sampling (AdvancedHMC and Turing).
 
 Use [`importance_sampling_problem`](@ref) to build problems in memory, or
-[`load_cache`](@ref) to read the Julia HDF5 cache format (`format_version` 1 or 2).
+[`load_cache`](@ref) to read the Julia HDF5 cache format (`format_version` 1, 2, or 3).
 For version 2 caches that omit `covariance` / `sgwb_scale`, pass `detectors=` to
 [`load_cache`](@ref) so those fields are rebuilt from [`Detector`](@ref) PSDs and ORFs.
+Version 3 stores raw per-sample `cached_flux` and may omit `proposal_log_prob` and
+`dgw_fid_sq` when fiducial population scalars are present in `hyperparameters`.
 Inference state is a nested [`HyperParameters`](@ref); caches carry
 [`ProposalFiducialParameters`](@ref) in `fiducial_parameters` (HDF5 group `hyperparameters`).
 """
@@ -20,10 +22,11 @@ include("detector/detector.jl")
 include("detector/overlap.jl")
 include("detector/covariance.jl")
 include("detector/observation.jl")
-include("io.jl")
 include("cosmology.jl")
 include("redshift.jl")
 include("priors.jl")
+include("cache.jl")
+include("io.jl")
 include("importance.jl")
 include("diagnostics.jl")
 include("posterior.jl")
