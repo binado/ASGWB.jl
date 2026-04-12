@@ -1,1 +1,5 @@
 Manifest.toml
+
+# GWFast ORF reference fixtures (generate with `uv run --script scripts/generate_orf_fixtures.py`)
+test/fixtures/orf_gwfast_reference.npz
+test/fixtures/orf_gwfast_reference_et_triangle.npz
