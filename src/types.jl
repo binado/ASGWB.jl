@@ -80,8 +80,8 @@ end
 """
     ProposalFiducialParameters
 
-Fiducial cosmology and propagation scalars stored in the HDF5 `hyperparameters`
-group with the importance cache (not the live MCMC state).
+Fiducial cosmology, propagation, and population scalars read from the HDF5 cache
+(`hyperparameters` and optionally matching keys under `redshift_prior_spec`), not the live MCMC state.
 """
 Base.@kwdef struct ProposalFiducialParameters
     H0::Float64

@@ -1,4 +1,4 @@
-using ASGWB: HyperParameters
+using ASGWB: HyperParameters, Detector
 using DelimitedFiles
 using JSON3
 
@@ -35,6 +35,7 @@ end
 
 struct Settings
     cache::String
+    detectors::Vector{Detector}
     priors::PriorBounds
     init::InitPoint
     sampler::SamplerConfig
@@ -110,8 +111,19 @@ end
     load_settings(path::AbstractString) -> Settings
 
 Read a JSON config file. Expected top-level keys: `cache`, `priors`, `init`, `sampler`;
-optional: `seed`, `observed_spectral_density_csv`, `output_jls`.
+optional: `detectors` (array of detector name strings, default `[\"H1\", \"L1\"]`), `seed`,
+`observed_spectral_density_csv`, `output_jls`.
 """
+function _detectors_from_config(raw)
+    if !haskey(raw, "detectors")
+        return [Detector("H1"), Detector("L1")]
+    end
+    d = raw.detectors
+    d isa AbstractVector || throw(ArgumentError("config.detectors must be a JSON array"))
+    length(d) >= 2 || throw(ArgumentError("config.detectors must list at least two detectors"))
+    return [Detector(String(name)) for name in d]
+end
+
 function load_settings(path::AbstractString)
     isfile(path) || throw(ArgumentError("config file not found: $(repr(path))"))
     raw = JSON3.read(read(path, String))
@@ -121,6 +133,7 @@ function load_settings(path::AbstractString)
     isempty(strip(cache)) && throw(ArgumentError("config.cache must be a non-empty path"))
     return Settings(
         cache,
+        _detectors_from_config(raw),
         _prior_bounds(raw),
         _init_point(raw),
         _sampler(raw),
@@ -190,6 +203,7 @@ end
 function merge_settings(
     s::Settings;
     cache::Union{Nothing,String} = nothing,
+    detectors::Union{Nothing,Vector{Detector}} = nothing,
     n_samples::Union{Nothing,Int} = nothing,
     n_adapts::Union{Nothing,Int} = nothing,
     target_acceptance::Union{Nothing,Float64} = nothing,
@@ -205,6 +219,7 @@ function merge_settings(
     )
     return Settings(
         something(cache, s.cache),
+        detectors === nothing ? s.detectors : detectors,
         s.priors,
         s.init,
         new_sampler,

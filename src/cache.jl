@@ -3,7 +3,7 @@
 
 Build [`HyperParameters`](@ref) from cache `hyperparameters` scalars and the file’s
 [`RedshiftPriorSpec`](@ref). Used when reconstructing per-sample proposal log-density
-from redshift grids (e.g. format v3 caches that omit `proposal_log_prob`).
+from redshift grids (e.g. caches that omit `proposal_log_prob`).
 
 Requires `gamma`, `kappa`, and `z_peak` on `fid` when `spec.family` is Madau–Dickinson,
 and `lamb` when the family is power-law.

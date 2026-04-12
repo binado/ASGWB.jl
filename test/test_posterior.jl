@@ -5,7 +5,7 @@ using Test
     cache_path = joinpath(@__DIR__, "fixtures", "posterior_cache_julia.h5")
     fixture_path = joinpath(@__DIR__, "fixtures", "deterministic_parity.h5")
 
-    cache = load_cache(cache_path)
+    cache = load_cache(cache_path, [Detector("H1"), Detector("L1")])
 
     h5open(fixture_path, "r") do file
         group = file["posterior_case"]

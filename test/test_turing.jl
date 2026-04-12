@@ -10,7 +10,10 @@ using Turing
             ("posterior_cache_julia.h5", "posterior_case"),
             ("full_intrinsic_cache_julia.h5", "full_intrinsic_case"),
         )
-            cache = load_cache(joinpath(@__DIR__, "fixtures", cache_filename))
+            cache = load_cache(
+                joinpath(@__DIR__, "fixtures", cache_filename),
+                [Detector("H1"), Detector("L1")],
+            )
             group = file[group_name]
 
             theta0 = HyperParameters((; (

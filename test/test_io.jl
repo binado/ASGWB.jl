@@ -3,9 +3,11 @@ using HDF5: delete_attribute
 using Test
 using Base.Filesystem: cp
 
-@testset "load_cache format v3 omits proposal_log_prob, dgw_fid_sq, fiducial spectrum; full BNS reconstruction" begin
+const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
+
+@testset "load_cache omits proposal_log_prob, dgw_fid_sq, fiducial spectrum; full BNS reconstruction" begin
     fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
-    ref = load_cache(fixture_path)
+    ref = load_cache(fixture_path, _TEST_LOAD_DETS)
     z = ref.proposal.samples.redshift
     spec = ref.redshift_prior_spec
     γ, κ, zp = 2.7, 3.0, 2.5
@@ -40,8 +42,8 @@ using Base.Filesystem: cp
     try
         h5open(path, "w") do f
             a = attributes(f)
-            a["format_name"] = "asgwb.julia.importance_cache"
-            a["format_version"] = 3
+            a[IMPORTANCE_CACHE_COMMAND_ATTR] = "synthetic test writer"
+            a[IMPORTANCE_CACHE_GIT_REVISION_ATTR] = "test"
             a["local_merger_rate"] = ref.local_merger_rate
             a["observation_time_sec"] = ref.observation.observation_time_sec
             a["observation_time_yr"] = ref.observation.observation_time_yr
@@ -53,8 +55,6 @@ using Base.Filesystem: cp
             )
             write(f, "frequencies", ref.observation.frequencies)
             write(f, "in_band_mask", Vector{Bool}(ref.observation.in_band_mask))
-            write(f, "covariance", ref.observation.covariance)
-            write(f, "sgwb_scale", ref.observation.sgwb_scale)
             write(f, "cached_flux", Matrix(permutedims(raw_flux)))
 
             g = create_group(f, "proposal_samples")
@@ -84,7 +84,7 @@ using Base.Filesystem: cp
             write(sg, "num_interp", spec.num_interp)
         end
 
-        p = load_cache(path)
+        p = load_cache(path, _TEST_LOAD_DETS)
         @test p.proposal.cached_flux_over_dgw2 ≈ ref.proposal.cached_flux_over_dgw2
         @test p.proposal.dgw_fid_sq ≈ d_gw .^ 2
         @test p.proposal.log_prob ≈ expected_lp
@@ -98,9 +98,8 @@ end
 
 @testset "importance_sampling_problem matches load_cache fixture" begin
     fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
-    from_file = load_cache(fixture_path)
+    from_file = load_cache(fixture_path, _TEST_LOAD_DETS)
 
-    sgwb_scale = [1 / sqrt(63115200.0), 1 / sqrt(63115200.0)]
     samples = FullBNSSamples(
         [1.4, 1.4],
         [1.2, 1.2],
@@ -119,27 +118,19 @@ end
         1.4 1.2 0.1 0.0 0.0 100.0 100.0
         1.4 1.2 0.2 0.0 0.0 100.0 100.0
     ]
+    dgw_sq = reconstruct_dgw_fid_sq(samples.redshift, from_file.fiducial_parameters)
     proposal = ProposalData(
         FULL_BNS_INTRINSIC_ORDER,
         samples,
         lp,
         intrinsic_mat,
         [1.0 2.0; 1.5 2.5],
-        [4.0, 9.0],
-    )
-    observation = ObservationConfig(
-        [1.0, 2.0],
-        [1.0, 1.0],
-        sgwb_scale,
-        BitVector([true, true]),
-        [0.0, 0.0],
-        365.25 * 24 * 3600,
-        1.0,
+        dgw_sq,
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 1024, nothing)
     from_memory = importance_sampling_problem(
         proposal,
-        observation,
+        from_file.observation,
         spec,
         161.0,
         1.0,
@@ -177,7 +168,7 @@ end
 
 @testset "load_cache" begin
     fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
-    problem = load_cache(fixture_path)
+    problem = load_cache(fixture_path, _TEST_LOAD_DETS)
 
     @test problem.proposal.intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER
     s = problem.proposal.samples
@@ -194,10 +185,11 @@ end
         1.4 1.2 0.2 0.0 0.0 100.0 100.0
     ]
     @test problem.proposal.cached_flux_over_dgw2 ≈ [1.0 2.0; 1.5 2.5]
-    @test problem.proposal.dgw_fid_sq ≈ [4.0, 9.0]
+    @test problem.proposal.dgw_fid_sq ≈
+        reconstruct_dgw_fid_sq(problem.proposal.samples.redshift, problem.fiducial_parameters)
     @test problem.observation.frequencies ≈ [1.0, 2.0]
-    @test problem.observation.covariance ≈ [1.0, 1.0]
-    @test problem.observation.sgwb_scale ≈ [1 / sqrt(63115200.0), 1 / sqrt(63115200.0)]
+    @test length(problem.observation.covariance) == length(problem.observation.frequencies)
+    @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
     @test problem.observation.in_band_mask == BitVector([true, true])
     @test problem.observation.fiducial_spectral_density ≈ [0.0, 0.0]
     @test problem.observation.sgwb_scale_in_band ≈ problem.observation.sgwb_scale
@@ -228,7 +220,7 @@ end
         delete_attribute(g, PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR)
         attributes(g)[PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR] = "BBH"
     end
-    @test_throws ArgumentError load_cache(path)
+    @test_throws ArgumentError load_cache(path, _TEST_LOAD_DETS)
 end
 
 @testset "importance_sampling_problem 5-arg infers redshift integral" begin

@@ -5,15 +5,18 @@ Astrophysical stochastic gravitational-wave background modeling: importance
 caches, redshift grids, likelihoods, and sampling (AdvancedHMC and Turing).
 
 Use [`importance_sampling_problem`](@ref) to build problems in memory, or
-[`load_cache`](@ref) to read the Julia HDF5 cache format (`format_version` 1, 2, or 3).
-For version 2 caches that omit `covariance` / `sgwb_scale`, pass `detectors=` to
-[`load_cache`](@ref) so those fields are rebuilt from [`Detector`](@ref) PSDs and ORFs.
-Version 3 stores raw per-sample `cached_flux` and may omit `proposal_log_prob` and
-`dgw_fid_sq` when fiducial population scalars are present in `hyperparameters`.
-Caches may omit `fiducial_spectral_density`; it is then filled from the fiducial
-[`HyperParameters`](@ref) implied by `hyperparameters` and the redshift prior (see
-[`fiducial_spectral_density`](@ref)). Caches may omit `redshift_integral_fiducial`; it is
-then set from [`fiducial_redshift_integral`](@ref) with the same population-key requirements.
+[`load_cache`](@ref) to read the HDF5 importance cache. Caches record provenance via root
+attributes [`IMPORTANCE_CACHE_COMMAND_ATTR`](@ref) and [`IMPORTANCE_CACHE_GIT_REVISION_ATTR`](@ref)
+(`command` and `git_revision`). Pass a vector of at least two [`Detector`](@ref) values as the
+second argument so `covariance` and `sgwb_scale` are built from tabulated PSDs and ORFs (those
+datasets must not appear in the file). Two-dimensional datasets `cached_flux` and
+`proposal_intrinsic_vector` use HDF5 extent `(n_columns, n_samples)` and are normalized to
+`(n_samples, n_columns)` on load. Per-sample flux is stored as `cached_flux` (before the
+fiducial ``(D_L/D_{gw})^2`` factor). Datasets `proposal_log_prob` and `dgw_fid_sq` may be omitted
+and are then reconstructed. Population scalars may live in `hyperparameters` and/or
+`redshift_prior_spec` (duplicate keys must agree). Caches may omit `fiducial_spectral_density`;
+it is then filled using [`fiducial_spectral_density`](@ref). Caches may omit
+`redshift_integral_fiducial`; it is then set from [`fiducial_redshift_integral`](@ref).
 Inference state is a nested [`HyperParameters`](@ref); caches carry
 [`ProposalFiducialParameters`](@ref) in `fiducial_parameters` (HDF5 group `hyperparameters`).
 """
@@ -62,9 +65,10 @@ export ImportanceSamplingProblem, ImportanceCache,
     ASGWBLogDensity, redshift
 
 # IO
-export load_cache, reconstruct_proposal_log_prob
+export load_cache, reconstruct_proposal_log_prob, reconstruct_dgw_fid_sq,
+    IMPORTANCE_CACHE_COMMAND_ATTR, IMPORTANCE_CACHE_GIT_REVISION_ATTR
 
-# Detector network (ORF / PSD covariance; optional HDF5 format v2)
+# Detector network (ORF / PSD covariance; used by `load_cache`)
 export Detector, PowerSpectralDensity, default_detector_data_dir,
     overlap_reduction_function, pairwise_overlap_reduction_function,
     covariance_on_grid, gaussian_bin_scale, gaussian_bin_variance,

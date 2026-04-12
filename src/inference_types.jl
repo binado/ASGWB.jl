@@ -160,11 +160,12 @@ end
     ImportanceSamplingProblem
 
 In-memory importance-sampling context. See [`importance_sampling_problem`](@ref) and
-[`load_cache`](@ref). `fiducial_parameters` holds HDF5 `hyperparameters` scalars
-([`ProposalFiducialParameters`](@ref)), not the live [`HyperParameters`](@ref) state.
-`redshift_integral_fiducial` is carried for cache round-trip and may differ from
-[`fiducial_redshift_integral`](@ref) when a legacy file used another normalization;
-likelihood evaluation uses the integral implied by the live [`HyperParameters`](@ref), not this field.
+[`load_cache`](@ref). `fiducial_parameters` merges population scalars from HDF5
+`hyperparameters` and `redshift_prior_spec` ([`ProposalFiducialParameters`](@ref)), not the live
+[`HyperParameters`](@ref) state. `redshift_integral_fiducial` is carried for cache round-trip and
+may differ from [`fiducial_redshift_integral`](@ref) when the file’s optional
+`redshift_integral_fiducial` attribute overrides the recomputed value; likelihood evaluation uses
+the integral implied by the live [`HyperParameters`](@ref), not this field.
 """
 struct ImportanceSamplingProblem
     proposal::ProposalData

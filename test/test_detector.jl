@@ -72,21 +72,22 @@ end
     @test all(isfinite, scale) && all(scale .> 0)
 end
 
-@testset "load_cache format v2 without covariance (reconstruct with detectors)" begin
+@testset "load_cache reconstructs covariance from detectors" begin
     path = joinpath(@__DIR__, "fixtures", "posterior_cache_julia_v2_minimal.h5")
     isfile(path) || error("missing fixture $path")
     d1 = Detector("H1")
     d2 = Detector("L1")
-    p = load_cache(path; detectors=[d1, d2])
+    p = load_cache(path, [d1, d2])
     @test length(p.observation.covariance) == length(p.observation.frequencies)
     @test all(isfinite, p.observation.covariance)
     @test length(p.observation.sgwb_scale) == length(p.observation.frequencies)
 end
 
-@testset "load_cache v2 parity with v1 when datasets present" begin
-    v1 = joinpath(@__DIR__, "fixtures", "posterior_cache_julia.h5")
-    p1 = load_cache(v1)
-    p2 = load_cache(v1; detectors=[Detector("H1"), Detector("L1")])
+@testset "load_cache is deterministic for the same path and detectors" begin
+    path = joinpath(@__DIR__, "fixtures", "posterior_cache_julia.h5")
+    dets = [Detector("H1"), Detector("L1")]
+    p1 = load_cache(path, dets)
+    p2 = load_cache(path, dets)
     @test p1.observation.covariance == p2.observation.covariance
     @test p1.observation.sgwb_scale == p2.observation.sgwb_scale
 end

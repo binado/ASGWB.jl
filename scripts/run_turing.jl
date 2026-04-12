@@ -16,7 +16,7 @@ include(joinpath(@__DIR__, "turing_settings.jl"))
 
 function _run(s::Settings)
     validate_init_in_priors(s)
-    problem = load_cache(s.cache)
+    problem = load_cache(s.cache, s.detectors)
     priors = build_uniform_priors(prior_dict(s))
     θ0 = theta0(s)
     observed = if s.observed_spectral_density_csv === nothing
