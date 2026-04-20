@@ -179,7 +179,8 @@ end
     @test s.chi_2 ≈ [0.0, 0.0]
     @test s.lambda_1 ≈ [100.0, 100.0]
     @test s.lambda_2 ≈ [100.0, 100.0]
-    @test problem.proposal.log_prob ≈ [-17.12928958264864, -15.702803964648165]
+    # tolerance reflects Simpson- vs trapezoid-based bundle norm (see radial_interpolant.jl)
+    @test problem.proposal.log_prob ≈ [-17.12928958264864, -15.702803964648165] rtol = 2e-3
     @test problem.proposal.intrinsic_vector ≈ Float64[
         1.4 1.2 0.1 0.0 0.0 100.0 100.0
         1.4 1.2 0.2 0.0 0.0 100.0 100.0

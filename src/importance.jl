@@ -30,10 +30,10 @@ Returns a NamedTuple with fields `weights`, `log_ratio`, `target_log_prob`, `dgw
 function compute_importance_weights(
     problem::ImportanceSamplingProblem,
     h::HyperParameters,
-    bundle::RedshiftGridBundle,
+    bundle::RadialInterpolant,
 )
     z = redshift(problem)
-    d_l = luminosity_distance.(z, h.cosmological.H0, h.cosmological.Omega_m)
+    d_l = luminosity_distance.(z, h.cosmological.H0, h.cosmological.Omega_m, Ref(bundle.companion))
     dgw_theta = gravitational_wave_distance.(z, d_l, h.propagation.chi0, h.propagation.chin)
     dgw_theta_sq = dgw_theta .^ 2
 

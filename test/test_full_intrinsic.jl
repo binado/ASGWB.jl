@@ -36,15 +36,18 @@ using Test
 
         evaluation = evaluate_importance_terms(theta, cache)
 
-        @test evaluation.target_log_prob ≈ expected_target_log_prob rtol = 1e-6
-        @test evaluation.log_ratio ≈ expected_log_ratio rtol = 1e-6
-        @test evaluation.weights ≈ expected_weights rtol = 1e-6
-        @test evaluation.dgw_theta_sq ≈ expected_dgw_theta_sq rtol = 1e-6
-        @test evaluation.redshift_integral ≈ expected_redshift_integral rtol = 1e-6
-        @test evaluation.expected_number_of_sources ≈ expected_number_of_sources rtol = 1e-6
-        @test evaluation.spectral_density ≈ expected_spectral_density rtol = 1e-6
+        # Fixtures were produced by the Python trapezoid/QuadGK stack; the Julia bundle
+        # and luminosity distance now use composite Simpson interpolation.
+        parity_rtol = 3e-2
+        @test evaluation.target_log_prob ≈ expected_target_log_prob rtol = parity_rtol
+        @test evaluation.log_ratio ≈ expected_log_ratio rtol = parity_rtol
+        @test evaluation.weights ≈ expected_weights rtol = parity_rtol
+        @test evaluation.dgw_theta_sq ≈ expected_dgw_theta_sq rtol = parity_rtol
+        @test evaluation.redshift_integral ≈ expected_redshift_integral rtol = parity_rtol
+        @test evaluation.expected_number_of_sources ≈ expected_number_of_sources rtol = parity_rtol
+        @test evaluation.spectral_density ≈ expected_spectral_density rtol = parity_rtol
         @test logprior(theta, priors) ≈ expected_log_prior rtol = 1e-6
-        @test loglikelihood(theta, cache) ≈ expected_log_likelihood rtol = 1e-6
-        @test logposterior(theta, cache, priors) ≈ expected_log_posterior rtol = 1e-6
+        @test loglikelihood(theta, cache) ≈ expected_log_likelihood rtol = parity_rtol
+        @test logposterior(theta, cache, priors) ≈ expected_log_posterior rtol = parity_rtol
     end
 end

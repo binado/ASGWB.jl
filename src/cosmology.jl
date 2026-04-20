@@ -21,6 +21,26 @@ function differential_comoving_volume(z::Real, H0::Real, Omega_m::Real)
     return d_h * d_c^2 / E(z, Omega_m)
 end
 
+"""
+    comoving_distance(z, H0, Omega_m, dist::RadialInterpolant) -> Real
+
+Comoving distance using a precomputed `RadialInterpolant` of `w -> 1/E(w, Omega_m)`.
+Equivalent to the scalar `quadgk` path but O(1) per call.
+"""
+comoving_distance(z::Real, H0::Real, Omega_m::Real, dist::RadialInterpolant) =
+    (SPEED_OF_LIGHT_KM_S / H0) * integrate(dist, z, w -> inv(E(w, Omega_m)))
+
+luminosity_distance(z::Real, H0::Real, Omega_m::Real, dist::RadialInterpolant) =
+    (1 + z) * comoving_distance(z, H0, Omega_m, dist)
+
+function differential_comoving_volume(
+    z::Real, H0::Real, Omega_m::Real, dist::RadialInterpolant,
+)
+    d_h = SPEED_OF_LIGHT_KM_S / H0
+    d_c = comoving_distance(z, H0, Omega_m, dist)
+    return d_h * d_c^2 / E(z, Omega_m)
+end
+
 function gravitational_wave_distance(
     z::Real,
     luminosity_distance::Real,

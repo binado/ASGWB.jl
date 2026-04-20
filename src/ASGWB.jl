@@ -29,6 +29,7 @@ include("detector/detector.jl")
 include("detector/overlap.jl")
 include("detector/covariance.jl")
 include("detector/observation.jl")
+include("radial_interpolant.jl")
 include("cosmology.jl")
 include("redshift.jl")
 include("priors.jl")
@@ -61,6 +62,7 @@ export ImportanceSamplingProblem, ImportanceCache,
     PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR, PROPOSAL_SAMPLES_SOURCE_TYPE_BNS,
     as_flat_constrained,
     validate_redshift_spec_population,
+    RadialInterpolant,
     RedshiftGridBundle,
     IntrinsicPriorStrategy, FullBNS,
     ASGWBLogDensity, redshift
