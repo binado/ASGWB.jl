@@ -52,9 +52,8 @@ using Test
             @test length(stats) == 3
 
             for sample in samples
-                flat = as_flat_constrained(sample)
                 for (name, (low, high)) in prior_bounds
-                    value = getproperty(flat, Symbol(name))
+                    value = getproperty(sample, Symbol(name))
                     @test isfinite(value)
                     @test low <= value <= high
                 end

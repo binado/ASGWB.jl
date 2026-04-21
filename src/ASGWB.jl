@@ -19,7 +19,7 @@ present, is ignored on load; [`load_cache`](@ref) always fills the observation u
 [`fiducial_spectral_density`](@ref) so the default likelihood data match the current Julia pipeline.
 Caches may omit
 `redshift_integral_fiducial`; it is then set from [`fiducial_redshift_integral`](@ref).
-Inference state is a nested [`HyperParameters`](@ref); caches carry
+Inference state is a flat [`HyperParameters`](@ref) `NamedTuple`; caches carry
 [`ProposalFiducialParameters`](@ref) in `fiducial_parameters` (HDF5 group `hyperparameters`).
 """
 module ASGWB
@@ -51,19 +51,11 @@ export ImportanceSamplingProblem, ImportanceCache,
     RedshiftPriorSpec, RedshiftPriorFamily, MadauDickinson, PowerLaw,
     parse_redshift_prior_family,
     HyperParameters,
-    CosmologicalParameters,
-    ModifiedPropagationParameters,
-    PopulationParameters,
-    MadauDickinsonParameters,
-    PowerLawRedshiftParameters,
-    InferencePriors,
     ProposalFiducialParameters,
     ProposalSampleBundle,
     FullBNSSamplesSoA, stack_source_masses,
     FULL_BNS_INTRINSIC_ORDER,
     PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR, PROPOSAL_SAMPLES_SOURCE_TYPE_BNS,
-    as_flat_constrained,
-    validate_redshift_spec_population,
     RadialInterpolant,
     RedshiftGridBundle,
     IntrinsicPriorStrategy, FullBNS,
@@ -111,7 +103,6 @@ export loglikelihood, logposterior,
 
 # Sampling (AdvancedHMC)
 export DEFAULT_PARAMETER_ORDER,
-    build_prior_distribution,
     unconstrained_initial_point, constrained_parameters,
     ad_logdensity, finite_difference_logdensity_and_gradient,
     sample_with_advancedhmc

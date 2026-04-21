@@ -140,34 +140,36 @@ function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
     return x0 + (target - c0) * (x1 - x0) / (c1 - c0)
 end
 
+"""
+    build_uniform_priors(bounds) -> ProductNamedTupleDistribution
+
+Build the seven-parameter uniform hyperparameter prior as a native
+[`Distributions.product_distribution`](@ref) keyed by [`DEFAULT_PARAMETER_ORDER`](@ref).
+`bounds` is a dict keyed by parameter name (`"H0"`, `"Omega_m"`, `"chi0"`, `"chin"`,
+`"gamma"`, `"kappa"`, `"z_peak"`) carrying `(low, high)` tuples.
+"""
 function build_uniform_priors(
     bounds::AbstractDict{<:AbstractString,<:Tuple{<:Real,<:Real}},
 )
-    return InferencePriors(
-        Uniform(Float64(bounds["H0"][1]), Float64(bounds["H0"][2])),
-        Uniform(Float64(bounds["Omega_m"][1]), Float64(bounds["Omega_m"][2])),
-        Uniform(Float64(bounds["chi0"][1]), Float64(bounds["chi0"][2])),
-        Uniform(Float64(bounds["chin"][1]), Float64(bounds["chin"][2])),
-        Uniform(Float64(bounds["gamma"][1]), Float64(bounds["gamma"][2])),
-        Uniform(Float64(bounds["kappa"][1]), Float64(bounds["kappa"][2])),
-        Uniform(Float64(bounds["z_peak"][1]), Float64(bounds["z_peak"][2])),
-    )
+    return product_distribution((
+        H0=Uniform(Float64(bounds["H0"][1]), Float64(bounds["H0"][2])),
+        Omega_m=Uniform(Float64(bounds["Omega_m"][1]), Float64(bounds["Omega_m"][2])),
+        chi0=Uniform(Float64(bounds["chi0"][1]), Float64(bounds["chi0"][2])),
+        chin=Uniform(Float64(bounds["chin"][1]), Float64(bounds["chin"][2])),
+        gamma=Uniform(Float64(bounds["gamma"][1]), Float64(bounds["gamma"][2])),
+        kappa=Uniform(Float64(bounds["kappa"][1]), Float64(bounds["kappa"][2])),
+        z_peak=Uniform(Float64(bounds["z_peak"][1]), Float64(bounds["z_peak"][2])),
+    ))
 end
 
-function logprior(h::HyperParameters, priors::InferencePriors)
-    pop = h.population
-    pop isa MadauDickinsonParameters || throw(
-        ArgumentError("logprior with InferencePriors requires MadauDickinsonParameters"),
-    )
-    return (
-        logpdf(priors.H0, h.cosmological.H0) +
-        logpdf(priors.Omega_m, h.cosmological.Omega_m) +
-        logpdf(priors.chi0, h.propagation.chi0) +
-        logpdf(priors.chin, h.propagation.chin) +
-        logpdf(priors.gamma, pop.gamma) +
-        logpdf(priors.kappa, pop.kappa) +
-        logpdf(priors.z_peak, pop.z_peak)
-    )
+"""
+    logprior(h::HyperParameters, prior::ProductNamedTupleDistribution) -> Real
+
+Log-prior of `h` under the seven-parameter product distribution. `h` is a flat
+`NamedTuple` matching `keys(prior.dists)` (`DEFAULT_PARAMETER_ORDER`).
+"""
+function logprior(h::HyperParametersNT, prior::ProductNamedTupleDistribution)
+    return logpdf(prior, h)
 end
 
 """

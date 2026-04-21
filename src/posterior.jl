@@ -1,4 +1,4 @@
-function target_log_prob_samples(h::HyperParameters, problem::ImportanceSamplingProblem)
+function target_log_prob_samples(h::HyperParametersNT, problem::ImportanceSamplingProblem)
     bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec)
     prior = intrinsic_prior(problem.strategy, bundle)
     return intrinsic_log_prob_samples(prior, problem.proposal.samples), bundle
@@ -13,7 +13,7 @@ the AdvancedHMC likelihood (`dgw_theta_sq`, `target_log_prob`, `log_ratio`, `wei
 `redshift_integral`, `expected_number_of_sources`, `spectral_density`,
 `spectral_density_in_band`).
 """
-function evaluate_importance_terms(h::HyperParameters, problem::ImportanceSamplingProblem)
+function evaluate_importance_terms(h::HyperParametersNT, problem::ImportanceSamplingProblem)
     bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec)
     iw = compute_importance_weights(problem, h, bundle)
     rate = merger_rate_per_sec(
@@ -38,7 +38,7 @@ function evaluate_importance_terms(h::HyperParameters, problem::ImportanceSampli
 end
 
 function loglikelihood(
-    h::HyperParameters,
+    h::HyperParametersNT,
     problem::ImportanceSamplingProblem;
     observed_spectral_density::AbstractVector{<:Real}=problem.observation.fiducial_spectral_density,
 )
@@ -52,12 +52,12 @@ function loglikelihood(
 end
 
 function logposterior(
-    h::HyperParameters,
+    h::HyperParametersNT,
     problem::ImportanceSamplingProblem,
-    priors::InferencePriors;
+    prior::ProductNamedTupleDistribution;
     observed_spectral_density::AbstractVector{<:Real}=problem.observation.fiducial_spectral_density,
 )
-    return logprior(h, priors) + loglikelihood(
+    return logprior(h, prior) + loglikelihood(
         h,
         problem;
         observed_spectral_density=observed_spectral_density,

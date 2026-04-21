@@ -13,11 +13,10 @@ begin
 	using ASGWB:
 		load_cache,
 		build_turing_model,
-		condition_turing_model,
-		InferencePriors,
+		evaluate_importance_terms,
+		omegagw,
 		HyperParameters,
 		Detector,
-		as_flat_constrained,
 		DEFAULT_PARAMETER_ORDER
 	using Turing
 	using Random
@@ -26,6 +25,8 @@ begin
 	using MCMCChains
 	using StatsPlots
 	using Plots
+	using CairoMakie
+	using LaTeXStrings
 	using Distributions
 	default(size = (900, 450))
 end
@@ -61,7 +62,7 @@ begin
 
 	cache = "analysis_numpyro_julia_cache.h5"
 	detectors = [Detector("E1"), Detector("E2"), Detector("E3")]
-	sample_only = [:H0]
+	sample_only = [:Ξ0]
 
 	priors = (
 		H0 = Uniform(20, 140),
@@ -82,6 +83,16 @@ begin
 		κ = 5.7,
 		zp = 2.0,
 	)
+	to_ascii = (
+		H0 = :H0,
+		Ωm = :Omega_m,
+		Ξ0 = :chi0,
+		Ξn = :chin,
+		γ = :gamma,
+		κ = :kappa,
+		zp = :z_peak
+	)
+	fixed_sites = (; (to_ascii[k] => v for (k, v) in pairs(init) if k ∉ sample_only)...)
 
 	sampler = (n_samples = 2000, n_adapts = 2000, target_acceptance = 0.9)
 
@@ -90,15 +101,15 @@ begin
 	output_jls = nothing
 
 	validate_init_against_priors(priors, init)
-	priors_turing = InferencePriors(
-		priors.H0,
-		priors.Ωm,
-		priors.Ξ0,
-		priors.Ξn,
-		priors.γ,
-		priors.κ,
-		priors.zp,
-	)
+	priors_turing = product_distribution((
+		H0      = priors.H0,
+		Omega_m = priors.Ωm,
+		chi0    = priors.Ξ0,
+		chin    = priors.Ξn,
+		gamma   = priors.γ,
+		kappa   = priors.κ,
+		z_peak  = priors.zp,
+	))
 	θ0 = HyperParameters(;
 		H0 = init.H0,
 		Omega_m = init.Ωm,
@@ -115,9 +126,9 @@ end
 md"""
 # ASGWB Turing sampling
 
-Same overall flow as [`scripts/run_turing.jl`](../scripts/run_turing.jl), but this notebook keeps **human-facing** settings as **unicode-key named tuples** (`Ωm`, `Ξ0`, …), maps once into the package’s ASCII `InferencePriors` / `HyperParameters` (what the Turing `@model` expects), and runs **NUTS** with the same steps as `sample_with_turing` inlined in the sampling cell (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
+Same overall flow as [`scripts/run_turing.jl`](../scripts/run_turing.jl), but this notebook keeps **human-facing** settings as **unicode-key named tuples** (`Ωm`, `Ξ0`, …), maps once into the package’s ASCII product-distribution prior and `HyperParameters` NamedTuple (what the Turing `@model` expects). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 
-The first cell activates the package root [`Project.toml`](../Project.toml) (same environment as `julia --project=.` when the working directory is the repository root). Plotting, `MCMCChains`, and `Turing` are **`[deps]`** there together with the core `ASGWB` stack.
+The first cell activates the package root [`Project.toml`](../Project.toml) (same environment as `julia --project=.` when the working directory is the repository root). **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics. `MCMCChains`, `Turing`, and the core `ASGWB` stack are **`[deps]`** there too.
 """
 
 
@@ -149,9 +160,8 @@ begin
 	end
 
 	function turing_initial_params(theta0::HyperParameters, sample_only::Union{Nothing,Tuple{Vararg{Symbol}}})
-		as = as_flat_constrained(theta0)
-		sample_only === nothing && return InitFromParams(as)
-		return InitFromParams((; (s => as[s] for s in sample_only)...))
+		sample_only === nothing && return InitFromParams(theta0)
+		return InitFromParams((; (s => theta0[s] for s in sample_only)...))
 	end
 
 	cd(pkgdir(ASGWB))
@@ -185,8 +195,42 @@ begin
 	else
 		Tuple(sample_only)
 	end
-	validate_sample_only(sample_only_tup)
+	#validate_sample_only(sample_only_tup)
 	sam = sampler
+	nothing
+end
+
+
+# ╔═╡ 954323e3-b79e-4b1e-9200-dcf074777345
+begin
+	ev = evaluate_importance_terms(θ0, problem)
+	f = problem.observation.frequencies
+	Ωgw = omegagw(ev.spectral_density, f, θ0)
+	mask = Ωgw .> 0.0
+	fm = f[mask]
+	Ωm = Ωgw[mask]
+	fig = Figure(size = (900, 450))
+	ax = Axis(
+		fig[1, 1];
+		xlabel = L"$f~\mathrm{(Hz)}$",
+		ylabel = L"$\Omega_{\mathrm{GW}}(f)$",
+		xscale = log10,
+		yscale = log10,
+		limits = (nothing, nothing, 1e-15, nothing)
+	)
+	if !isempty(Ωm)
+		lines!(ax, fm, Ωm; label = L"$\mathrm{model~at}~\theta_0$")
+		axislegend(ax; position = :rt)
+	end
+	fig
+end
+
+
+# ╔═╡ 949e4bd9-1ce8-44f0-a8d6-04c8e966641a
+Ωgw
+
+# ╔═╡ 23f963ee-0675-4f7f-875d-a8afd443e166
+begin
 	@info "starting NUTS" n_adapts = sam.n_adapts n_samples = sam.n_samples target_acceptance =
 		sam.target_acceptance sample_only = sample_only_tup
 
@@ -196,7 +240,7 @@ begin
 		priors_turing;
 		observed_spectral_density = observed,
 	)
-	conditioned = condition_turing_model(model, θ0, sample_only_tup)
+	conditioned = model | fixed_sites
 	nuts = NUTS(sam.n_adapts, sam.target_acceptance)
 	chain = sample(
 		conditioned,
@@ -205,7 +249,6 @@ begin
 		sam.n_samples,
 		num_threads;
 		progress = true,
-		#initial_params = turing_initial_params(θ0, sample_only_tup),
 	)
 	@info "NUTS finished" seconds = round(time() - t_sample; digits = 2) chain_size = size(chain)
 
@@ -229,12 +272,15 @@ describe(chain)
 traceplot(chain)
 
 
+# ╔═╡ 622dc36b-a0f2-482e-b562-70ee63d5904a
+autocorplot(chain)
+
 # ╔═╡ aa7c759a-36b3-11f1-af66-b5a6a831a0c8
 let pnames = names(chain, :parameters)
 	if length(pnames) >= 2
-		corner(chain)
+		StatsPlots.corner(chain)
 	else
-		density(chain)
+		StatsPlots.density(chain)
 	end
 end
 
@@ -245,6 +291,10 @@ end
 # ╠═aa7c74e6-36b3-11f1-84a9-df5091ee4209
 # ╠═aa7c7524-36b3-11f1-bd4e-1121e886c676
 # ╠═aa7c7572-36b3-11f1-a66c-f1c2e7b4f465
+# ╠═954323e3-b79e-4b1e-9200-dcf074777345
+# ╠═949e4bd9-1ce8-44f0-a8d6-04c8e966641a
+# ╠═23f963ee-0675-4f7f-875d-a8afd443e166
 # ╠═e4fcf73c-7193-445b-8d55-1ad9a9645caa
 # ╠═aa7c7584-36b3-11f1-9894-cd9b12e6b4fe
+# ╠═622dc36b-a0f2-482e-b562-70ee63d5904a
 # ╠═aa7c759a-36b3-11f1-af66-b5a6a831a0c8

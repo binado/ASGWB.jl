@@ -81,36 +81,19 @@ function _build_redshift_grid(
     return pdf
 end
 
-function _source_frame_fn(spec::RedshiftPriorSpec, pop::MadauDickinsonParameters)
-    spec.family == MadauDickinson || throw(
-        ArgumentError("MadauDickinson population requires MadauDickinson redshift prior family"),
-    )
-    return z -> madau_dickinson_source_frame_distribution(
-        z; gamma=pop.gamma, kappa=pop.kappa, z_peak=pop.z_peak,
-    )
-end
-
-function _source_frame_fn(spec::RedshiftPriorSpec, pop::PowerLawRedshiftParameters)
-    spec.family == PowerLaw || throw(
-        ArgumentError("PowerLawRedshiftParameters require PowerLaw redshift prior family"),
-    )
-    return z -> power_law_source_frame_distribution(z; lamb=pop.lamb)
-end
-
-function build_redshift_grid_bundle(h::HyperParameters, spec::RedshiftPriorSpec)
+function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpec)
     isnothing(spec.time_delay_model) || throw(
         ArgumentError("time-delay redshift models are not supported in the Julia v0 port"),
     )
-    validate_redshift_spec_population(spec, h.population)
-    sfn = _source_frame_fn(spec, h.population)
-    return _build_redshift_grid(
-        sfn,
-        h.cosmological.H0,
-        h.cosmological.Omega_m,
-        spec.z_min,
-        spec.z_max,
-        spec.num_interp,
+    spec.family == MadauDickinson || throw(
+        ArgumentError(
+            "build_redshift_grid_bundle only supports the MadauDickinson redshift prior family",
+        ),
     )
+    sfn = z -> madau_dickinson_source_frame_distribution(
+        z; gamma=h.gamma, kappa=h.kappa, z_peak=h.z_peak,
+    )
+    return _build_redshift_grid(sfn, h.H0, h.Omega_m, spec.z_min, spec.z_max, spec.num_interp)
 end
 
 function log_prob_from_bundle(value::Real, bundle::RadialInterpolant)

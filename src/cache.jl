@@ -6,39 +6,34 @@ Build [`HyperParameters`](@ref) from cache `hyperparameters` scalars and the fil
 from redshift grids (e.g. caches that omit `proposal_log_prob`).
 
 Requires `gamma`, `kappa`, and `z_peak` on `fid` when `spec.family` is Madau–Dickinson,
-and `lamb` when the family is power-law.
+Power-law caches are rejected: live hyperparameter reconstruction is MadauDickinson-only.
 """
 function hyperparameters_from_fiducial(
     fid::ProposalFiducialParameters,
     spec::RedshiftPriorSpec,
 )::HyperParameters
-    if spec.family == MadauDickinson
-        g, κ, zp = fid.gamma, fid.kappa, fid.z_peak
-        if isnothing(g) || isnothing(κ) || isnothing(zp)
-            throw(
-                ArgumentError(
-                    "reconstructing proposal log-density requires hyperparameters gamma, kappa, and z_peak for MadauDickinson redshift prior",
-                ),
-            )
-        end
-        return HyperParameters(;
-            H0=fid.H0,
-            Omega_m=fid.Omega_m,
-            chi0=fid.chi0,
-            chin=fid.chin,
-            gamma=g,
-            kappa=κ,
-            z_peak=zp,
-        )
-    else
-        λ = fid.lamb
-        isnothing(λ) && throw(
+    spec.family == MadauDickinson || throw(
+        ArgumentError(
+            "live hyperparameter reconstruction supports MadauDickinson only; PowerLaw caches are metadata-only",
+        ),
+    )
+    g, κ, zp = fid.gamma, fid.kappa, fid.z_peak
+    if isnothing(g) || isnothing(κ) || isnothing(zp)
+        throw(
             ArgumentError(
-                "reconstructing proposal log-density requires hyperparameter lamb for PowerLaw redshift prior",
+                "reconstructing proposal log-density requires hyperparameters gamma, kappa, and z_peak for MadauDickinson redshift prior",
             ),
         )
-        return HyperParameters(; H0=fid.H0, Omega_m=fid.Omega_m, chi0=fid.chi0, chin=fid.chin, lamb=λ)
     end
+    return HyperParameters(;
+        H0=fid.H0,
+        Omega_m=fid.Omega_m,
+        chi0=fid.chi0,
+        chin=fid.chin,
+        gamma=g,
+        kappa=κ,
+        z_peak=zp,
+    )
 end
 
 """

@@ -1,138 +1,83 @@
-using Distributions: Distribution
-
-"""Ordering of parameters in the flat constrained `NamedTuple` used by Bijectors / HMC."""
+"""Ordering of parameters in the flat `HyperParameters` NamedTuple used by
+`product_distribution` / Bijectors / HMC."""
 const DEFAULT_PARAMETER_ORDER = (:H0, :Omega_m, :chi0, :chin, :gamma, :kappa, :z_peak)
-
-abstract type PopulationParameters end
-
-struct MadauDickinsonParameters{Tγ<:Real,Tκ<:Real,Tz<:Real} <: PopulationParameters
-    gamma::Tγ
-    kappa::Tκ
-    z_peak::Tz
-end
-
-struct PowerLawRedshiftParameters{Tλ<:Real} <: PopulationParameters
-    lamb::Tλ
-end
-
-struct CosmologicalParameters{TH0<:Real,TΩ<:Real}
-    H0::TH0
-    Omega_m::TΩ
-end
-
-struct ModifiedPropagationParameters{Tχ0<:Real,Tχn<:Real}
-    chi0::Tχ0
-    chin::Tχn
-end
 
 """
     HyperParameters
 
-Nested inference state: cosmology, modified GW propagation, and a
-[`PopulationParameters`](@ref) branch (Madau–Dickinson or power-law redshift population).
-
-For HMC / [`build_prior_distribution`](@ref), only [`MadauDickinsonParameters`](@ref) is
-supported today (seven stochastic parameters). Use [`as_flat_constrained`](@ref) for
-the Bijectors bridge; [`PowerLawRedshiftParameters`](@ref) is for redshift-grid tests
-that do not use the seven-parameter product prior.
+Flat Madau–Dickinson inference state as a concrete `Float64` `NamedTuple` alias keyed by
+[`DEFAULT_PARAMETER_ORDER`](@ref). Used directly by the product-distribution prior
+(`logpdf(prior, h)`), by Bijectors (`Bijectors.link(prior, h)`), and inside the Turing
+`@model`. The keyword constructor [`HyperParameters(; H0, Omega_m, …)`](@ref) and the
+from-NamedTuple constructor [`HyperParameters(nt)`](@ref) coerce inputs to `Float64`
+for user-facing code. Inner loops that see `ForwardDiff.Dual` values (e.g. HMC
+log-density gradient) work against the [`HyperParametersNT`](@ref) UnionAll alias which
+accepts any element types.
 """
-struct HyperParameters{
-    C<:CosmologicalParameters,
-    P<:ModifiedPropagationParameters,
-    Pop<:PopulationParameters,
+const HyperParameters = @NamedTuple{
+    H0::Float64,
+    Omega_m::Float64,
+    chi0::Float64,
+    chin::Float64,
+    gamma::Float64,
+    kappa::Float64,
+    z_peak::Float64,
 }
-    cosmological::C
-    propagation::P
-    population::Pop
-end
 
-function _getnt(nt::NamedTuple, key::Symbol, default)
-    haskey(nt, key) ? nt[key] : default
-end
+"""
+    HyperParametersNT
 
+UnionAll NamedTuple type keyed by [`DEFAULT_PARAMETER_ORDER`](@ref) that matches any
+element types. Used in inner-loop function signatures (`logprior`, `logposterior`,
+`loglikelihood`, `evaluate_importance_terms`, `build_redshift_grid_bundle`,
+`compute_importance_weights`) so `ForwardDiff.Dual`-valued hyperparameters from HMC
+gradients flow through unchanged.
+"""
+const HyperParametersNT = NamedTuple{DEFAULT_PARAMETER_ORDER}
+
+"""
+    HyperParameters(; H0, Omega_m, chi0=1.0, chin=0.0, gamma, kappa, z_peak) -> HyperParameters
+
+Convenience keyword constructor returning a flat [`HyperParameters`](@ref) NamedTuple
+with `Float64` coercion.
+"""
 function HyperParameters(;
     H0::Real,
     Omega_m::Real,
     chi0::Real=1.0,
     chin::Real=0.0,
-    gamma=nothing,
-    kappa=nothing,
-    z_peak=nothing,
-    lamb=nothing,
-)
-    if !isnothing(lamb) && isnothing(gamma)
-        return HyperParameters((
-            H0=Float64(H0),
-            Omega_m=Float64(Omega_m),
-            chi0=Float64(chi0),
-            chin=Float64(chin),
-            lamb=Float64(lamb),
-        ))
-    end
-    return HyperParameters((
+    gamma::Real,
+    kappa::Real,
+    z_peak::Real,
+)::HyperParameters
+    return (
         H0=Float64(H0),
         Omega_m=Float64(Omega_m),
         chi0=Float64(chi0),
         chin=Float64(chin),
-        gamma=Float64(something(gamma)),
-        kappa=Float64(something(kappa)),
-        z_peak=Float64(something(z_peak)),
-    ))
-end
-
-function HyperParameters(nt::NamedTuple)
-    c = CosmologicalParameters(nt.H0, nt.Omega_m)
-    p = ModifiedPropagationParameters(_getnt(nt, :chi0, 1.0), _getnt(nt, :chin, 0.0))
-    pop = if haskey(nt, :lamb) && !haskey(nt, :gamma)
-        PowerLawRedshiftParameters(nt.lamb)
-    else
-        MadauDickinsonParameters(nt.gamma, nt.kappa, nt.z_peak)
-    end
-    return HyperParameters(c, p, pop)
-end
-
-function validate_redshift_spec_population(spec::RedshiftPriorSpec, pop::PopulationParameters)
-    if spec.family == MadauDickinson && !(pop isa MadauDickinsonParameters)
-        throw(ArgumentError("MadauDickinson redshift prior requires MadauDickinsonParameters"))
-    end
-    if spec.family == PowerLaw && !(pop isa PowerLawRedshiftParameters)
-        throw(ArgumentError("PowerLaw redshift prior requires PowerLawRedshiftParameters"))
-    end
-    return nothing
-end
-
-"""
-    as_flat_constrained(h::HyperParameters)
-
-Build the flat constrained `NamedTuple` in [`DEFAULT_PARAMETER_ORDER`](@ref) for
-`product_distribution` / Bijectors. Requires [`MadauDickinsonParameters`](@ref).
-"""
-function as_flat_constrained(h::HyperParameters)
-    pop = h.population
-    pop isa MadauDickinsonParameters || throw(
-        ArgumentError(
-            "as_flat_constrained requires MadauDickinsonParameters; use PowerLaw only for redshift-grid code paths without the seven-parameter prior",
-        ),
+        gamma=Float64(gamma),
+        kappa=Float64(kappa),
+        z_peak=Float64(z_peak),
     )
-    return NamedTuple{DEFAULT_PARAMETER_ORDER}((
-        h.cosmological.H0,
-        h.cosmological.Omega_m,
-        h.propagation.chi0,
-        h.propagation.chin,
-        pop.gamma,
-        pop.kappa,
-        pop.z_peak,
-    ))
 end
 
-struct InferencePriors
-    H0::Distribution
-    Omega_m::Distribution
-    chi0::Distribution
-    chin::Distribution
-    gamma::Distribution
-    kappa::Distribution
-    z_peak::Distribution
+"""
+    HyperParameters(nt::NamedTuple) -> HyperParameters
+
+Build a [`HyperParameters`](@ref) NamedTuple (with `Float64` coercion) from any
+NamedTuple carrying at least `:H0, :Omega_m, :gamma, :kappa, :z_peak`. `chi0` /
+`chin` default to `1.0` / `0.0` when absent.
+"""
+function HyperParameters(nt::NamedTuple)::HyperParameters
+    return HyperParameters(;
+        H0=nt.H0,
+        Omega_m=nt.Omega_m,
+        chi0=haskey(nt, :chi0) ? nt.chi0 : 1.0,
+        chin=haskey(nt, :chin) ? nt.chin : 0.0,
+        gamma=nt.gamma,
+        kappa=nt.kappa,
+        z_peak=nt.z_peak,
+    )
 end
 
 abstract type ProposalSampleBundle end

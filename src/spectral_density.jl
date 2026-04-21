@@ -34,7 +34,7 @@ const METERS_PER_MPC = 3.085677581e22
 """
     hubble_constant_si(H0_km_s_mpc::Real) -> Float64
 
-Hubble constant in s⁻¹ from ``H_0`` in **km/s/Mpc** (same units as [`CosmologicalParameters`](@ref).`H0`).
+Hubble constant in s⁻¹ from ``H_0`` in **km/s/Mpc** (same units as [`HyperParameters`](@ref).`H0`).
 """
 function hubble_constant_si(H0_km_s_mpc::Real)
     return Float64(H0_km_s_mpc) * 1000.0 / METERS_PER_MPC
@@ -52,7 +52,7 @@ where ``S_h(f)`` is the strain spectral density (same units as [`spectral_densit
 and ``H_0`` is the Hubble constant in **s⁻¹**.
 
 The `H0::Real` method takes ``H_0`` in **km/s/Mpc** (matching the rest of this package) and converts
-it internally to s⁻¹. The [`HyperParameters`](@ref) method uses `parameters.cosmological.H0`.
+it internally to s⁻¹. The [`HyperParameters`](@ref) method uses `parameters.H0`.
 
 `frequency` and `spectral_density` may be scalars or arrays; they broadcast together (e.g. same-length
 vectors for one spectrum per frequency bin).
@@ -64,4 +64,4 @@ function omegagw(spectral_density, frequency, H0::Real)
 end
 
 omegagw(spectral_density, frequency, parameters::HyperParameters) =
-    omegagw(spectral_density, frequency, parameters.cosmological.H0)
+    omegagw(spectral_density, frequency, parameters.H0)
