@@ -93,7 +93,8 @@ export madau_dickinson_source_frame_distribution,
 # Priors
 export logprior, build_uniform_priors,
     OrderedUniformSourceMassPair, AlignedSpinChiSimple, RedshiftInterpolatedDistribution,
-    IntrinsicPriorTerm, intrinsic_prior_terms, intrinsic_log_prob_samples
+    IntrinsicPriorTerm, intrinsic_prior_terms,
+    intrinsic_log_prob_samples, intrinsic_log_prob_samples!
 
 # Importance sampling
 export importance_weights, compute_importance_weights,

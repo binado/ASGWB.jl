@@ -177,31 +177,101 @@ function intrinsic_prior_terms(
     )
 end
 
-function _sample_vectors(samples, fields::Tuple{Vararg{Symbol}})
-    return map(field -> getfield(samples, field), fields)
-end
-
-function _logpdf_samples(dist, values::AbstractVector{<:Real})
-    return logpdf.(Ref(dist), values)
-end
-
-function _logpdf_samples(
-    dist,
-    values::AbstractVector{<:Real},
-    more::AbstractVector{<:Real}...,
+function _require_matching_output_length(
+    out::AbstractVector,
+    values::AbstractVector{<:Real}...,
 )
-    n = length(values)
-    all(length(v) == n for v in more) || throw(
-        ArgumentError("all sample vectors for an intrinsic prior term must have matching lengths"),
+    n = length(out)
+    all(length(v) == n for v in values) || throw(
+        ArgumentError(
+            "output and intrinsic prior sample vectors must have matching lengths",
+        ),
     )
-    return [
-        logpdf(dist, map(v -> v[i], (values, more...))) for i in eachindex(values)
-    ]
+    return n
+end
+
+function _term_result_type(
+    samples,
+    term::IntrinsicPriorTerm{<:Tuple{Symbol}},
+)
+    values = getfield(samples, term.fields[1])
+    return typeof(logpdf(term.dist, first(values)))
+end
+
+function _term_result_type(
+    samples,
+    term::IntrinsicPriorTerm{<:Tuple{Symbol,Symbol}},
+)
+    values1 = getfield(samples, term.fields[1])
+    values2 = getfield(samples, term.fields[2])
+    return typeof(logpdf(term.dist, (first(values1), first(values2))))
+end
+
+_intrinsic_log_prob_type(samples, ::Tuple{}) = Float64
+
+function _intrinsic_log_prob_type(samples, terms::Tuple)
+    return promote_type(
+        _term_result_type(samples, first(terms)),
+        _intrinsic_log_prob_type(samples, Base.tail(terms)),
+    )
+end
+
+function _accumulate_logpdf!(
+    out::AbstractVector,
+    samples,
+    term::IntrinsicPriorTerm{<:Tuple{Symbol}},
+)
+    values = getfield(samples, term.fields[1])
+    _require_matching_output_length(out, values)
+    @inbounds for i in eachindex(out, values)
+        out[i] += logpdf(term.dist, values[i])
+    end
+    return out
+end
+
+function _accumulate_logpdf!(
+    out::AbstractVector,
+    samples,
+    term::IntrinsicPriorTerm{<:Tuple{Symbol,Symbol}},
+)
+    values1 = getfield(samples, term.fields[1])
+    values2 = getfield(samples, term.fields[2])
+    _require_matching_output_length(out, values1, values2)
+    @inbounds for i in eachindex(out, values1, values2)
+        out[i] += logpdf(term.dist, (values1[i], values2[i]))
+    end
+    return out
+end
+
+function _accumulate_logpdf!(out::AbstractVector, samples, term::IntrinsicPriorTerm)
+    throw(
+        ArgumentError(
+            "unsupported intrinsic prior term arity $(length(term.fields)) for $(term.name)",
+        ),
+    )
+end
+
+_intrinsic_log_prob_samples!(out::AbstractVector, samples, ::Tuple{}) = out
+
+function _intrinsic_log_prob_samples!(out::AbstractVector, samples, terms::Tuple)
+    _accumulate_logpdf!(out, samples, first(terms))
+    return _intrinsic_log_prob_samples!(out, samples, Base.tail(terms))
+end
+
+function intrinsic_log_prob_samples!(
+    out::AbstractVector,
+    samples,
+    terms::Tuple,
+)
+    fill!(out, zero(eltype(out)))
+    return _intrinsic_log_prob_samples!(out, samples, terms)
 end
 
 function intrinsic_log_prob_samples(samples, terms::Tuple)
-    contributions = map(terms) do term
-        _logpdf_samples(term.dist, _sample_vectors(samples, term.fields)...)
-    end
-    return reduce((lhs, rhs) -> lhs .+ rhs, contributions)
+    isempty(terms) && return Float64[]
+    first_term = first(terms)
+    first_values = getfield(samples, first(first_term.fields))
+    T = _intrinsic_log_prob_type(samples, terms)
+    out = similar(first_values, T)
+    return intrinsic_log_prob_samples!(out, samples, terms)
 end
