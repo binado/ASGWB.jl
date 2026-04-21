@@ -7,7 +7,7 @@ Collapse per-sample flux contributions into a spectral density vector.
 is `nothing`, samples are averaged uniformly: `mean_flux = sum(fluxes; dims=2) / n_samples`.
 When `weights` is supplied, the contraction is `fluxes * weights / n_samples`
 (no normalization of `weights`). The `0.4 = 2/5` prefactor captures the
-sky/polarization average.
+average over the inclination angle.
 """
 function spectral_density(
     fluxes::AbstractMatrix{<:Real},
