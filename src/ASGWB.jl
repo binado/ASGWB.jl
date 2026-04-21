@@ -91,7 +91,9 @@ export madau_dickinson_source_frame_distribution,
     merger_rate_per_sec
 
 # Priors
-export logprior, build_uniform_priors
+export logprior, build_uniform_priors,
+    OrderedUniformSourceMassPair, AlignedSpinChiSimple, RedshiftInterpolatedDistribution,
+    IntrinsicPriorTerm, intrinsic_prior_terms, intrinsic_log_prob_samples
 
 # Importance sampling
 export importance_weights, compute_importance_weights,

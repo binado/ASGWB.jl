@@ -37,8 +37,8 @@ function compute_importance_weights(
     dgw_theta = gravitational_wave_distance.(z, d_l, h.propagation.chi0, h.propagation.chin)
     dgw_theta_sq = dgw_theta .^ 2
 
-    redshift_log_prob = log_prob_from_bundle.(z, Ref(bundle))
-    target_log_prob = bns_intrinsic_log_prob_samples(problem.proposal.samples, redshift_log_prob)
+    terms = intrinsic_prior_terms(problem.strategy, bundle)
+    target_log_prob = intrinsic_log_prob_samples(problem.proposal.samples, terms)
     log_ratio = target_log_prob .- problem.proposal.log_prob
     weights = importance_weights(log_ratio, problem.proposal.dgw_fid_sq, dgw_theta_sq)
     return (;
