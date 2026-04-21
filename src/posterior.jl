@@ -81,8 +81,12 @@ end
 """
     fiducial_spectral_density(problem::ImportanceSamplingProblem) -> Vector{Float64}
 
-Predicted isotropic SGWB spectrum ``Ω_\\mathrm{GW}(f)`` at [`fiducial_hyperparameters`](@ref),
-using [`evaluate_importance_terms`](@ref) (cached flux, importance weights, and event rate).
+Strain spectral density ``S_h(f)`` at [`fiducial_hyperparameters`](@ref), from
+[`evaluate_importance_terms`](@ref) (cached flux, importance weights, and merger rate). Same
+units as the vector returned by [`spectral_density`](@ref) on the importance-weighted fluxes.
+
+For the dimensionless energy density ``\\Omega_{\\mathrm{GW}}(f)``, use [`omegagw`](@ref) with
+this vector and the corresponding frequency bins from `problem.observation.frequencies`.
 """
 function fiducial_spectral_density(problem::ImportanceSamplingProblem)
     h = fiducial_hyperparameters(problem)
