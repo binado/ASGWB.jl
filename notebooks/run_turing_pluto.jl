@@ -1,14 +1,14 @@
 ### A Pluto.jl notebook ###
-# v0.20.21
+# v0.20.24
 
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ aa7c74e6-36b3-11f1-84a9-df5091ee4209
+# ╔═╡ bb8c74e6-36b3-11f1-84a9-df5091ee4210
 begin
 	import Pkg
-	Pkg.activate(joinpath(@__DIR__, ".."))
-	Pkg.instantiate()
+    # Activates the environment in the directory where the notebook lives
+    Pkg.activate(@__DIR__)
 	using ASGWB
 	using ASGWB:
 		load_cache,
@@ -128,7 +128,7 @@ md"""
 
 Same overall flow as [`scripts/run_turing.jl`](../scripts/run_turing.jl), but this notebook keeps **human-facing** settings as **unicode-key named tuples** (`Ωm`, `Ξ0`, …), maps once into the package’s ASCII product-distribution prior and `HyperParameters` NamedTuple (what the Turing `@model` expects). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 
-The first cell activates the package root [`Project.toml`](../Project.toml) (same environment as `julia --project=.` when the working directory is the repository root). **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics. `MCMCChains`, `Turing`, and the core `ASGWB` stack are **`[deps]`** there too.
+The first cell activates the **workspace subproject** [`Project.toml`](./Project.toml) under `notebooks/` (Pkg **workspace** with the package root: one shared [`Manifest.toml`](../Manifest.toml) at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`Pluto`**, **`MCMCChains`**) live there; **`ASGWB`** is a path dev of the parent package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
 """
 
 
@@ -288,7 +288,7 @@ end
 # ╔═╡ Cell order:
 # ╠═aa7c72a2-36b3-11f1-a5e9-17b92e804e41
 # ╠═a9aeb877-2396-49b6-856e-c719be5db6d7
-# ╠═aa7c74e6-36b3-11f1-84a9-df5091ee4209
+# ╠═bb8c74e6-36b3-11f1-84a9-df5091ee4210
 # ╠═aa7c7524-36b3-11f1-bd4e-1121e886c676
 # ╠═aa7c7572-36b3-11f1-a66c-f1c2e7b4f465
 # ╠═954323e3-b79e-4b1e-9200-dcf074777345
