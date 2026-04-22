@@ -8,7 +8,7 @@ Use [`importance_sampling_problem`](@ref) to build problems in memory, or
 [`load_cache`](@ref) to read the HDF5 importance cache. Caches record provenance via root
 attributes [`IMPORTANCE_CACHE_COMMAND_ATTR`](@ref) and [`IMPORTANCE_CACHE_GIT_REVISION_ATTR`](@ref)
 (`command` and `git_revision`). Pass a vector of at least two [`Detector`](@ref) values as the
-second argument so `covariance` and `sgwb_scale` are built from tabulated PSDs and ORFs (those
+second argument so `effective_psd` and `sgwb_scale` are built from tabulated PSDs and ORFs (those
 datasets must not appear in the file). Two-dimensional datasets `cached_flux` and
 `proposal_intrinsic_vector` use HDF5 extent `(n_columns, n_samples)` and are normalized to
 `(n_samples, n_columns)` on load. Per-sample flux is stored as `cached_flux` (before the
@@ -29,7 +29,7 @@ include("inference_types.jl")
 include("detector/psd.jl")
 include("detector/detector.jl")
 include("detector/overlap.jl")
-include("detector/covariance.jl")
+include("detector/effective_psd.jl")
 include("detector/observation.jl")
 include("cumulative_integral.jl")
 include("cosmology.jl")
@@ -77,13 +77,13 @@ export load_cache,
        IMPORTANCE_CACHE_COMMAND_ATTR,
        IMPORTANCE_CACHE_GIT_REVISION_ATTR
 
-# Detector network (ORF / PSD covariance; used by `load_cache`)
+# Detector network (ORF / PSD effective strain PSD; used by `load_cache`)
 export Detector,
        PowerSpectralDensity,
        default_detector_data_dir,
        overlap_reduction_function,
        pairwise_overlap_reduction_function,
-       covariance_on_grid,
+       effective_psd,
        gaussian_bin_scale,
        gaussian_bin_variance,
        frequency_bin_width,

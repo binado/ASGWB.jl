@@ -40,12 +40,14 @@ struct FullBNS <: IntrinsicPriorStrategy end
 """
     ObservationConfig
 
-Detector-side SGWB observation layout: frequency grid, uncertainties, band mask,
-and observation time metadata used by the likelihood.
+Detector-side SGWB observation layout: frequency grid, per-bin effective strain PSD
+amplitude from the detector network (ORFs and tabulated PSDs; square matches network
+variance), Gaussian bin scales for the likelihood, analysis band mask, and observation
+time metadata.
 """
 struct ObservationConfig
     frequencies::Vector{Float64}
-    covariance::Vector{Float64}
+    effective_psd::Vector{Float64}
     sgwb_scale::Vector{Float64}
     in_band_mask::BitVector
     fiducial_spectral_density::Vector{Float64}
@@ -57,7 +59,7 @@ end
 
 function ObservationConfig(
         frequencies::Vector{Float64},
-        covariance::Vector{Float64},
+        effective_psd::Vector{Float64},
         sgwb_scale::Vector{Float64},
         in_band_mask::BitVector,
         fiducial_spectral_density::Vector{Float64},
@@ -66,7 +68,7 @@ function ObservationConfig(
 )
     return ObservationConfig(
         frequencies,
-        covariance,
+        effective_psd,
         sgwb_scale,
         in_band_mask,
         fiducial_spectral_density,

@@ -44,7 +44,7 @@ using Test
             @test isfinite(logdensity)
             @test all(isfinite, gradient)
             @test logdensity ≈ reference_logdensity rtol = 1e-9
-            # Loose tolerance: log-density magnitudes are large; detector-rebuilt covariance
+            # Loose tolerance: log-density magnitudes are large; detector-rebuilt effective_psd
             # can leave AD vs finite differences slightly misaligned on some grids.
             @test gradient ≈ reference_gradient rtol = 0.05
 
