@@ -25,6 +25,8 @@ begin
     using Serialization
     using Logging
     using MCMCChains
+    using ArviZ
+    using NCDatasets
     using StatsPlots
     using Plots
     using CairoMakie
@@ -96,6 +98,7 @@ begin
     seed = 1
     observed_spectral_density_csv = nothing
     output_jls = nothing
+    output_netcdf = nothing
 
     validate_init_against_priors(priors, init)
     priors_turing = product_distribution((
@@ -125,7 +128,7 @@ md"""
 
 Same overall flow as [`scripts/run_turing.jl`](../scripts/run_turing.jl), but this notebook keeps **human-facing** settings as **unicode-key named tuples** (`Ωm`, `Ξ0`, …), maps once into the package’s ASCII product-distribution prior and `HyperParameters` NamedTuple (what the Turing `@model` expects). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 
-The first cell activates the **workspace subproject** [`Project.toml`](./Project.toml) under `notebooks/` (Pkg **workspace** with the package root: one shared [`Manifest.toml`](../Manifest.toml) at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`Pluto`**, **`MCMCChains`**) live there; **`ASGWB`** is a path dev of the parent package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
+The first cell activates the **workspace subproject** [`Project.toml`](./Project.toml) under `notebooks/` (Pkg **workspace** with the package root: one shared [`Manifest.toml`](../Manifest.toml) at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`Pluto`**, **`MCMCChains`**, **`ArviZ`**, **`NCDatasets`**) live there; **`ASGWB`** is a path dev of the parent package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics; **`ArviZ`** (with **`NCDatasets`**) can convert samples to [**`InferenceData`**](https://arviz-devs.github.io/ArviZ.jl/stable/api/inference_data/) and write NetCDF. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
 """
 
 
@@ -251,6 +254,13 @@ begin
             serialize(io, chain)
         end
         @info "wrote chain to disk" path = output_jls
+    end
+
+    idata = from_mcmcchains(chain; library = "Turing")
+    if output_netcdf !== nothing
+        @info "writing InferenceData to NetCDF" path = output_netcdf
+        to_netcdf(idata, output_netcdf)
+        @info "wrote InferenceData to NetCDF" path = output_netcdf
     end
 
     @info "sampling cell complete" chain_size = size(chain)
