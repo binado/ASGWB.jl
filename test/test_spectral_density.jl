@@ -80,7 +80,7 @@ end
         [1.0, 2.0, 3.0],
         [1.0, 2.0, 3.0],
         T1,
-        1.0,
+        1.0
     )
     @test isfinite(
         spectral_snr_squared([1.0, 2.0], [1.0, 2.0], [2.0, 1.0], T1, df_bins),

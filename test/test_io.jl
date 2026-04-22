@@ -191,7 +191,8 @@ end
         problem.fiducial_parameters
     )
     @test problem.observation.frequencies ≈ [1.0, 2.0]
-    @test length(problem.observation.effective_psd) == length(problem.observation.frequencies)
+    @test length(problem.observation.effective_psd) ==
+          length(problem.observation.frequencies)
     @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
     @test problem.observation.in_band_mask == BitVector([true, true])
     ev = evaluate_importance_terms(fiducial_hyperparameters(problem), problem)

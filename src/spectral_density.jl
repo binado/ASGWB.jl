@@ -112,6 +112,6 @@ function spectral_snr(
         effective_psd,
         frequencies,
         observation_time_sec,
-        df,
+        df
     ))
 end

@@ -65,7 +65,7 @@ using Test
                 "chin" => :Ξₙ,
                 "gamma" => :γ,
                 "kappa" => :κ,
-                "z_peak" => :zpeak,
+                "z_peak" => :zpeak
             )
             for sample in samples
                 for (name, (low, high)) in prior_bounds

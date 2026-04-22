@@ -62,7 +62,7 @@ const _LEGACY_SAMPLE_ONLY = Dict{Symbol, Symbol}(
     :chin => :Ξₙ,
     :gamma => :γ,
     :kappa => :κ,
-    :z_peak => :zpeak,
+    :z_peak => :zpeak
 )
 
 function _canonical_hyper_symbol(s::Symbol)

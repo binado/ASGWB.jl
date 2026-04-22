@@ -78,7 +78,7 @@ using Turing
                 "chin" => :Ξₙ,
                 "gamma" => :γ,
                 "kappa" => :κ,
-                "z_peak" => :zpeak,
+                "z_peak" => :zpeak
             )
             for (name, (low, high)) in prior_bounds
                 values = vec(Array(chain[:, _chain_sym[name], :]))

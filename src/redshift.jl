@@ -116,7 +116,7 @@ function _build_redshift_grid(
         source_frame_fn,
         H0::Real,
         Ωm::Real,
-        z_grid::AbstractVector{<:Real},
+        z_grid::AbstractVector{<:Real}
 )
     z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
     inv_E = w -> inv(E(w, Ωm))
@@ -136,7 +136,7 @@ end
 function build_redshift_grid_bundle(
         h::HyperParametersNT,
         spec::RedshiftPriorSpec,
-        z_grid::AbstractVector{<:Real},
+        z_grid::AbstractVector{<:Real}
 )
     isnothing(spec.time_delay_model) || throw(
         ArgumentError("time-delay redshift models are not supported in the Julia v0 port"),
