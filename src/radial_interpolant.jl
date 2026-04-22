@@ -8,7 +8,7 @@ function _interp_linear(
     length(x_grid) == length(y_grid) || throw(ArgumentError("grid and values must align"))
     T = promote_type(eltype(y_grid), typeof(left), typeof(right))
     x < x_grid[1] && return convert(T, left)
-    x >= x_grid[end] && return y_grid[end]
+    x > x_grid[end] && return convert(T, right)
 
     idx = searchsortedlast(x_grid, x)
     idx == 0 && return convert(T, left)

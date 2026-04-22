@@ -123,8 +123,10 @@ function Distributions.insupport(d::RedshiftInterpolatedDistribution, value::Rea
     return minimum(d) <= value <= maximum(d)
 end
 
-Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real) =
-    log_prob_from_bundle(value, d.bundle)
+function Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real)
+    insupport(d, value) || return -Inf
+    return log_prob_from_bundle(value, d.bundle)
+end
 
 function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
     target = rand(rng) * d.bundle.norm

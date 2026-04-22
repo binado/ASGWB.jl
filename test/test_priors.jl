@@ -46,6 +46,10 @@ using Test
     bundle = build_redshift_grid_bundle(theta, spec)
     redshift_dist = RedshiftInterpolatedDistribution(bundle)
     @test logpdf(redshift_dist, 0.5) ≈ log_prob_from_bundle(0.5, bundle)
+    @test !insupport(redshift_dist, spec.z_min - 0.01)
+    @test logpdf(redshift_dist, spec.z_min - 0.01) == -Inf
+    @test !insupport(redshift_dist, spec.z_max + 0.5)
+    @test logpdf(redshift_dist, spec.z_max + 0.5) == -Inf
 
     redshift_sample = rand(MersenneTwister(3), redshift_dist)
     @test minimum(redshift_dist) <= redshift_sample <= maximum(redshift_dist)

@@ -52,6 +52,8 @@ end
         @test isapprox(ASGWB.integrate(r, π, sin), 2.0; atol=1e-8)
         # Integrand matches at nodes and between nodes
         @test ASGWB.integrand(r, π / 2) ≈ sin(π / 2) atol = 1e-8
+        # Extrapolation above the grid uses `right` (default 0.0)
+        @test ASGWB.integrand(r, 2π + 0.1) == 0.0
     end
 
     @testset "integrate agrees with quadgk on cosmology kernel" begin
