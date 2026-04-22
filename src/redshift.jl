@@ -5,7 +5,7 @@ Domain bundle pairing the comoving-distance cumulative integral with the
 detector-frame merger-rate PDF cumulative integral, both sampled on the same
 uniform redshift grid.
 
-- `distance::CumulativeIntegral1D` : antiderivative of `1/E(z, Ω_m)` used by
+- `distance::CumulativeIntegral1D` : antiderivative of `1/E(z, Ωm)` used by
   [`comoving_distance`](@ref) / [`luminosity_distance`](@ref).
 - `pdf::CumulativeIntegral1D`      : detector-frame merger-rate density; its
   [`normalizer`](@ref) is the redshift integral ``∫ p(z)\\,dz`` driving
@@ -68,16 +68,16 @@ end
 
 function madau_dickinson_source_frame_distribution(
         z::Real;
-        gamma::Real,
-        kappa::Real,
-        z_peak::Real
+        γ::Real,
+        κ::Real,
+        zpeak::Real
 )
     one_plus_z = 1 + z
-    return ((one_plus_z^gamma) / (1 + (one_plus_z / (1 + z_peak))^kappa)) *
-           (1 + (1 + z_peak)^(-kappa))
+    return ((one_plus_z^γ) / (1 + (one_plus_z / (1 + zpeak))^κ)) *
+           (1 + (1 + zpeak)^(-κ))
 end
 
-power_law_source_frame_distribution(z::Real; lamb::Real) = (1 + z)^lamb
+power_law_source_frame_distribution(z::Real; Λ::Real) = (1 + z)^Λ
 
 """
     redshift_grid(spec::RedshiftPriorSpec) -> Vector{Float64}
@@ -92,19 +92,19 @@ end
 function _build_redshift_grid(
         source_frame_fn,
         H0::Real,
-        Omega_m::Real,
+        Ωm::Real,
         z_min::Real,
         z_max::Real,
         num_interp::Integer
 )
     z_grid = collect(LinRange(Float64(z_min), Float64(z_max), Int(num_interp)))
-    inv_E = w -> inv(E(w, Omega_m))
+    inv_E = w -> inv(E(w, Ωm))
     distance = CumulativeIntegral1D(z_grid, inv_E)
     d_h = SPEED_OF_LIGHT_KM_S / H0
-    pdf_integrand = let dist = distance, sf = source_frame_fn, Ω = Omega_m, dh = d_h
+    pdf_integrand = let dist = distance, sf = source_frame_fn, Ωm′ = Ωm, dh = d_h
         function (w)
             d_c = dh * cdf(dist, w)
-            dvc_dz = dh * d_c^2 / E(w, Ω)
+            dvc_dz = dh * d_c^2 / E(w, Ωm′)
             return detector_frame_merger_rate_density(w, dvc_dz, sf(w))
         end
     end
@@ -115,17 +115,17 @@ end
 function _build_redshift_grid(
         source_frame_fn,
         H0::Real,
-        Omega_m::Real,
+        Ωm::Real,
         z_grid::AbstractVector{<:Real},
 )
     z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
-    inv_E = w -> inv(E(w, Omega_m))
+    inv_E = w -> inv(E(w, Ωm))
     distance = CumulativeIntegral1D(z_grid_f, inv_E)
     d_h = SPEED_OF_LIGHT_KM_S / H0
-    pdf_integrand = let dist = distance, sf = source_frame_fn, Ω = Omega_m, dh = d_h
+    pdf_integrand = let dist = distance, sf = source_frame_fn, Ωm′ = Ωm, dh = d_h
         function (w)
             d_c = dh * cdf(dist, w)
-            dvc_dz = dh * d_c^2 / E(w, Ω)
+            dvc_dz = dh * d_c^2 / E(w, Ωm′)
             return detector_frame_merger_rate_density(w, dvc_dz, sf(w))
         end
     end
@@ -148,14 +148,14 @@ function build_redshift_grid_bundle(
     )
     sfn = z -> madau_dickinson_source_frame_distribution(
         z;
-        gamma = h.gamma,
-        kappa = h.kappa,
-        z_peak = h.z_peak
+        γ = h.γ,
+        κ = h.κ,
+        zpeak = h.zpeak
     )
     return _build_redshift_grid(
         sfn,
         h.H0,
-        h.Omega_m,
+        h.Ωm,
         z_grid
     )
 end

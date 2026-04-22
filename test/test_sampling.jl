@@ -15,13 +15,15 @@ using Test
                 [Detector("H1"), Detector("L1")]
             )
             group = file[group_name]
-            theta0 = HyperParameters((;
-                (
-                Symbol(name) => Float64(read(group["theta/$(name)"]))
-            for name in
-                ("H0", "Omega_m", "chi0", "chin", "gamma", "kappa", "z_peak")
-            )...,
-            ))
+            theta0 = HyperParameters(;
+                H0 = Float64(read(group["theta/H0"])),
+                Ωm = Float64(read(group["theta/Omega_m"])),
+                Ξ₀ = Float64(read(group["theta/chi0"])),
+                Ξₙ = Float64(read(group["theta/chin"])),
+                γ = Float64(read(group["theta/gamma"])),
+                κ = Float64(read(group["theta/kappa"])),
+                zpeak = Float64(read(group["theta/z_peak"]))
+            )
             prior_bounds = Dict(
                 name => (
                     Float64(read(group["prior_bounds/$(name)/low"])),
@@ -56,9 +58,18 @@ using Test
             @test length(samples) == 3
             @test length(stats) == 3
 
+            _prop_sym = Dict(
+                "H0" => :H0,
+                "Omega_m" => :Ωm,
+                "chi0" => :Ξ₀,
+                "chin" => :Ξₙ,
+                "gamma" => :γ,
+                "kappa" => :κ,
+                "z_peak" => :zpeak,
+            )
             for sample in samples
                 for (name, (low, high)) in prior_bounds
-                    value = getproperty(sample, Symbol(name))
+                    value = getproperty(sample, _prop_sym[name])
                     @test isfinite(value)
                     @test low <= value <= high
                 end

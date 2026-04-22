@@ -69,29 +69,20 @@ begin
 
     cache = "analysis_numpyro_julia_cache.h5"
     detectors = [Detector("E1"), Detector("E2"), Detector("E3")]
-    sample_only = [:Ξ0]
+    sample_only = [:Ξ₀]
 
     priors = (
         H0 = Uniform(20, 140),
         Ωm = Uniform(0.05, 0.95),
-        Ξ0 = Uniform(0.5, 5),
-        Ξn = Uniform(0.05, 3),
+        Ξ₀ = Uniform(0.5, 5),
+        Ξₙ = Uniform(0.05, 3),
         γ = Uniform(0.5, 10),
-        zp = Uniform(0.05, 10),
-        κ = Uniform(0.05, 10)
+        κ = Uniform(0.05, 10),
+        zpeak = Uniform(0.05, 10)
     )
 
-    init = (H0 = 67.66, Ωm = 0.3096, Ξ0 = 1.0, Ξn = 1.91, γ = 2.7, κ = 5.7, zp = 2.0)
-    to_ascii = (
-        H0 = :H0,
-        Ωm = :Omega_m,
-        Ξ0 = :chi0,
-        Ξn = :chin,
-        γ = :gamma,
-        κ = :kappa,
-        zp = :z_peak
-    )
-    fixed_sites = (; (to_ascii[k] => v for (k, v) in pairs(init) if k ∉ sample_only)...)
+    init = (H0 = 67.66, Ωm = 0.3096, Ξ₀ = 1.0, Ξₙ = 1.91, γ = 2.7, κ = 5.7, zpeak = 2.0)
+    fixed_sites = (; (k => init[k] for k in DEFAULT_PARAMETER_ORDER if k ∉ sample_only)...)
 
     sampler = (n_samples = 2000, n_adapts = 2000, target_acceptance = 0.9)
 
@@ -103,22 +94,14 @@ begin
     validate_init_against_priors(priors, init)
     priors_turing = product_distribution((
         H0 = priors.H0,
-        Omega_m = priors.Ωm,
-        chi0 = priors.Ξ0,
-        chin = priors.Ξn,
-        gamma = priors.γ,
-        kappa = priors.κ,
-        z_peak = priors.zp
+        Ωm = priors.Ωm,
+        Ξ₀ = priors.Ξ₀,
+        Ξₙ = priors.Ξₙ,
+        γ = priors.γ,
+        κ = priors.κ,
+        zpeak = priors.zpeak
     ))
-    θ0 = HyperParameters(;
-        H0 = init.H0,
-        Omega_m = init.Ωm,
-        chi0 = init.Ξ0,
-        chin = init.Ξn,
-        gamma = init.γ,
-        kappa = init.κ,
-        z_peak = init.zp
-    )
+    θ0 = HyperParameters(; init...)
 end
 
 
@@ -126,7 +109,7 @@ end
 md"""
 # ASGWB Turing sampling
 
-Same overall flow as [`scripts/run_turing.jl`](../scripts/run_turing.jl), but this notebook keeps **human-facing** settings as **unicode-key named tuples** (`Ωm`, `Ξ0`, …), maps once into the package’s ASCII product-distribution prior and `HyperParameters` NamedTuple (what the Turing `@model` expects). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
+Same overall flow as [`scripts/run_turing.jl`](../scripts/run_turing.jl), but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with [`HyperParameters`](@ref) and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 
 The first cell activates the **workspace subproject** [`Project.toml`](./Project.toml) under `notebooks/` (Pkg **workspace** with the package root: one shared [`Manifest.toml`](../Manifest.toml) at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`Pluto`**, **`MCMCChains`**, **`ArviZ`**, **`NCDatasets`**) live there; **`ASGWB`** is a path dev of the parent package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics; **`ArviZ`** (with **`NCDatasets`**) can convert samples to [**`InferenceData`**](https://arviz-devs.github.io/ArviZ.jl/stable/api/inference_data/) and write NetCDF. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
 """

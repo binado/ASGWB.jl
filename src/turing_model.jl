@@ -59,14 +59,14 @@ end
 )
     d = prior.dists
     H0 ~ d.H0
-    Omega_m ~ d.Omega_m
-    chi0 ~ d.chi0
-    chin ~ d.chin
-    gamma ~ d.gamma
-    kappa ~ d.kappa
-    z_peak ~ d.z_peak
+    Ωm ~ d.Ωm
+    Ξ₀ ~ d.Ξ₀
+    Ξₙ ~ d.Ξₙ
+    γ ~ d.γ
+    κ ~ d.κ
+    zpeak ~ d.zpeak
 
-    h = (; H0, Omega_m, chi0, chin, gamma, kappa, z_peak)
+    h = (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak)
 
     bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec, z_grid)
     iw = compute_importance_weights(problem, h, bundle)

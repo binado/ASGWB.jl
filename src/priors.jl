@@ -152,12 +152,12 @@ function build_uniform_priors(bounds::AbstractDict{
         <:AbstractString, <:Tuple{<:Real, <:Real}})
     return product_distribution((
         H0 = Uniform(Float64(bounds["H0"][1]), Float64(bounds["H0"][2])),
-        Omega_m = Uniform(Float64(bounds["Omega_m"][1]), Float64(bounds["Omega_m"][2])),
-        chi0 = Uniform(Float64(bounds["chi0"][1]), Float64(bounds["chi0"][2])),
-        chin = Uniform(Float64(bounds["chin"][1]), Float64(bounds["chin"][2])),
-        gamma = Uniform(Float64(bounds["gamma"][1]), Float64(bounds["gamma"][2])),
-        kappa = Uniform(Float64(bounds["kappa"][1]), Float64(bounds["kappa"][2])),
-        z_peak = Uniform(Float64(bounds["z_peak"][1]), Float64(bounds["z_peak"][2]))
+        Ωm = Uniform(Float64(bounds["Omega_m"][1]), Float64(bounds["Omega_m"][2])),
+        Ξ₀ = Uniform(Float64(bounds["chi0"][1]), Float64(bounds["chi0"][2])),
+        Ξₙ = Uniform(Float64(bounds["chin"][1]), Float64(bounds["chin"][2])),
+        γ = Uniform(Float64(bounds["gamma"][1]), Float64(bounds["gamma"][2])),
+        κ = Uniform(Float64(bounds["kappa"][1]), Float64(bounds["kappa"][2])),
+        zpeak = Uniform(Float64(bounds["z_peak"][1]), Float64(bounds["z_peak"][2]))
     ))
 end
 
@@ -178,7 +178,7 @@ Build the intrinsic-parameter prior for the full-BNS proposal as a native
 [`Distributions.product_distribution`](@ref) keyed by a `NamedTuple` with fields
 `mass` (an [`OrderedUniformSourceMassPair`](@ref), a 2-vector component),
 `redshift` (a [`RedshiftInterpolatedDistribution`](@ref) tied to `bundle`),
-`chi_1`/`chi_2` (a shared [`AlignedSpinChiSimple`](@ref)), and `lambda_1`/`lambda_2`
+`χ₁`/`χ₂` (a shared [`AlignedSpinChiSimple`](@ref)), and `Λ₁`/`Λ₂`
 (a shared [`Distributions.Uniform`](@ref)).
 
 The returned [`ProductNamedTupleDistribution`](@ref) supports `rand`/`rand(prior, n)`
@@ -198,10 +198,10 @@ function intrinsic_prior(
     return product_distribution((
         mass = OrderedUniformSourceMassPair(; low = mass_low, high = mass_high),
         redshift = RedshiftInterpolatedDistribution(bundle),
-        chi_1 = spin_dist,
-        chi_2 = spin_dist,
-        lambda_1 = lambda_dist,
-        lambda_2 = lambda_dist
+        χ₁ = spin_dist,
+        χ₂ = spin_dist,
+        Λ₁ = lambda_dist,
+        Λ₂ = lambda_dist
     ))
 end
 
@@ -228,10 +228,10 @@ function _full_bns_pointwise_logpdf(
     return (
         logpdf(prior.dists.mass, (samples.mass[1, i], samples.mass[2, i])) +
         logpdf(prior.dists.redshift, samples.redshift[i]) +
-        logpdf(prior.dists.chi_1, samples.chi_1[i]) +
-        logpdf(prior.dists.chi_2, samples.chi_2[i]) +
-        logpdf(prior.dists.lambda_1, samples.lambda_1[i]) +
-        logpdf(prior.dists.lambda_2, samples.lambda_2[i])
+        logpdf(prior.dists.χ₁, samples.χ₁[i]) +
+        logpdf(prior.dists.χ₂, samples.χ₂[i]) +
+        logpdf(prior.dists.Λ₁, samples.Λ₁[i]) +
+        logpdf(prior.dists.Λ₂, samples.Λ₂[i])
     )
 end
 
@@ -273,10 +273,10 @@ end
 function _require_full_bns_soa_matching_lengths(samples::NamedTuple)
     n = length(samples.redshift)
     (
-        length(samples.chi_1) == n &&
-        length(samples.chi_2) == n &&
-        length(samples.lambda_1) == n &&
-        length(samples.lambda_2) == n &&
+        length(samples.χ₁) == n &&
+        length(samples.χ₂) == n &&
+        length(samples.Λ₁) == n &&
+        length(samples.Λ₂) == n &&
         size(samples.mass, 2) == n
     ) || throw(ArgumentError("SoA sample vectors must all have matching lengths"))
     size(samples.mass, 1) == 2 ||

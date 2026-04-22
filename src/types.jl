@@ -87,15 +87,15 @@ Fiducial cosmology, propagation, and population scalars read from the HDF5 cache
 """
 Base.@kwdef struct ProposalFiducialParameters
     H0::Float64
-    Omega_m::Float64
-    chi0::Float64
-    chin::Float64
+    Ωm::Float64
+    Ξ₀::Float64
+    Ξₙ::Float64
     """Madau–Dickinson population scalars for reconstructing proposal redshift density (format v3)."""
-    gamma::Union{Nothing, Float64} = nothing
-    kappa::Union{Nothing, Float64} = nothing
-    z_peak::Union{Nothing, Float64} = nothing
-    """Power-law redshift index `lamb` when `redshift_prior_spec.family` is `PowerLaw`."""
-    lamb::Union{Nothing, Float64} = nothing
+    γ::Union{Nothing, Float64} = nothing
+    κ::Union{Nothing, Float64} = nothing
+    zpeak::Union{Nothing, Float64} = nothing
+    """Power-law redshift index when `redshift_prior_spec.family` is `PowerLaw` (HDF5 key `lamb`)."""
+    Λ::Union{Nothing, Float64} = nothing
 end
 
 const FULL_BNS_INTRINSIC_ORDER = [

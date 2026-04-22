@@ -37,10 +37,10 @@ using Test
 
     theta = HyperParameters(;
         H0 = 67.0,
-        Omega_m = 0.315,
-        gamma = 2.7,
-        kappa = 3.0,
-        z_peak = 2.5
+        Ωm = 0.315,
+        γ = 2.7,
+        κ = 3.0,
+        zpeak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
@@ -58,19 +58,19 @@ end
 @testset "intrinsic_prior factory returns ProductNamedTupleDistribution" begin
     theta = HyperParameters(;
         H0 = 67.0,
-        Omega_m = 0.315,
-        gamma = 2.7,
-        kappa = 3.0,
-        z_peak = 2.5
+        Ωm = 0.315,
+        γ = 2.7,
+        κ = 3.0,
+        zpeak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
     prior = intrinsic_prior(FullBNS(), bundle)
     @test prior isa ProductNamedTupleDistribution
-    @test keys(prior.dists) == (:mass, :redshift, :chi_1, :chi_2, :lambda_1, :lambda_2)
+    @test keys(prior.dists) == (:mass, :redshift, :χ₁, :χ₂, :Λ₁, :Λ₂)
 
     single = rand(MersenneTwister(7), prior)
-    @test keys(single) == (:mass, :redshift, :chi_1, :chi_2, :lambda_1, :lambda_2)
+    @test keys(single) == (:mass, :redshift, :χ₁, :χ₂, :Λ₁, :Λ₂)
     @test single.mass isa AbstractVector && length(single.mass) == 2
     @test single.mass[1] >= single.mass[2]
     @test logpdf(prior, single) isa Real
@@ -88,10 +88,10 @@ end
 @testset "intrinsic_log_prob_samples SoA fast path matches native logpdf" begin
     theta = HyperParameters(;
         H0 = 67.0,
-        Omega_m = 0.315,
-        gamma = 2.7,
-        kappa = 3.0,
-        z_peak = 2.5
+        Ωm = 0.315,
+        γ = 2.7,
+        κ = 3.0,
+        zpeak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
@@ -99,10 +99,10 @@ end
     samples = (
         mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
         redshift = [0.1, 0.2],
-        chi_1 = [0.0, 0.1],
-        chi_2 = [0.0, -0.2],
-        lambda_1 = [100.0, 200.0],
-        lambda_2 = [150.0, 250.0]
+        χ₁ = [0.0, 0.1],
+        χ₂ = [0.0, -0.2],
+        Λ₁ = [100.0, 200.0],
+        Λ₂ = [150.0, 250.0]
     )
 
     expected = [logpdf(
@@ -110,10 +110,10 @@ end
                     (
                         mass = [samples.mass[1, i], samples.mass[2, i]],
                         redshift = samples.redshift[i],
-                        chi_1 = samples.chi_1[i],
-                        chi_2 = samples.chi_2[i],
-                        lambda_1 = samples.lambda_1[i],
-                        lambda_2 = samples.lambda_2[i]
+                        χ₁ = samples.χ₁[i],
+                        χ₂ = samples.χ₂[i],
+                        Λ₁ = samples.Λ₁[i],
+                        Λ₂ = samples.Λ₂[i]
                     )
                 ) for i in 1:length(samples.redshift)]
 
@@ -127,10 +127,10 @@ end
 @testset "intrinsic_log_prob_samples AoS fallback" begin
     theta = HyperParameters(;
         H0 = 67.0,
-        Omega_m = 0.315,
-        gamma = 2.7,
-        kappa = 3.0,
-        z_peak = 2.5
+        Ωm = 0.315,
+        γ = 2.7,
+        κ = 3.0,
+        zpeak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
@@ -139,18 +139,18 @@ end
         (
             mass = [1.4, 1.2],
             redshift = 0.1,
-            chi_1 = 0.0,
-            chi_2 = 0.0,
-            lambda_1 = 100.0,
-            lambda_2 = 150.0
+            χ₁ = 0.0,
+            χ₂ = 0.0,
+            Λ₁ = 100.0,
+            Λ₂ = 150.0
         ),
         (
             mass = [1.5, 1.3],
             redshift = 0.2,
-            chi_1 = 0.1,
-            chi_2 = -0.2,
-            lambda_1 = 200.0,
-            lambda_2 = 250.0
+            χ₁ = 0.1,
+            χ₂ = -0.2,
+            Λ₁ = 200.0,
+            Λ₂ = 250.0
         )
     ]
     @test intrinsic_log_prob_samples(prior, aos) == [logpdf(prior, s) for s in aos]

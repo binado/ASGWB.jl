@@ -13,12 +13,12 @@ using Test
     @test omegagw(sh, f, H0_kms) ≈ expected
     θ = HyperParameters(;
         H0 = H0_kms,
-        Omega_m = 0.3,
-        chi0 = 1.0,
-        chin = 0.0,
-        gamma = 2.0,
-        kappa = 1.0,
-        z_peak = 1.0
+        Ωm = 0.3,
+        Ξ₀ = 1.0,
+        Ξₙ = 0.0,
+        γ = 2.0,
+        κ = 1.0,
+        zpeak = 1.0
     )
     @test omegagw(sh, f, θ) ≈ omegagw(sh, f, H0_kms)
     @test omegagw(1.0e-45, 10.0, H0_kms) ≈ pre * 10.0^3 * 1.0e-45

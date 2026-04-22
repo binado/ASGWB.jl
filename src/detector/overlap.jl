@@ -42,77 +42,77 @@ function _azimuth_bisector_rad(az1, az2)
     return atan(sin(a1) + sin(a2), cos(a1) + cos(a2))
 end
 
-function _g1(alpha::AbstractVector{Float64})
-    return map(_g1_scalar, alpha)
+function _g1(α::AbstractVector{Float64})
+    return map(_g1_scalar, α)
 end
 
-function _g1_scalar(alpha::Float64)
-    if abs(alpha) < 1e-14
+function _g1_scalar(α::Float64)
+    if abs(α) < 1e-14
         return 3.0 / 56.0
     end
     return (5.0 / 16.0) * (
         (
-        -9 * alpha * cos(alpha) - 6 * alpha^3 * cos(alpha) +
-        9 * sin(alpha) +
-        3 * alpha^2 * sin(alpha) +
-        alpha^4 * sin(alpha)
-    ) / alpha^5
+        -9 * α * cos(α) - 6 * α^3 * cos(α) +
+        9 * sin(α) +
+        3 * α^2 * sin(α) +
+        α^4 * sin(α)
+    ) / α^5
     )
 end
 
-function _g2(alpha::AbstractVector{Float64})
-    return map(_g2_scalar, alpha)
+function _g2(α::AbstractVector{Float64})
+    return map(_g2_scalar, α)
 end
 
-function _g2_scalar(alpha::Float64)
-    if abs(alpha) < 1e-14
+function _g2_scalar(α::Float64)
+    if abs(α) < 1e-14
         return -1.0 / 168.0
     end
     return (5.0 / 16.0) * (
         (
-        45 * alpha * cos(alpha) + 6 * alpha^3 * cos(alpha) - 45 * sin(alpha) +
-        9 * alpha^2 * sin(alpha) +
-        3 * alpha^4 * sin(alpha)
-    ) / alpha^5
+        45 * α * cos(α) + 6 * α^3 * cos(α) - 45 * sin(α) +
+        9 * α^2 * sin(α) +
+        3 * α^4 * sin(α)
+    ) / α^5
     )
 end
 
-function _g3(alpha::AbstractVector{Float64})
-    return map(_g3_scalar, alpha)
+function _g3(α::AbstractVector{Float64})
+    return map(_g3_scalar, α)
 end
 
-function _g3_scalar(alpha::Float64)
-    if abs(alpha) < 1e-14
+function _g3_scalar(α::Float64)
+    if abs(α) < 1e-14
         return 1.0 / 168.0
     end
     return (5.0 / 4.0) * (
         (
-        15 * alpha * cos(alpha) - 4 * alpha^3 * cos(alpha) - 15 * sin(alpha) +
-        9 * alpha^2 * sin(alpha) - alpha^4 * sin(alpha)
-    ) / alpha^5
+        15 * α * cos(α) - 4 * α^3 * cos(α) - 15 * sin(α) +
+        9 * α^2 * sin(α) - α^4 * sin(α)
+    ) / α^5
     )
 end
 
 function _get_orf(
-        alpha::AbstractVector{Float64},
-        beta::Float64,
-        delta::Float64,
-        big_delta::Float64,
+        α::AbstractVector{Float64},
+        β::Float64,
+        δ::Float64,
+        Δ::Float64,
         ang_btw_arms_1::Float64,
         ang_btw_arms_2::Float64
 )
     sin1 = sin(ang_btw_arms_1)
     sin2 = sin(ang_btw_arms_2)
-    g1 = _g1(alpha)
-    g2 = _g2(alpha)
-    g3 = _g3(alpha)
-    cb = cos(0.5 * beta)
-    sb = sin(0.5 * beta)
+    g1 = _g1(α)
+    g2 = _g2(α)
+    g3 = _g3(α)
+    cb = cos(0.5 * β)
+    sb = sin(0.5 * β)
     theta_1 = (cb^4) .* g1
     theta_2 = (cb^4) .* g2 .+ g3 .- (sb^4) .* (g2 .+ g1)
-    high = (cos(4 * delta) .* theta_1 .+ cos(4 * big_delta) .* theta_2) .* (sin1 * sin2)
-    low = cos(4 * delta) * sin1 * sin2
-    return ifelse.(alpha .> _LOW_ALPHA_THRESHOLD, high, low)
+    high = (cos(4 * δ) .* theta_1 .+ cos(4 * Δ) .* theta_2) .* (sin1 * sin2)
+    low = cos(4 * δ) * sin1 * sin2
+    return ifelse.(α .> _LOW_ALPHA_THRESHOLD, high, low)
 end
 
 """
@@ -131,18 +131,18 @@ function overlap_reduction_function(
     lat2 = detector_2.latitude
     lon2 = detector_2.longitude
     d = _chord_distance_km(lat1, lon1, lat2, lon2)
-    alpha = @. 2 * π * f * d / _C_LIGHT_KM_S
+    α = @. 2 * π * f * d / _C_LIGHT_KM_S
     xax_1 = _azimuth_bisector_rad(detector_1.xarm_azimuth, detector_1.yarm_azimuth)
     xax_2 = _azimuth_bisector_rad(detector_2.xarm_azimuth, detector_2.yarm_azimuth)
     ang_1 = deg2rad(_initial_course_deg(lat1, lat2, lon1, lon2) - 90.0)
     ang_2 = deg2rad(_final_course_deg(lat1, lat2, lon1, lon2) - 90.0)
-    delta = 0.5 * ((xax_1 + ang_1) - (xax_2 + ang_2))
-    big_delta = 0.5 * ((xax_1 + ang_1) + (xax_2 + ang_2))
+    δ = 0.5 * ((xax_1 + ang_1) - (xax_2 + ang_2))
+    Δ = 0.5 * ((xax_1 + ang_1) + (xax_2 + ang_2))
     asin_arg = clamp(0.5 * d / _R_EARTH_KM, -1.0, 1.0)
-    beta = 2 * asin(asin_arg)
+    β = 2 * asin(asin_arg)
     ang_btw_arms_1 = _opening_angle_rad(detector_1.xarm_azimuth, detector_1.yarm_azimuth)
     ang_btw_arms_2 = _opening_angle_rad(detector_2.xarm_azimuth, detector_2.yarm_azimuth)
-    return _get_orf(alpha, beta, delta, big_delta, ang_btw_arms_1, ang_btw_arms_2)
+    return _get_orf(α, β, δ, Δ, ang_btw_arms_1, ang_btw_arms_2)
 end
 
 """

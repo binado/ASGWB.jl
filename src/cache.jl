@@ -5,7 +5,7 @@ Build [`HyperParameters`](@ref) from cache `hyperparameters` scalars and the fil
 [`RedshiftPriorSpec`](@ref). Used when reconstructing per-sample proposal log-density
 from redshift grids (e.g. caches that omit `proposal_log_prob`).
 
-Requires `gamma`, `kappa`, and `z_peak` on `fid` when `spec.family` is Madau–Dickinson,
+Requires `γ`, `κ`, and `zpeak` on `fid` when `spec.family` is Madau–Dickinson,
 Power-law caches are rejected: live hyperparameter reconstruction is MadauDickinson-only.
 """
 function hyperparameters_from_fiducial(
@@ -17,22 +17,22 @@ function hyperparameters_from_fiducial(
         "live hyperparameter reconstruction supports MadauDickinson only; PowerLaw caches are metadata-only",
     ),
     )
-    g, κ, zp = fid.gamma, fid.kappa, fid.z_peak
-    if isnothing(g) || isnothing(κ) || isnothing(zp)
+    g, κ′, zp = fid.γ, fid.κ, fid.zpeak
+    if isnothing(g) || isnothing(κ′) || isnothing(zp)
         throw(
             ArgumentError(
-            "reconstructing proposal log-density requires hyperparameters gamma, kappa, and z_peak for MadauDickinson redshift prior",
+            "reconstructing proposal log-density requires hyperparameters gamma, kappa, and z_peak (HDF5 keys) for MadauDickinson redshift prior",
         ),
         )
     end
     return HyperParameters(;
         H0 = fid.H0,
-        Omega_m = fid.Omega_m,
-        chi0 = fid.chi0,
-        chin = fid.chin,
-        gamma = g,
-        kappa = κ,
-        z_peak = zp
+        Ωm = fid.Ωm,
+        Ξ₀ = fid.Ξ₀,
+        Ξₙ = fid.Ξₙ,
+        γ = g,
+        κ = κ′,
+        zpeak = zp
     )
 end
 
@@ -62,8 +62,8 @@ function reconstruct_dgw_fid_sq(
         z::AbstractVector{<:Real},
         fid::ProposalFiducialParameters
 )::Vector{Float64}
-    d_l = luminosity_distance.(z, fid.H0, fid.Omega_m)
-    d_gw = gravitational_wave_distance.(z, d_l, fid.chi0, fid.chin)
+    d_l = luminosity_distance.(z, fid.H0, fid.Ωm)
+    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
     return Float64.(d_gw .^ 2)
 end
 
@@ -81,8 +81,8 @@ function reconstruct_cached_flux_over_dgw2(
 )::Matrix{Float64}
     size(cached_flux, 2) == length(z) ||
         throw(ArgumentError("cached_flux column count must match redshift sample count"))
-    d_l = luminosity_distance.(z, fid.H0, fid.Omega_m)
-    d_gw = gravitational_wave_distance.(z, d_l, fid.chi0, fid.chin)
+    d_l = luminosity_distance.(z, fid.H0, fid.Ωm)
+    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
     scale_row = reshape(Float64.((d_l ./ d_gw) .^ 2), 1, :)
     return Matrix{Float64}(cached_flux) .* scale_row
 end

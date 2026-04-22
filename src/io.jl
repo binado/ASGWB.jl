@@ -215,7 +215,7 @@ function _read_proposal_fiducial_parameters(
     γ = _merge_population_scalar(hyper, spec, "gamma")
     κ = _merge_population_scalar(hyper, spec, "kappa")
     zp = _merge_population_scalar(hyper, spec, "z_peak")
-    λ = _merge_population_scalar(hyper, spec, "lamb")
+    Λ_pl = _merge_population_scalar(hyper, spec, "lamb")
     if family == MadauDickinson
         γ === nothing && throw(
             ArgumentError(
@@ -233,7 +233,7 @@ function _read_proposal_fiducial_parameters(
         ),
         )
     else
-        λ === nothing && throw(
+        Λ_pl === nothing && throw(
             ArgumentError(
             "power-law cache requires lamb in hyperparameters or redshift_prior_spec",
         ),
@@ -241,13 +241,13 @@ function _read_proposal_fiducial_parameters(
     end
     return ProposalFiducialParameters(;
         H0 = _read_float_scalar_dataset(hyper, "H0"),
-        Omega_m = _read_float_scalar_dataset(hyper, "Omega_m"),
-        chi0 = _read_float_scalar_dataset(hyper, "chi0"),
-        chin = _read_float_scalar_dataset(hyper, "chin"),
-        gamma = γ,
-        kappa = κ,
-        z_peak = zp,
-        lamb = λ
+        Ωm = _read_float_scalar_dataset(hyper, "Omega_m"),
+        Ξ₀ = _read_float_scalar_dataset(hyper, "chi0"),
+        Ξₙ = _read_float_scalar_dataset(hyper, "chin"),
+        γ = γ,
+        κ = κ,
+        zpeak = zp,
+        Λ = Λ_pl
     )
 end
 
@@ -271,10 +271,10 @@ function bundle_from_hdf5(
             proposal_samples["mass_2_source"]
         ),
         redshift = copy(proposal_samples["redshift"]),
-        chi_1 = copy(proposal_samples["chi_1"]),
-        chi_2 = copy(proposal_samples["chi_2"]),
-        lambda_1 = copy(proposal_samples["lambda_1"]),
-        lambda_2 = copy(proposal_samples["lambda_2"])
+        χ₁ = copy(proposal_samples["chi_1"]),
+        χ₂ = copy(proposal_samples["chi_2"]),
+        Λ₁ = copy(proposal_samples["lambda_1"]),
+        Λ₂ = copy(proposal_samples["lambda_2"])
     )
 end
 

@@ -7,8 +7,8 @@
 #
 # Sites under investigation:
 #   - src/cosmology.jl:9-13     quadgk inside comoving_distance
-#   - src/redshift.jl:95        differential_comoving_volume.(z_grid, H0, Omega_m) broadcast
-#   - src/importance.jl:36      luminosity_distance.(z, H0, Omega_m) per-sample broadcast
+#   - src/redshift.jl           differential_comoving_volume.(z_grid, H0, Ωm) broadcast
+#   - src/importance.jl         luminosity_distance.(z, H0, Ωm) per-sample broadcast
 #   - src/turing_model.jl:55-97 the model being profiled
 #
 # This script is *measurement only*: it does not edit any src/ files.
@@ -178,7 +178,7 @@ function _run(
     weights0 = iw0.weights
     z_samples = redshift(problem)
     H0_val = h.H0
-    Omega_m_val = h.Omega_m
+    Ωm_val = h.Ωm
 
     # ------------------------------------------------------------------
     # Warmup — trigger JIT / AD compilation before any benchmark
@@ -235,7 +235,7 @@ function _run(
     suite["stage"]["prior"] = @benchmarkable logprior($h, $priors)
     # Bare luminosity_distance broadcast — isolates the per-sample quadgk
     # cost currently in src/importance.jl:36 and src/cache.jl:70.
-    suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $H0_val, $Omega_m_val)
+    suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $H0_val, $Ωm_val)
 
     @info "tuning benchmark suite (evals/sample calibration)"
     tune!(suite)

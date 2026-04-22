@@ -1,6 +1,6 @@
 """Ordering of parameters in the flat `HyperParameters` NamedTuple used by
 `product_distribution` / Bijectors / HMC."""
-const DEFAULT_PARAMETER_ORDER = (:H0, :Omega_m, :chi0, :chin, :gamma, :kappa, :z_peak)
+const DEFAULT_PARAMETER_ORDER = (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 
 """
     HyperParameters
@@ -8,20 +8,22 @@ const DEFAULT_PARAMETER_ORDER = (:H0, :Omega_m, :chi0, :chin, :gamma, :kappa, :z
 Flat Madau–Dickinson inference state as a concrete `Float64` `NamedTuple` alias keyed by
 [`DEFAULT_PARAMETER_ORDER`](@ref). Used directly by the product-distribution prior
 (`logpdf(prior, h)`), by Bijectors (`Bijectors.link(prior, h)`), and inside the Turing
-`@model`. The keyword constructor [`HyperParameters(; H0, Omega_m, …)`](@ref) and the
+`@model`. The keyword constructor [`HyperParameters(; H0, Ωm, …)`](@ref) and the
 from-NamedTuple constructor [`HyperParameters(nt)`](@ref) coerce inputs to `Float64`
 for user-facing code. Inner loops that see `ForwardDiff.Dual` values (e.g. HMC
 log-density gradient) work against the [`HyperParametersNT`](@ref) UnionAll alias which
 accepts any element types.
+
+On-disk HDF5 caches use ASCII dataset names (`Omega_m`, `chi0`, `gamma`, …); see [`load_cache`](@ref).
 """
 const HyperParameters = @NamedTuple{
     H0::Float64,
-    Omega_m::Float64,
-    chi0::Float64,
-    chin::Float64,
-    gamma::Float64,
-    kappa::Float64,
-    z_peak::Float64
+    Ωm::Float64,
+    Ξ₀::Float64,
+    Ξₙ::Float64,
+    γ::Float64,
+    κ::Float64,
+    zpeak::Float64
 }
 
 """
@@ -36,28 +38,28 @@ gradients flow through unchanged.
 const HyperParametersNT = NamedTuple{DEFAULT_PARAMETER_ORDER}
 
 """
-    HyperParameters(; H0, Omega_m, chi0=1.0, chin=0.0, gamma, kappa, z_peak) -> HyperParameters
+    HyperParameters(; H0, Ωm, Ξ₀=1.0, Ξₙ=0.0, γ, κ, zpeak) -> HyperParameters
 
 Convenience keyword constructor returning a flat [`HyperParameters`](@ref) NamedTuple
 with `Float64` coercion.
 """
 function HyperParameters(;
         H0::Real,
-        Omega_m::Real,
-        chi0::Real = 1.0,
-        chin::Real = 0.0,
-        gamma::Real,
-        kappa::Real,
-        z_peak::Real
+        Ωm::Real,
+        Ξ₀::Real = 1.0,
+        Ξₙ::Real = 0.0,
+        γ::Real,
+        κ::Real,
+        zpeak::Real
 )::HyperParameters
     return (
         H0 = Float64(H0),
-        Omega_m = Float64(Omega_m),
-        chi0 = Float64(chi0),
-        chin = Float64(chin),
-        gamma = Float64(gamma),
-        kappa = Float64(kappa),
-        z_peak = Float64(z_peak)
+        Ωm = Float64(Ωm),
+        Ξ₀ = Float64(Ξ₀),
+        Ξₙ = Float64(Ξₙ),
+        γ = Float64(γ),
+        κ = Float64(κ),
+        zpeak = Float64(zpeak)
     )
 end
 
@@ -65,18 +67,18 @@ end
     HyperParameters(nt::NamedTuple) -> HyperParameters
 
 Build a [`HyperParameters`](@ref) NamedTuple (with `Float64` coercion) from any
-NamedTuple carrying at least `:H0, :Omega_m, :gamma, :kappa, :z_peak`. `chi0` /
-`chin` default to `1.0` / `0.0` when absent.
+NamedTuple carrying at least `:H0, :Ωm, :γ, :κ, :zpeak`. `Ξ₀` /
+`Ξₙ` default to `1.0` / `0.0` when absent.
 """
 function HyperParameters(nt::NamedTuple)::HyperParameters
     return HyperParameters(;
         H0 = nt.H0,
-        Omega_m = nt.Omega_m,
-        chi0 = haskey(nt, :chi0) ? nt.chi0 : 1.0,
-        chin = haskey(nt, :chin) ? nt.chin : 0.0,
-        gamma = nt.gamma,
-        kappa = nt.kappa,
-        z_peak = nt.z_peak
+        Ωm = nt.Ωm,
+        Ξ₀ = haskey(nt, :Ξ₀) ? nt.Ξ₀ : 1.0,
+        Ξₙ = haskey(nt, :Ξₙ) ? nt.Ξₙ : 0.0,
+        γ = nt.γ,
+        κ = nt.κ,
+        zpeak = nt.zpeak
     )
 end
 
@@ -89,17 +91,17 @@ Struct-of-arrays proposal-sample container matching the NamedTuple returned by
 `rand(prior, n)` when `prior = intrinsic_prior(FullBNS(), bundle)`:
 
 - `mass::Matrix{Float64}` of size `(2, n)`; row 1 is `mass_1_source`, row 2 is `mass_2_source`.
-- `redshift`, `chi_1`, `chi_2`, `lambda_1`, `lambda_2` are `Vector{Float64}` of length `n`.
+- `redshift`, `χ₁`, `χ₂`, `Λ₁`, `Λ₂` are `Vector{Float64}` of length `n`.
 
-Matches `keys(prior.dists)` for the full-BNS intrinsic prior.
+HDF5 proposal columns remain ASCII (`chi_1`, `lambda_1`, …). Matches `keys(prior.dists)` for the full-BNS intrinsic prior.
 """
 const FullBNSSamplesSoA = @NamedTuple{
     mass::Matrix{Float64},
     redshift::Vector{Float64},
-    chi_1::Vector{Float64},
-    chi_2::Vector{Float64},
-    lambda_1::Vector{Float64},
-    lambda_2::Vector{Float64}
+    χ₁::Vector{Float64},
+    χ₂::Vector{Float64},
+    Λ₁::Vector{Float64},
+    Λ₂::Vector{Float64}
 }
 
 """

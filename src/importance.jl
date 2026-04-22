@@ -32,8 +32,8 @@ function compute_importance_weights(
         bundle::RedshiftBundle
 )
     z = redshift(problem)
-    d_l = luminosity_distance.(z, h.H0, h.Omega_m, Ref(bundle.distance))
-    dgw_theta = gravitational_wave_distance.(z, d_l, h.chi0, h.chin)
+    d_l = luminosity_distance.(z, h.H0, h.Ωm, Ref(bundle.distance))
+    dgw_theta = gravitational_wave_distance.(z, d_l, h.Ξ₀, h.Ξₙ)
     dgw_theta_sq = dgw_theta .^ 2
 
     prior = intrinsic_prior(problem.strategy, bundle)

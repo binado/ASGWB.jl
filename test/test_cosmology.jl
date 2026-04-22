@@ -27,17 +27,17 @@ end
         for case_name in sort!(collect(keys(cases)))
             case_group = cases[case_name]
             H0 = Float64(read(case_group["H0"]))
-            Omega_m = Float64(read(case_group["Omega_m"]))
-            chi0 = Float64(read(case_group["chi0"]))
-            chin = Float64(read(case_group["chin"]))
+            Ωm = Float64(read(case_group["Omega_m"]))
+            Ξ₀ = Float64(read(case_group["chi0"]))
+            Ξₙ = Float64(read(case_group["chin"]))
 
             expected_dl = vec(Float64.(read(case_group["luminosity_distance"])))
             expected_dvc = vec(Float64.(read(case_group["differential_comoving_volume"])))
             expected_dgw = vec(Float64.(read(case_group["gravitational_wave_distance"])))
 
-            @test luminosity_distance.(z_grid, H0, Omega_m) ≈ expected_dl rtol = 1e-6
-            @test differential_comoving_volume.(z_grid, H0, Omega_m) ≈ expected_dvc rtol = 1e-6
-            @test gravitational_wave_distance.(z_grid, expected_dl, chi0, chin) ≈
+            @test luminosity_distance.(z_grid, H0, Ωm) ≈ expected_dl rtol = 1e-6
+            @test differential_comoving_volume.(z_grid, H0, Ωm) ≈ expected_dvc rtol = 1e-6
+            @test gravitational_wave_distance.(z_grid, expected_dl, Ξ₀, Ξₙ) ≈
                   expected_dgw rtol = 1e-6
         end
     end
@@ -61,8 +61,8 @@ end
     end
 
     @testset "cdf agrees with quadgk on cosmology kernel (trapezoidal bound)" begin
-        Omega_m = 0.315
-        inv_E = w -> inv(E(w, Omega_m))
+        Ωm = 0.315
+        inv_E = w -> inv(E(w, Ωm))
         x = collect(LinRange(0.0, 20.0, 1024))
         r = CumulativeIntegral1D(x, inv_E)
         # Trapezoidal antiderivative error on a 1024-node grid is ≤ 1e-4 everywhere.
@@ -73,23 +73,23 @@ end
     end
 
     @testset "luminosity_distance overload matches scalar path" begin
-        H0, Omega_m = 67.0, 0.315
+        H0, Ωm = 67.0, 0.315
         x = collect(LinRange(0.0, 10.0, 1024))
-        dist = CumulativeIntegral1D(x, w -> inv(E(w, Omega_m)))
+        dist = CumulativeIntegral1D(x, w -> inv(E(w, Ωm)))
         for z in (0.05, 0.3, 1.2, 4.5, 8.0)
-            @test luminosity_distance(z, H0, Omega_m, dist) ≈
-                  luminosity_distance(z, H0, Omega_m) rtol = 1e-4
-            @test differential_comoving_volume(z, H0, Omega_m, dist) ≈
-                  differential_comoving_volume(z, H0, Omega_m) rtol = 1e-4
+            @test luminosity_distance(z, H0, Ωm, dist) ≈
+                  luminosity_distance(z, H0, Ωm) rtol = 1e-4
+            @test differential_comoving_volume(z, H0, Ωm, dist) ≈
+                  differential_comoving_volume(z, H0, Ωm) rtol = 1e-4
         end
     end
 
     @testset "ForwardDiff Duals propagate through CumulativeIntegral1D" begin
         x = collect(LinRange(0.0, 10.0, 257))
         # Derivative of d_c(H0, Ωm) w.r.t. Ωm, evaluated at a catalog z.
-        f = Omega_m -> begin
-            dist = CumulativeIntegral1D(x, w -> inv(E(w, Omega_m)))
-            luminosity_distance(1.2, 67.0, Omega_m, dist)
+        f = Ωm -> begin
+            dist = CumulativeIntegral1D(x, w -> inv(E(w, Ωm)))
+            luminosity_distance(1.2, 67.0, Ωm, dist)
         end
         grad = ForwardDiff.derivative(f, 0.315)
         @test isfinite(grad)

@@ -13,25 +13,25 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
     γ, κ, zp = 2.7, 3.0, 2.5
     fid = ProposalFiducialParameters(;
         H0 = ref.fiducial_parameters.H0,
-        Omega_m = ref.fiducial_parameters.Omega_m,
-        chi0 = ref.fiducial_parameters.chi0,
-        chin = ref.fiducial_parameters.chin,
-        gamma = γ,
-        kappa = κ,
-        z_peak = zp
+        Ωm = ref.fiducial_parameters.Ωm,
+        Ξ₀ = ref.fiducial_parameters.Ξ₀,
+        Ξₙ = ref.fiducial_parameters.Ξₙ,
+        γ = γ,
+        κ = κ,
+        zpeak = zp
     )
-    d_l = luminosity_distance.(z, fid.H0, fid.Omega_m)
-    d_gw = gravitational_wave_distance.(z, d_l, fid.chi0, fid.chin)
+    d_l = luminosity_distance.(z, fid.H0, fid.Ωm)
+    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
     scale = (d_l ./ d_gw) .^ 2
     raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
     h = HyperParameters(;
         H0 = fid.H0,
-        Omega_m = fid.Omega_m,
-        chi0 = fid.chi0,
-        chin = fid.chin,
-        gamma = γ,
-        kappa = κ,
-        z_peak = zp
+        Ωm = fid.Ωm,
+        Ξ₀ = fid.Ξ₀,
+        Ξₙ = fid.Ξₙ,
+        γ = γ,
+        κ = κ,
+        zpeak = zp
     )
     bundle = build_redshift_grid_bundle(h, spec)
     expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)
@@ -63,16 +63,16 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
             write(g, "mass_1_source", Vector(s.mass[1, :]))
             write(g, "mass_2_source", Vector(s.mass[2, :]))
             write(g, "redshift", s.redshift)
-            write(g, "chi_1", s.chi_1)
-            write(g, "chi_2", s.chi_2)
-            write(g, "lambda_1", s.lambda_1)
-            write(g, "lambda_2", s.lambda_2)
+            write(g, "chi_1", s.χ₁)
+            write(g, "chi_2", s.χ₂)
+            write(g, "lambda_1", s.Λ₁)
+            write(g, "lambda_2", s.Λ₂)
 
             hg = create_group(f, "hyperparameters")
             write(hg, "H0", fid.H0)
-            write(hg, "Omega_m", fid.Omega_m)
-            write(hg, "chi0", fid.chi0)
-            write(hg, "chin", fid.chin)
+            write(hg, "Omega_m", fid.Ωm)
+            write(hg, "chi0", fid.Ξ₀)
+            write(hg, "chin", fid.Ξₙ)
             write(hg, "gamma", γ)
             write(hg, "kappa", κ)
             write(hg, "z_peak", zp)
@@ -103,10 +103,10 @@ end
     samples = (
         mass = stack_source_masses([1.4, 1.4], [1.2, 1.2]),
         redshift = [0.1, 0.2],
-        chi_1 = [0.0, 0.0],
-        chi_2 = [0.0, 0.0],
-        lambda_1 = [100.0, 100.0],
-        lambda_2 = [100.0, 100.0]
+        χ₁ = [0.0, 0.0],
+        χ₂ = [0.0, 0.0],
+        Λ₁ = [100.0, 100.0],
+        Λ₂ = [100.0, 100.0]
     )
     lp = reconstruct_proposal_log_prob(
         samples,
@@ -160,9 +160,9 @@ end
     @test from_memory.redshift_prior_spec.time_delay_model ===
           from_file.redshift_prior_spec.time_delay_model
     @test from_memory.fiducial_parameters.H0 == from_file.fiducial_parameters.H0
-    @test from_memory.fiducial_parameters.Omega_m == from_file.fiducial_parameters.Omega_m
-    @test from_memory.fiducial_parameters.chi0 == from_file.fiducial_parameters.chi0
-    @test from_memory.fiducial_parameters.chin == from_file.fiducial_parameters.chin
+    @test from_memory.fiducial_parameters.Ωm == from_file.fiducial_parameters.Ωm
+    @test from_memory.fiducial_parameters.Ξ₀ == from_file.fiducial_parameters.Ξ₀
+    @test from_memory.fiducial_parameters.Ξₙ == from_file.fiducial_parameters.Ξₙ
     @test from_memory.local_merger_rate == from_file.local_merger_rate
     @test from_memory.redshift_integral_fiducial == from_file.redshift_integral_fiducial
     @test typeof(from_memory.strategy) == typeof(from_file.strategy)
@@ -177,10 +177,10 @@ end
     @test s.redshift ≈ [0.1, 0.2]
     @test Vector(s.mass[1, :]) ≈ [1.4, 1.4]
     @test Vector(s.mass[2, :]) ≈ [1.2, 1.2]
-    @test s.chi_1 ≈ [0.0, 0.0]
-    @test s.chi_2 ≈ [0.0, 0.0]
-    @test s.lambda_1 ≈ [100.0, 100.0]
-    @test s.lambda_2 ≈ [100.0, 100.0]
+    @test s.χ₁ ≈ [0.0, 0.0]
+    @test s.χ₂ ≈ [0.0, 0.0]
+    @test s.Λ₁ ≈ [100.0, 100.0]
+    @test s.Λ₂ ≈ [100.0, 100.0]
     # tolerance reflects Simpson- vs trapezoid-based bundle norm (see radial_interpolant.jl)
     @test problem.proposal.log_prob ≈ [-17.12928958264864, -15.702803964648165] rtol = 2e-3
     @test problem.proposal.intrinsic_vector ≈ Float64[1.4 1.2 0.1 0.0 0.0 100.0 100.0
@@ -200,9 +200,9 @@ end
     @test problem.observation.fiducial_spectral_density_in_band ≈
           ev.spectral_density_in_band
     @test problem.fiducial_parameters.H0 == 67.0
-    @test problem.fiducial_parameters.Omega_m == 0.315
-    @test problem.fiducial_parameters.chi0 == 1.0
-    @test problem.fiducial_parameters.chin == 0.0
+    @test problem.fiducial_parameters.Ωm == 0.315
+    @test problem.fiducial_parameters.Ξ₀ == 1.0
+    @test problem.fiducial_parameters.Ξₙ == 0.0
     @test problem.redshift_prior_spec.family == MadauDickinson
     @test problem.redshift_prior_spec.z_min == 0.001
     @test problem.redshift_prior_spec.z_max == 20.0
@@ -231,22 +231,22 @@ end
 @testset "importance_sampling_problem 5-arg infers redshift integral" begin
     fid = ProposalFiducialParameters(;
         H0 = 67.0,
-        Omega_m = 0.315,
-        chi0 = 1.0,
-        chin = 0.0,
-        gamma = 2.7,
-        kappa = 3.0,
-        z_peak = 2.5
+        Ωm = 0.315,
+        Ξ₀ = 1.0,
+        Ξₙ = 0.0,
+        γ = 2.7,
+        κ = 3.0,
+        zpeak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     ri = fiducial_redshift_integral(fid, spec)
     samples = (
         mass = stack_source_masses([1.4], [1.2]),
         redshift = [0.1],
-        chi_1 = [0.0],
-        chi_2 = [0.0],
-        lambda_1 = [100.0],
-        lambda_2 = [100.0]
+        χ₁ = [0.0],
+        χ₂ = [0.0],
+        Λ₁ = [100.0],
+        Λ₂ = [100.0]
     )
     lp = reconstruct_proposal_log_prob(samples, spec, fid)
     proposal = ProposalData(
