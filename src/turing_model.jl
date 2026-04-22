@@ -53,6 +53,7 @@ end
 @model function asgwb_importance_turing_model(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution,
+        z_grid::AbstractVector{<:Real},
         observed_in_band::AbstractVector{<:Real}
 )
     d = prior.dists
@@ -66,7 +67,7 @@ end
 
     h = (; H0, Omega_m, chi0, chin, gamma, kappa, z_peak)
 
-    bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec)
+    bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec, z_grid)
     iw = compute_importance_weights(problem, h, bundle)
     rate = merger_rate_per_sec(
         bundle,
@@ -101,9 +102,11 @@ function build_turing_model(
         prior::ProductNamedTupleDistribution;
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
+    z_grid = redshift_grid(problem.redshift_prior_spec)
     return asgwb_importance_turing_model(
         problem,
         prior,
+        z_grid,
         observed_spectral_density[problem.observation.in_band_mask]
     )
 end
