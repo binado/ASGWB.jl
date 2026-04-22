@@ -1,6 +1,6 @@
 function _inverse_covariance_from_orf_psd(
-    orf::AbstractArray{Float64,3},
-    psds::AbstractMatrix{Float64},
+        orf::AbstractArray{Float64, 3},
+        psds::AbstractMatrix{Float64}
 )
     # orf[i,j,f], psds[f, i] matches Python stacking on axis=-1
     n_freq = size(orf, 3)
@@ -31,12 +31,11 @@ Per-frequency isotropic SGWB variance `σ²(f)` (diagonal in Ω), matching Pytho
 Requires at least two detectors.
 """
 function covariance_on_grid(
-    frequencies::AbstractVector{<:Real},
-    detectors::AbstractVector{<:Detector},
+        frequencies::AbstractVector{<:Real},
+        detectors::AbstractVector{<:Detector}
 )
-    length(detectors) >= 2 || throw(
-        ArgumentError("covariance_on_grid requires at least two detectors"),
-    )
+    length(detectors) >= 2 ||
+        throw(ArgumentError("covariance_on_grid requires at least two detectors"))
     f = Float64.(collect(frequencies))
     orf = pairwise_overlap_reduction_function(f, detectors)
     psd_vecs = [det.psd(f) for det in detectors]

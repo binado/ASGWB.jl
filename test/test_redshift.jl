@@ -7,18 +7,18 @@ using Test
     h5open(fixture_path, "r") do file
         group = file["redshift_case"]
         theta = HyperParameters(;
-            H0=Float64(read(group["theta/H0"])),
-            Omega_m=Float64(read(group["theta/Omega_m"])),
-            gamma=Float64(read(group["theta/gamma"])),
-            kappa=Float64(read(group["theta/kappa"])),
-            z_peak=Float64(read(group["theta/z_peak"])),
+            H0 = Float64(read(group["theta/H0"])),
+            Omega_m = Float64(read(group["theta/Omega_m"])),
+            gamma = Float64(read(group["theta/gamma"])),
+            kappa = Float64(read(group["theta/kappa"])),
+            z_peak = Float64(read(group["theta/z_peak"]))
         )
         spec = RedshiftPriorSpec(
             parse_redshift_prior_family(String(read(group["spec/family"]))),
             Float64(read(group["spec/z_min"])),
             Float64(read(group["spec/z_max"])),
             Int(read(group["spec/num_interp"])),
-            nothing,
+            nothing
         )
         sample_z = vec(Float64.(read(group["sample_z"])))
         expected_log_prob = vec(Float64.(read(group["log_prob"])))

@@ -50,9 +50,14 @@ function _g1_scalar(alpha::Float64)
     if abs(alpha) < 1e-14
         return 3.0 / 56.0
     end
-    return (5.0 / 16.0) *
-           ((-9 * alpha * cos(alpha) - 6 * alpha^3 * cos(alpha) + 9 * sin(alpha) +
-             3 * alpha^2 * sin(alpha) + alpha^4 * sin(alpha)) / alpha^5)
+    return (5.0 / 16.0) * (
+        (
+        -9 * alpha * cos(alpha) - 6 * alpha^3 * cos(alpha) +
+        9 * sin(alpha) +
+        3 * alpha^2 * sin(alpha) +
+        alpha^4 * sin(alpha)
+    ) / alpha^5
+    )
 end
 
 function _g2(alpha::AbstractVector{Float64})
@@ -63,9 +68,13 @@ function _g2_scalar(alpha::Float64)
     if abs(alpha) < 1e-14
         return -1.0 / 168.0
     end
-    return (5.0 / 16.0) *
-           ((45 * alpha * cos(alpha) + 6 * alpha^3 * cos(alpha) - 45 * sin(alpha) +
-             9 * alpha^2 * sin(alpha) + 3 * alpha^4 * sin(alpha)) / alpha^5)
+    return (5.0 / 16.0) * (
+        (
+        45 * alpha * cos(alpha) + 6 * alpha^3 * cos(alpha) - 45 * sin(alpha) +
+        9 * alpha^2 * sin(alpha) +
+        3 * alpha^4 * sin(alpha)
+    ) / alpha^5
+    )
 end
 
 function _g3(alpha::AbstractVector{Float64})
@@ -76,18 +85,21 @@ function _g3_scalar(alpha::Float64)
     if abs(alpha) < 1e-14
         return 1.0 / 168.0
     end
-    return (5.0 / 4.0) *
-           ((15 * alpha * cos(alpha) - 4 * alpha^3 * cos(alpha) - 15 * sin(alpha) +
-             9 * alpha^2 * sin(alpha) - alpha^4 * sin(alpha)) / alpha^5)
+    return (5.0 / 4.0) * (
+        (
+        15 * alpha * cos(alpha) - 4 * alpha^3 * cos(alpha) - 15 * sin(alpha) +
+        9 * alpha^2 * sin(alpha) - alpha^4 * sin(alpha)
+    ) / alpha^5
+    )
 end
 
 function _get_orf(
-    alpha::AbstractVector{Float64},
-    beta::Float64,
-    delta::Float64,
-    big_delta::Float64,
-    ang_btw_arms_1::Float64,
-    ang_btw_arms_2::Float64,
+        alpha::AbstractVector{Float64},
+        beta::Float64,
+        delta::Float64,
+        big_delta::Float64,
+        ang_btw_arms_1::Float64,
+        ang_btw_arms_2::Float64
 )
     sin1 = sin(ang_btw_arms_1)
     sin2 = sin(ang_btw_arms_2)
@@ -109,9 +121,9 @@ end
 Stochastic isotropic ORF Γ(f) for one detector pair (same length as `frequencies`).
 """
 function overlap_reduction_function(
-    frequencies::AbstractVector{<:Real},
-    detector_1::Detector,
-    detector_2::Detector,
+        frequencies::AbstractVector{<:Real},
+        detector_1::Detector,
+        detector_2::Detector
 )
     f = Float64.(collect(frequencies))
     lat1 = detector_1.latitude
@@ -139,8 +151,8 @@ end
 Returns `Γ[i,j,f]` with shape `(n_detector, n_detector, n_freq)` (symmetric in `i,j`).
 """
 function pairwise_overlap_reduction_function(
-    frequencies::AbstractVector{<:Real},
-    detectors::AbstractVector{<:Detector},
+        frequencies::AbstractVector{<:Real},
+        detectors::AbstractVector{<:Detector}
 )
     det_list = collect(detectors)
     n = length(det_list)

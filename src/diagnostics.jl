@@ -9,4 +9,4 @@ function max_normalized_weight(weights::AbstractVector{<:Real})
     return maximum(weights) / sum(weights)
 end
 
-log_ratio_variance(log_ratio::AbstractVector{<:Real}) = var(log_ratio; corrected=false)
+log_ratio_variance(log_ratio::AbstractVector{<:Real}) = var(log_ratio; corrected = false)

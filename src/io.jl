@@ -37,9 +37,9 @@ function _read_in_band_mask(dataset)::BitVector
         catch
             throw(
                 ArgumentError(
-                    "in_band_mask: unsupported HDF5 element type $(eltype(v)); " *
-                    "expected bool, integer, or HDF5 enum compatible with Bool",
-                ),
+                "in_band_mask: unsupported HDF5 element type $(eltype(v)); " *
+                "expected bool, integer, or HDF5 enum compatible with Bool",
+            ),
             )
         end
     end
@@ -60,10 +60,10 @@ matrices. When it returns `(n_cols, n_samples)`, we apply `permutedims` to obtai
 when it already returns `(n_samples, n_cols)`, we use it as-is.
 """
 function _read_hdf5_col_sample_matrix(
-    dataset,
-    name::AbstractString,
-    n_samples::Int,
-    n_cols::Int,
+        dataset,
+        name::AbstractString,
+        n_samples::Int,
+        n_cols::Int
 )::Matrix{Float64}
     raw = Array{Float64}(read(dataset))
     ndims(raw) == 2 || throw(ArgumentError("$(name) must be a 2D dataset"))
@@ -74,9 +74,9 @@ function _read_hdf5_col_sample_matrix(
     else
         throw(
             ArgumentError(
-                "$(name): HDF5 extent contract is ($n_cols, $n_samples) = (n_columns, n_samples); " *
-                "after read expected size ($n_cols, $n_samples) or ($n_samples, $n_cols), got $(size(raw))",
-            ),
+            "$(name): HDF5 extent contract is ($n_cols, $n_samples) = (n_columns, n_samples); " *
+            "after read expected size ($n_cols, $n_samples) or ($n_samples, $n_cols), got $(size(raw))",
+        ),
         )
     end
 end
@@ -90,10 +90,10 @@ is the same `(n_freq, n_samples)`; when `HDF5.read` returns that shape we use it
 as-is, when it returns the transpose we apply `permutedims`.
 """
 function _read_hdf5_freq_sample_matrix(
-    dataset,
-    name::AbstractString,
-    n_samples::Int,
-    n_freq::Int,
+        dataset,
+        name::AbstractString,
+        n_samples::Int,
+        n_freq::Int
 )::Matrix{Float64}
     raw = Array{Float64}(read(dataset))
     ndims(raw) == 2 || throw(ArgumentError("$(name) must be a 2D dataset"))
@@ -104,9 +104,9 @@ function _read_hdf5_freq_sample_matrix(
     else
         throw(
             ArgumentError(
-                "$(name): HDF5 extent contract is ($n_freq, $n_samples) = (n_columns, n_samples); " *
-                "after read expected size ($n_freq, $n_samples) or ($n_samples, $n_freq), got $(size(raw))",
-            ),
+            "$(name): HDF5 extent contract is ($n_freq, $n_samples) = (n_columns, n_samples); " *
+            "after read expected size ($n_freq, $n_samples) or ($n_samples, $n_freq), got $(size(raw))",
+        ),
         )
     end
 end
@@ -127,11 +127,12 @@ end
 
 function _read_nonempty_string_attr(attrs, name::AbstractString)::String
     text = strip(_as_string(_read_attr(attrs, name)))
-    isempty(text) && throw(ArgumentError("HDF5 attribute $(repr(name)) must be a non-empty string"))
+    isempty(text) &&
+        throw(ArgumentError("HDF5 attribute $(repr(name)) must be a non-empty string"))
     return text
 end
 
-function _read_optional_string(group, key::AbstractString)::Union{String,Nothing}
+function _read_optional_string(group, key::AbstractString)::Union{String, Nothing}
     haskey(group, key) || return nothing
     raw = read(group[key])
     text = _as_string(raw)
@@ -142,15 +143,15 @@ function _validate_proposal_samples_source_type(g::HDF5.Group)
     attrs = attributes(g)
     haskey(attrs, PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR) || throw(
         ArgumentError(
-            "missing required HDF5 attribute proposal_samples/$(PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR)",
-        ),
+        "missing required HDF5 attribute proposal_samples/$(PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR)",
+    ),
     )
     st = strip(_as_string(read(attrs[PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR])))
     st == PROPOSAL_SAMPLES_SOURCE_TYPE_BNS || throw(
         ArgumentError(
-            "unsupported proposal_samples/$(PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR)=$(repr(st)); " *
-            "only $(repr(PROPOSAL_SAMPLES_SOURCE_TYPE_BNS)) is implemented",
-        ),
+        "unsupported proposal_samples/$(PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR)=$(repr(st)); " *
+        "only $(repr(PROPOSAL_SAMPLES_SOURCE_TYPE_BNS)) is implemented",
+    ),
     )
     return nothing
 end
@@ -163,45 +164,50 @@ function _read_redshift_prior_spec(group)::RedshiftPriorSpec
         Float64(read(_require_child(spec_group, "z_min"))),
         Float64(read(_require_child(spec_group, "z_max"))),
         Int(read(_require_child(spec_group, "num_interp"))),
-        _read_optional_string(spec_group, "time_delay_model"),
+        _read_optional_string(spec_group, "time_delay_model")
     )
 end
 
 const _CACHE_FIDUCIAL_KEYS = ("H0", "Omega_m", "chi0", "chin")
 const _CACHE_OPTIONAL_POPULATION_KEYS = ("gamma", "kappa", "z_peak", "lamb")
 
-function _read_optional_float_scalar(group::HDF5.Group, key::AbstractString)::Union{Nothing,Float64}
+function _read_optional_float_scalar(
+        group::HDF5.Group,
+        key::AbstractString
+)::Union{Nothing, Float64}
     haskey(group, key) || return nothing
     return Float64(read(group[key]))
 end
 
 function _merge_population_scalar(
-    hyper::HDF5.Group,
-    spec::HDF5.Group,
-    key::AbstractString,
-)::Union{Nothing,Float64}
+        hyper::HDF5.Group,
+        spec::HDF5.Group,
+        key::AbstractString
+)::Union{Nothing, Float64}
     v_h = _read_optional_float_scalar(hyper, key)
     v_s = _read_optional_float_scalar(spec, key)
     if v_h !== nothing && v_s !== nothing && v_h != v_s
         throw(
             ArgumentError(
-                "inconsistent $(key) between hyperparameters ($(v_h)) and " *
-                "redshift_prior_spec ($(v_s))",
-            ),
+            "inconsistent $(key) between hyperparameters ($(v_h)) and " *
+            "redshift_prior_spec ($(v_s))",
+        ),
         )
     end
     return v_h !== nothing ? v_h : v_s
 end
 
 function _read_proposal_fiducial_parameters(
-    hyper::HDF5.Group,
-    spec::HDF5.Group,
-    family::RedshiftPriorFamily,
+        hyper::HDF5.Group,
+        spec::HDF5.Group,
+        family::RedshiftPriorFamily
 )::ProposalFiducialParameters
     for k in _CACHE_FIDUCIAL_KEYS
         haskey(hyper, k) || throw(ArgumentError("missing hyperparameter $(k)"))
     end
-    allowed = Set{String}(collect(_CACHE_FIDUCIAL_KEYS) ∪ collect(_CACHE_OPTIONAL_POPULATION_KEYS))
+    allowed = Set{String}(
+        collect(_CACHE_FIDUCIAL_KEYS) ∪ collect(_CACHE_OPTIONAL_POPULATION_KEYS),
+    )
     for k in keys(hyper)
         kn = String(k)
         kn in allowed || throw(ArgumentError("unknown hyperparameter $(kn)"))
@@ -211,53 +217,64 @@ function _read_proposal_fiducial_parameters(
     zp = _merge_population_scalar(hyper, spec, "z_peak")
     λ = _merge_population_scalar(hyper, spec, "lamb")
     if family == MadauDickinson
-        γ === nothing &&
-            throw(ArgumentError("Madau–Dickinson cache requires gamma in hyperparameters or redshift_prior_spec"))
-        κ === nothing &&
-            throw(ArgumentError("Madau–Dickinson cache requires kappa in hyperparameters or redshift_prior_spec"))
-        zp === nothing &&
-            throw(ArgumentError("Madau–Dickinson cache requires z_peak in hyperparameters or redshift_prior_spec"))
+        γ === nothing && throw(
+            ArgumentError(
+            "Madau–Dickinson cache requires gamma in hyperparameters or redshift_prior_spec",
+        ),
+        )
+        κ === nothing && throw(
+            ArgumentError(
+            "Madau–Dickinson cache requires kappa in hyperparameters or redshift_prior_spec",
+        ),
+        )
+        zp === nothing && throw(
+            ArgumentError(
+            "Madau–Dickinson cache requires z_peak in hyperparameters or redshift_prior_spec",
+        ),
+        )
     else
-        λ === nothing &&
-            throw(ArgumentError("power-law cache requires lamb in hyperparameters or redshift_prior_spec"))
+        λ === nothing && throw(
+            ArgumentError(
+            "power-law cache requires lamb in hyperparameters or redshift_prior_spec",
+        ),
+        )
     end
     return ProposalFiducialParameters(;
-        H0=_read_float_scalar_dataset(hyper, "H0"),
-        Omega_m=_read_float_scalar_dataset(hyper, "Omega_m"),
-        chi0=_read_float_scalar_dataset(hyper, "chi0"),
-        chin=_read_float_scalar_dataset(hyper, "chin"),
-        gamma=γ,
-        kappa=κ,
-        z_peak=zp,
-        lamb=λ,
+        H0 = _read_float_scalar_dataset(hyper, "H0"),
+        Omega_m = _read_float_scalar_dataset(hyper, "Omega_m"),
+        chi0 = _read_float_scalar_dataset(hyper, "chi0"),
+        chin = _read_float_scalar_dataset(hyper, "chin"),
+        gamma = γ,
+        kappa = κ,
+        z_peak = zp,
+        lamb = λ
     )
 end
 
 function bundle_from_hdf5(
-    intrinsic_site_order::Vector{String},
-    proposal_samples::Dict{String,Vector{Float64}},
+        intrinsic_site_order::Vector{String},
+        proposal_samples::Dict{String, Vector{Float64}}
 )::FullBNSSamplesSoA
     intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER || throw(
         ArgumentError(
-            "unsupported intrinsic_site_order $(repr(intrinsic_site_order)); " *
-            "only full BNS is supported: $(repr(FULL_BNS_INTRINSIC_ORDER))",
-        ),
+        "unsupported intrinsic_site_order $(repr(intrinsic_site_order)); " *
+        "only full BNS is supported: $(repr(FULL_BNS_INTRINSIC_ORDER))",
+    ),
     )
     for key in FULL_BNS_INTRINSIC_ORDER
-        haskey(proposal_samples, key) || throw(
-            ArgumentError("proposal_samples must include $(key) for full BNS layout"),
-        )
+        haskey(proposal_samples, key) ||
+            throw(ArgumentError("proposal_samples must include $(key) for full BNS layout"))
     end
     return (
-        mass=stack_source_masses(
+        mass = stack_source_masses(
             proposal_samples["mass_1_source"],
-            proposal_samples["mass_2_source"],
+            proposal_samples["mass_2_source"]
         ),
-        redshift=copy(proposal_samples["redshift"]),
-        chi_1=copy(proposal_samples["chi_1"]),
-        chi_2=copy(proposal_samples["chi_2"]),
-        lambda_1=copy(proposal_samples["lambda_1"]),
-        lambda_2=copy(proposal_samples["lambda_2"]),
+        redshift = copy(proposal_samples["redshift"]),
+        chi_1 = copy(proposal_samples["chi_1"]),
+        chi_2 = copy(proposal_samples["chi_2"]),
+        lambda_1 = copy(proposal_samples["lambda_1"]),
+        lambda_2 = copy(proposal_samples["lambda_2"])
     )
 end
 
@@ -296,12 +313,14 @@ current Julia forward model.
 Equivalent in-memory problems can be built with [`importance_sampling_problem`](@ref).
 """
 function load_cache(
-    path::AbstractString,
-    detectors::AbstractVector{D},
-)::ImportanceSamplingProblem where {D<:Detector}
+        path::AbstractString,
+        detectors::AbstractVector{D}
+)::ImportanceSamplingProblem where {D <: Detector}
     isempty(detectors) && throw(ArgumentError("load_cache: detectors must be non-empty"))
     length(detectors) < 2 && throw(
-        ArgumentError("load_cache: at least two detectors are required to build covariance"),
+        ArgumentError(
+        "load_cache: at least two detectors are required to build covariance",
+    ),
     )
     return h5open(path, "r") do file
         attrs = attributes(file)
@@ -310,39 +329,34 @@ function load_cache(
 
         (haskey(file, "covariance") || haskey(file, "sgwb_scale")) && throw(
             ArgumentError(
-                "cache must not contain covariance or sgwb_scale datasets; " *
-                "pass detectors to reconstruct them from tabulated PSDs and ORFs",
-            ),
+            "cache must not contain covariance or sgwb_scale datasets; " *
+            "pass detectors to reconstruct them from tabulated PSDs and ORFs",
+        ),
         )
         haskey(file, "cached_flux_over_dgw2") && throw(
             ArgumentError(
-                "cache must not contain cached_flux_over_dgw2; use dataset cached_flux instead",
-            ),
+            "cache must not contain cached_flux_over_dgw2; use dataset cached_flux instead",
+        ),
         )
 
-        intrinsic_site_order = _read_string_vector(
-            _require_child(file, "intrinsic_site_order"),
-        )
+        intrinsic_site_order = _read_string_vector(_require_child(file, "intrinsic_site_order"))
 
-        proposal_samples = Dict{String,Vector{Float64}}()
+        proposal_samples = Dict{String, Vector{Float64}}()
         proposal_samples_group = _require_child(file, "proposal_samples")
         _validate_proposal_samples_source_type(proposal_samples_group)
         proposal_samples["redshift"] = _read_float_vector(
             _require_child(proposal_samples_group, "redshift"),
-            "proposal_samples/redshift",
+            "proposal_samples/redshift"
         )
         n_samples = length(proposal_samples["redshift"])
         proposal_intrinsic_vector = _read_hdf5_col_sample_matrix(
             _require_child(file, "proposal_intrinsic_vector"),
             "proposal_intrinsic_vector",
             n_samples,
-            length(intrinsic_site_order),
+            length(intrinsic_site_order)
         )
 
-        frequencies = _read_float_vector(
-            _require_child(file, "frequencies"),
-            "frequencies",
-        )
+        frequencies = _read_float_vector(_require_child(file, "frequencies"), "frequencies")
         in_band_mask = _read_in_band_mask(_require_child(file, "in_band_mask"))
         # Placeholder only; replaced after `importance_sampling_problem` by `fiducial_spectral_density(p)`.
         # Any HDF5 `fiducial_spectral_density` dataset is ignored so caches cannot go stale vs Julia code.
@@ -357,7 +371,7 @@ function load_cache(
             in_band_mask,
             collect(Float64, fiducial_spectral_density_vec),
             obs_sec,
-            obs_yr,
+            obs_yr
         )
         covariance = observation0.covariance
         sgwb_scale = observation0.sgwb_scale
@@ -366,7 +380,7 @@ function load_cache(
             key == "redshift" && continue
             proposal_samples[key] = _read_float_vector(
                 _require_child(proposal_samples_group, key),
-                "proposal_samples/$(key)",
+                "proposal_samples/$(key)"
             )
         end
 
@@ -376,12 +390,11 @@ function load_cache(
         fiducial_parameters = _read_proposal_fiducial_parameters(
             hyper_group,
             spec_group,
-            redshift_prior_spec.family,
+            redshift_prior_spec.family
         )
 
-        haskey(proposal_samples, "redshift") || throw(
-            ArgumentError("proposal_samples must include a redshift entry"),
-        )
+        haskey(proposal_samples, "redshift") ||
+            throw(ArgumentError("proposal_samples must include a redshift entry"))
         samples_bundle = bundle_from_hdf5(intrinsic_site_order, proposal_samples)
 
         proposal_log_prob = if haskey(file, "proposal_log_prob")
@@ -390,20 +403,21 @@ function load_cache(
             reconstruct_proposal_log_prob(
                 samples_bundle,
                 redshift_prior_spec,
-                fiducial_parameters,
+                fiducial_parameters
             )
         end
 
-        haskey(file, "cached_flux") || throw(ArgumentError("missing required HDF5 dataset: cached_flux"))
+        haskey(file, "cached_flux") ||
+            throw(ArgumentError("missing required HDF5 dataset: cached_flux"))
         cached_flux_over_dgw2 = reconstruct_cached_flux_over_dgw2(
             _read_hdf5_freq_sample_matrix(
                 _require_child(file, "cached_flux"),
                 "cached_flux",
                 n_samples,
-                length(frequencies),
+                length(frequencies)
             ),
             proposal_samples["redshift"],
-            fiducial_parameters,
+            fiducial_parameters
         )
 
         dgw_fid_sq = if haskey(file, "dgw_fid_sq")
@@ -414,48 +428,41 @@ function load_cache(
 
         length(intrinsic_site_order) == size(proposal_intrinsic_vector, 2) || throw(
             ArgumentError(
-                "proposal_intrinsic_vector column count must match intrinsic_site_order length",
-            ),
+            "proposal_intrinsic_vector column count must match intrinsic_site_order length",
+        ),
         )
         size(proposal_intrinsic_vector, 1) == n_samples || throw(
             ArgumentError(
-                "proposal_intrinsic_vector row count must match redshift / sample count",
-            ),
+            "proposal_intrinsic_vector row count must match redshift / sample count",
+        ),
         )
         size(cached_flux_over_dgw2, 2) == n_samples || throw(
             ArgumentError(
-                "cached flux matrix column count must match redshift / sample count",
-            ),
+            "cached flux matrix column count must match redshift / sample count",
+        ),
         )
-        length(dgw_fid_sq) == n_samples || throw(
-            ArgumentError("dgw_fid_sq length must match redshift / sample count"),
-        )
+        length(dgw_fid_sq) == n_samples ||
+            throw(ArgumentError("dgw_fid_sq length must match redshift / sample count"))
         length(proposal_log_prob) == n_samples || throw(
             ArgumentError("proposal_log_prob length must match redshift / sample count"),
         )
         for key in intrinsic_site_order
             length(proposal_samples[key]) == n_samples || throw(
                 ArgumentError(
-                    "proposal_samples/$(key) length must match redshift / sample count",
-                ),
+                "proposal_samples/$(key) length must match redshift / sample count",
+            ),
             )
         end
 
         n_frequencies = length(frequencies)
-        size(cached_flux_over_dgw2, 1) == n_frequencies || throw(
-            ArgumentError(
-                "cached flux row count must match frequencies length",
-            ),
-        )
-        length(covariance) == n_frequencies || throw(
-            ArgumentError("covariance length must match frequencies length"),
-        )
-        length(sgwb_scale) == n_frequencies || throw(
-            ArgumentError("sgwb_scale length must match frequencies length"),
-        )
-        length(in_band_mask) == n_frequencies || throw(
-            ArgumentError("in_band_mask length must match frequencies length"),
-        )
+        size(cached_flux_over_dgw2, 1) == n_frequencies ||
+            throw(ArgumentError("cached flux row count must match frequencies length"))
+        length(covariance) == n_frequencies ||
+            throw(ArgumentError("covariance length must match frequencies length"))
+        length(sgwb_scale) == n_frequencies ||
+            throw(ArgumentError("sgwb_scale length must match frequencies length"))
+        length(in_band_mask) == n_frequencies ||
+            throw(ArgumentError("in_band_mask length must match frequencies length"))
         length(fiducial_spectral_density_vec) == n_frequencies || throw(
             ArgumentError("fiducial_spectral_density length must match frequencies length"),
         )
@@ -466,7 +473,7 @@ function load_cache(
             proposal_log_prob,
             proposal_intrinsic_vector,
             cached_flux_over_dgw2,
-            dgw_fid_sq,
+            dgw_fid_sq
         )
 
         observation = ObservationConfig(
@@ -476,7 +483,7 @@ function load_cache(
             in_band_mask,
             fiducial_spectral_density_vec,
             obs_sec,
-            obs_yr,
+            obs_yr
         )
 
         redshift_integral_fiducial = if haskey(attrs, "redshift_integral_fiducial")
@@ -487,11 +494,12 @@ function load_cache(
             catch err
                 throw(
                     ArgumentError(
-                        "cache omits redshift_integral_fiducial but recomputation failed; " *
-                        "ensure population keys are present in hyperparameters or redshift_prior_spec " *
-                        "(e.g. gamma, kappa, z_peak for Madau–Dickinson, or lamb for power-law). " *
-                        "Underlying error: " * sprint(showerror, err),
-                    ),
+                    "cache omits redshift_integral_fiducial but recomputation failed; " *
+                    "ensure population keys are present in hyperparameters or redshift_prior_spec " *
+                    "(e.g. gamma, kappa, z_peak for Madau–Dickinson, or lamb for power-law). " *
+                    "Underlying error: " *
+                    sprint(showerror, err),
+                ),
                 )
             end
         end
@@ -502,23 +510,24 @@ function load_cache(
             redshift_prior_spec,
             Float64(_read_attr(attrs, "local_merger_rate")),
             redshift_integral_fiducial,
-            fiducial_parameters,
+            fiducial_parameters
         )
         fs = try
             fiducial_spectral_density(p)
         catch err
             throw(
                 ArgumentError(
-                    "fiducial_spectral_density recomputation on load failed; " *
-                    "ensure population keys are present for the redshift prior. " *
-                    "Underlying error: " * sprint(showerror, err),
-                ),
+                "fiducial_spectral_density recomputation on load failed; " *
+                "ensure population keys are present for the redshift prior. " *
+                "Underlying error: " *
+                sprint(showerror, err),
+            ),
             )
         end
         length(fs) == n_frequencies || throw(
             ArgumentError(
-                "fiducial_spectral_density recomputation returned length $(length(fs)), expected $n_frequencies",
-            ),
+            "fiducial_spectral_density recomputation returned length $(length(fs)), expected $n_frequencies",
+        ),
         )
         observation2 = ObservationConfig(
             p.observation.frequencies,
@@ -527,7 +536,7 @@ function load_cache(
             p.observation.in_band_mask,
             fs,
             p.observation.observation_time_sec,
-            p.observation.observation_time_yr,
+            p.observation.observation_time_yr
         )
         p = importance_sampling_problem(
             p.proposal,
@@ -535,7 +544,7 @@ function load_cache(
             p.redshift_prior_spec,
             p.local_merger_rate,
             p.redshift_integral_fiducial,
-            p.fiducial_parameters,
+            p.fiducial_parameters
         )
         return p
     end

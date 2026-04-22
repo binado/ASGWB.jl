@@ -7,7 +7,7 @@ struct PowerSpectralDensity
 end
 
 function _read_psd_table(path::AbstractString)
-    rows = Vector{Tuple{Float64,Float64}}()
+    rows = Vector{Tuple{Float64, Float64}}()
     open(path, "r") do io
         for line in eachline(io)
             s = strip(line)
@@ -30,7 +30,7 @@ end
 `curve_type` is `:psd` (file column is S_n) or `:asd` (column is √(S_n); values are squared).
 Out-of-range frequencies evaluate to `Inf` (matches the Python stack).
 """
-function PowerSpectralDensity(path::AbstractString; curve_type::Symbol=:psd)
+function PowerSpectralDensity(path::AbstractString; curve_type::Symbol = :psd)
     curve_type in (:psd, :asd) || throw(ArgumentError("curve_type must be :psd or :asd"))
     f, v = _read_psd_table(path)
     psd = curve_type == :asd ? v .^ 2 : copy(v)
@@ -38,9 +38,9 @@ function PowerSpectralDensity(path::AbstractString; curve_type::Symbol=:psd)
 end
 
 function _linear_extrapolate_inf(
-    xq::AbstractVector{<:Real},
-    x::AbstractVector{Float64},
-    y::AbstractVector{Float64},
+        xq::AbstractVector{<:Real},
+        x::AbstractVector{Float64},
+        y::AbstractVector{Float64}
 )
     n = length(xq)
     out = Vector{Float64}(undef, n)

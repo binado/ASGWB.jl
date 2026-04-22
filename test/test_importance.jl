@@ -9,16 +9,17 @@ using Test
 
     h5open(fixture_path, "r") do file
         group = file["posterior_case"]
-        theta = HyperParameters((; (
-            Symbol(name) => Float64(read(group["theta/$(name)"])) for
-            name in ("H0", "Omega_m", "chi0", "chin", "gamma", "kappa", "z_peak")
-        )...,))
+        theta = HyperParameters((;
+            (
+            Symbol(name) => Float64(read(group["theta/$(name)"]))
+        for
+        name in ("H0", "Omega_m", "chi0", "chin", "gamma", "kappa", "z_peak")
+        )...,
+        ))
         expected_dgw_theta_sq = vec(Float64.(read(group["dgw_theta_sq"])))
         expected_weights = vec(Float64.(read(group["weights"])))
         expected_spectral_density = vec(Float64.(read(group["spectral_density_full"])))
-        expected_spectral_density_in_band = vec(
-            Float64.(read(group["spectral_density_in_band"])),
-        )
+        expected_spectral_density_in_band = vec(Float64.(read(group["spectral_density_in_band"])))
         expected_number_of_sources = Float64(read(group["expected_number_of_sources"]))
         expected_log_ratio = vec(Float64.(read(group["log_ratio"])))
         expected_target_log_prob = vec(Float64.(read(group["target_log_prob"])))
@@ -51,7 +52,7 @@ using Test
             bundle,
             cache.local_merger_rate,
             cache.observation.observation_time_yr,
-            cache.observation.observation_time_sec,
+            cache.observation.observation_time_sec
         )
         @test rate * cache.observation.observation_time_sec ≈ expected_number_of_sources rtol = parity_rtol
     end

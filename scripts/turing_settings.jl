@@ -39,15 +39,18 @@ struct Settings
     priors::PriorBounds
     init::InitPoint
     sampler::SamplerConfig
-    seed::Union{Nothing,Int}
-    observed_spectral_density_csv::Union{Nothing,String}
-    output_jls::Union{Nothing,String}
+    seed::Union{Nothing, Int}
+    observed_spectral_density_csv::Union{Nothing, String}
+    output_jls::Union{Nothing, String}
+    """If non-empty, only these hyperparameters are sampled; others are fixed via Turing `|` conditioning."""
+    sample_only::Union{Nothing, Vector{Symbol}}
 end
 
 function _interval(obj, path::AbstractString)
     low = Float64(obj.low)
     high = Float64(obj.high)
-    isfinite(low) && isfinite(high) || throw(ArgumentError("$path: low and high must be finite"))
+    isfinite(low) && isfinite(high) ||
+        throw(ArgumentError("$path: low and high must be finite"))
     low < high || throw(ArgumentError("$path: require low < high, got ($low, $high)"))
     return Interval(low, high)
 end
@@ -62,7 +65,7 @@ function _prior_bounds(raw)
         _interval(p.chin, "priors.chin"),
         _interval(p.gamma, "priors.gamma"),
         _interval(p.kappa, "priors.kappa"),
-        _interval(p.z_peak, "priors.z_peak"),
+        _interval(p.z_peak, "priors.z_peak")
     )
 end
 
@@ -76,7 +79,7 @@ function _init_point(raw)
         Float64(z.chin),
         Float64(z.gamma),
         Float64(z.kappa),
-        Float64(z.z_peak),
+        Float64(z.z_peak)
     )
 end
 
@@ -107,12 +110,23 @@ function _optional_int(raw, key::AbstractString)
     return Int(v)
 end
 
+function _optional_sample_only(raw)
+    !haskey(raw, "sample_only") && return nothing
+    v = raw.sample_only
+    v === nothing && return nothing
+    v isa AbstractVector ||
+        throw(ArgumentError("config.sample_only must be a JSON array of strings or null"))
+    isempty(v) && return nothing
+    return [Symbol(String(x)) for x in v]
+end
+
 """
     load_settings(path::AbstractString) -> Settings
 
 Read a JSON config file. Expected top-level keys: `cache`, `priors`, `init`, `sampler`;
 optional: `detectors` (array of detector name strings, default `[\"H1\", \"L1\"]`), `seed`,
-`observed_spectral_density_csv`, `output_jls`.
+`observed_spectral_density_csv`, `output_jls`, `sample_only` (array of hyperparameter names
+to sample; if set, all others are fixed to `init` via Turing conditioning).
 """
 function _detectors_from_config(raw)
     if !haskey(raw, "detectors")
@@ -120,7 +134,8 @@ function _detectors_from_config(raw)
     end
     d = raw.detectors
     d isa AbstractVector || throw(ArgumentError("config.detectors must be a JSON array"))
-    length(d) >= 2 || throw(ArgumentError("config.detectors must list at least two detectors"))
+    length(d) >= 2 ||
+        throw(ArgumentError("config.detectors must list at least two detectors"))
     return [Detector(String(name)) for name in d]
 end
 
@@ -140,6 +155,7 @@ function load_settings(path::AbstractString)
         _optional_int(raw, "seed"),
         _optional_string(raw, "observed_spectral_density_csv"),
         _optional_string(raw, "output_jls"),
+        _optional_sample_only(raw)
     )
 end
 
@@ -151,13 +167,11 @@ function validate_init_in_priors(s::Settings)
         chin = (s.init.chin, s.priors.chin),
         gamma = (s.init.gamma, s.priors.gamma),
         kappa = (s.init.kappa, s.priors.kappa),
-        z_peak = (s.init.z_peak, s.priors.z_peak),
+        z_peak = (s.init.z_peak, s.priors.z_peak)
     )
     for (name, (v, b)) in pairs(nt)
         b.low <= v <= b.high || throw(
-            ArgumentError(
-                "init.$name = $v is outside prior bounds [$(b.low), $(b.high)]",
-            ),
+            ArgumentError("init.$name = $v is outside prior bounds [$(b.low), $(b.high)]"),
         )
     end
     return nothing
@@ -165,14 +179,14 @@ end
 
 function prior_dict(s::Settings)
     p = s.priors
-    return Dict{String,Tuple{Float64,Float64}}(
+    return Dict{String, Tuple{Float64, Float64}}(
         "H0" => (p.H0.low, p.H0.high),
         "Omega_m" => (p.Omega_m.low, p.Omega_m.high),
         "chi0" => (p.chi0.low, p.chi0.high),
         "chin" => (p.chin.low, p.chin.high),
         "gamma" => (p.gamma.low, p.gamma.high),
         "kappa" => (p.kappa.low, p.kappa.high),
-        "z_peak" => (p.z_peak.low, p.z_peak.high),
+        "z_peak" => (p.z_peak.low, p.z_peak.high)
     )
 end
 
@@ -185,7 +199,7 @@ function theta0(s::Settings)
         chin = z.chin,
         gamma = z.gamma,
         kappa = z.kappa,
-        z_peak = z.z_peak,
+        z_peak = z.z_peak
     )
 end
 
@@ -194,28 +208,42 @@ function load_observed_spectral_density(path::AbstractString, expected_len::Int)
     v = vec(readdlm(path, ',', Float64))
     length(v) == expected_len || throw(
         ArgumentError(
-            "observed_spectral_density_csv has length $(length(v)), expected $expected_len",
-        ),
+        "observed_spectral_density_csv has length $(length(v)), expected $expected_len",
+    ),
     )
     return v
 end
 
+"""
+    parse_sample_only_cli(s::AbstractString) -> Union{Nothing,Vector{Symbol}}
+
+Parse a comma-separated list of hyperparameter names (e.g. `\"H0\"` or `\"H0,Omega_m\"`).
+Empty or whitespace-only string means “use config file / no CLI override”.
+"""
+function parse_sample_only_cli(s::AbstractString)::Union{Nothing, Vector{Symbol}}
+    t = strip(s)
+    isempty(t) && return nothing
+    parts = split(t, ','; keepempty = false)
+    return [Symbol(strip(p)) for p in parts]
+end
+
 function merge_settings(
-    s::Settings;
-    cache::Union{Nothing,String} = nothing,
-    detectors::Union{Nothing,Vector{Detector}} = nothing,
-    n_samples::Union{Nothing,Int} = nothing,
-    n_adapts::Union{Nothing,Int} = nothing,
-    target_acceptance::Union{Nothing,Float64} = nothing,
-    seed::Union{Nothing,Int} = nothing,
-    observed_spectral_density_csv::Union{Nothing,String} = nothing,
-    output_jls::Union{Nothing,String} = nothing,
+        s::Settings;
+        cache::Union{Nothing, String} = nothing,
+        detectors::Union{Nothing, Vector{Detector}} = nothing,
+        n_samples::Union{Nothing, Int} = nothing,
+        n_adapts::Union{Nothing, Int} = nothing,
+        target_acceptance::Union{Nothing, Float64} = nothing,
+        seed::Union{Nothing, Int} = nothing,
+        observed_spectral_density_csv::Union{Nothing, String} = nothing,
+        output_jls::Union{Nothing, String} = nothing,
+        sample_only::Union{Nothing, Vector{Symbol}} = nothing
 )
     sam = s.sampler
     new_sampler = SamplerConfig(
         something(n_samples, sam.n_samples),
         something(n_adapts, sam.n_adapts),
-        something(target_acceptance, sam.target_acceptance),
+        something(target_acceptance, sam.target_acceptance)
     )
     return Settings(
         something(cache, s.cache),
@@ -227,5 +255,6 @@ function merge_settings(
         observed_spectral_density_csv === nothing ? s.observed_spectral_density_csv :
         observed_spectral_density_csv,
         output_jls === nothing ? s.output_jls : output_jls,
+        sample_only === nothing ? s.sample_only : sample_only
     )
 end

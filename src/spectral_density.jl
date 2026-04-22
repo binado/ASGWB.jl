@@ -10,18 +10,18 @@ When `weights` is supplied, the contraction is `fluxes * weights / n_samples`
 average over the inclination angle.
 """
 function spectral_density(
-    fluxes::AbstractMatrix{<:Real},
-    merger_rate_per_sec::Real;
-    weights::Union{Nothing,AbstractVector{<:Real}}=nothing,
+        fluxes::AbstractMatrix{<:Real},
+        merger_rate_per_sec::Real;
+        weights::Union{Nothing, AbstractVector{<:Real}} = nothing
 )
     n_samples = size(fluxes, 2)
     mean_flux = if weights === nothing
-        vec(sum(fluxes; dims=2)) ./ n_samples
+        vec(sum(fluxes; dims = 2)) ./ n_samples
     else
         length(weights) == n_samples || throw(
             ArgumentError(
-                "weights length ($(length(weights))) must match fluxes sample count ($(n_samples))",
-            ),
+            "weights length ($(length(weights))) must match fluxes sample count ($(n_samples))",
+        ),
         )
         (fluxes * weights) ./ n_samples
     end
@@ -63,5 +63,6 @@ function omegagw(spectral_density, frequency, H0::Real)
     return @. pre * frequency^3 * spectral_density
 end
 
-omegagw(spectral_density, frequency, parameters::HyperParameters) =
+function omegagw(spectral_density, frequency, parameters::HyperParameters)
     omegagw(spectral_density, frequency, parameters.H0)
+end

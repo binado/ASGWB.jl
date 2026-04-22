@@ -21,7 +21,7 @@ const HyperParameters = @NamedTuple{
     chin::Float64,
     gamma::Float64,
     kappa::Float64,
-    z_peak::Float64,
+    z_peak::Float64
 }
 
 """
@@ -42,22 +42,22 @@ Convenience keyword constructor returning a flat [`HyperParameters`](@ref) Named
 with `Float64` coercion.
 """
 function HyperParameters(;
-    H0::Real,
-    Omega_m::Real,
-    chi0::Real=1.0,
-    chin::Real=0.0,
-    gamma::Real,
-    kappa::Real,
-    z_peak::Real,
+        H0::Real,
+        Omega_m::Real,
+        chi0::Real = 1.0,
+        chin::Real = 0.0,
+        gamma::Real,
+        kappa::Real,
+        z_peak::Real
 )::HyperParameters
     return (
-        H0=Float64(H0),
-        Omega_m=Float64(Omega_m),
-        chi0=Float64(chi0),
-        chin=Float64(chin),
-        gamma=Float64(gamma),
-        kappa=Float64(kappa),
-        z_peak=Float64(z_peak),
+        H0 = Float64(H0),
+        Omega_m = Float64(Omega_m),
+        chi0 = Float64(chi0),
+        chin = Float64(chin),
+        gamma = Float64(gamma),
+        kappa = Float64(kappa),
+        z_peak = Float64(z_peak)
     )
 end
 
@@ -70,13 +70,13 @@ NamedTuple carrying at least `:H0, :Omega_m, :gamma, :kappa, :z_peak`. `chi0` /
 """
 function HyperParameters(nt::NamedTuple)::HyperParameters
     return HyperParameters(;
-        H0=nt.H0,
-        Omega_m=nt.Omega_m,
-        chi0=haskey(nt, :chi0) ? nt.chi0 : 1.0,
-        chin=haskey(nt, :chin) ? nt.chin : 0.0,
-        gamma=nt.gamma,
-        kappa=nt.kappa,
-        z_peak=nt.z_peak,
+        H0 = nt.H0,
+        Omega_m = nt.Omega_m,
+        chi0 = haskey(nt, :chi0) ? nt.chi0 : 1.0,
+        chin = haskey(nt, :chin) ? nt.chin : 0.0,
+        gamma = nt.gamma,
+        kappa = nt.kappa,
+        z_peak = nt.z_peak
     )
 end
 
@@ -99,7 +99,7 @@ const FullBNSSamplesSoA = @NamedTuple{
     chi_1::Vector{Float64},
     chi_2::Vector{Float64},
     lambda_1::Vector{Float64},
-    lambda_2::Vector{Float64},
+    lambda_2::Vector{Float64}
 }
 
 """
@@ -109,14 +109,15 @@ Pack two same-length mass vectors into the `2 × n` matrix expected by
 [`FullBNSSamplesSoA`](@ref)`.mass` (row 1 = `mass_1_source`, row 2 = `mass_2_source`).
 """
 function stack_source_masses(
-    mass_1_source::AbstractVector{<:Real},
-    mass_2_source::AbstractVector{<:Real},
+        mass_1_source::AbstractVector{<:Real},
+        mass_2_source::AbstractVector{<:Real}
 )::Matrix{Float64}
     n = length(mass_1_source)
-    length(mass_2_source) == n || throw(
-        ArgumentError("mass_1_source and mass_2_source must have matching lengths"),
+    length(mass_2_source) == n ||
+        throw(ArgumentError("mass_1_source and mass_2_source must have matching lengths"))
+    return permutedims(
+        hcat(collect(Float64, mass_1_source), collect(Float64, mass_2_source)),
     )
-    return permutedims(hcat(collect(Float64, mass_1_source), collect(Float64, mass_2_source)))
 end
 
 """
@@ -164,9 +165,8 @@ redshift(s::NamedTuple) = s.redshift
 redshift(problem::ImportanceSamplingProblem) = redshift(problem.proposal.samples)
 
 function _validate_strategy_bundle(strategy::FullBNS, proposal::ProposalData)
-    proposal.samples isa FullBNSSamplesSoA || throw(
-        ArgumentError("proposal samples must match the FullBNSSamplesSoA layout"),
-    )
+    proposal.samples isa FullBNSSamplesSoA ||
+        throw(ArgumentError("proposal samples must match the FullBNSSamplesSoA layout"))
     return nothing
 end
 
@@ -189,12 +189,12 @@ Six-argument form: supply a precomputed fiducial redshift integral (e.g. read fr
 Both forms validate [`IntrinsicPriorStrategy`](@ref) against the proposal sample bundle type.
 """
 function importance_sampling_problem(
-    proposal::ProposalData,
-    observation::ObservationConfig,
-    redshift_prior_spec::RedshiftPriorSpec,
-    local_merger_rate::Real,
-    redshift_integral_fiducial::Real,
-    fiducial_parameters::ProposalFiducialParameters,
+        proposal::ProposalData,
+        observation::ObservationConfig,
+        redshift_prior_spec::RedshiftPriorSpec,
+        local_merger_rate::Real,
+        redshift_integral_fiducial::Real,
+        fiducial_parameters::ProposalFiducialParameters
 )
     strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
     _validate_strategy_bundle(strategy, proposal)
@@ -205,7 +205,7 @@ function importance_sampling_problem(
         Float64(local_merger_rate),
         Float64(redshift_integral_fiducial),
         fiducial_parameters,
-        strategy,
+        strategy
     )
 end
 

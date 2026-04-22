@@ -12,7 +12,7 @@ uniform redshift grid.
   [`merger_rate_per_sec`](@ref) and its cumulative table supports inverse-CDF
   sampling in [`RedshiftInterpolatedDistribution`](@ref).
 """
-struct RedshiftBundle{D<:CumulativeIntegral1D, P<:CumulativeIntegral1D}
+struct RedshiftBundle{D <: CumulativeIntegral1D, P <: CumulativeIntegral1D}
     distance::D
     pdf::P
 end
@@ -28,21 +28,21 @@ redshift_integral(bundle::RedshiftBundle) = normalizer(bundle.pdf)
 function trapezoid_integral(x::AbstractVector{<:Real}, y::AbstractVector{<:Real})
     length(x) == length(y) || throw(ArgumentError("x and y must have the same length"))
     length(x) >= 2 || throw(ArgumentError("at least two grid points are required"))
-    @views sum((y[1:end-1] .+ y[2:end]) .* (x[2:end] .- x[1:end-1])) / 2
+    @views sum((y[1:(end - 1)] .+ y[2:end]) .* (x[2:end] .- x[1:(end - 1)])) / 2
 end
 
 function detector_frame_merger_rate_density(
-    z::Real,
-    differential_comoving_volume::Real,
-    source_frame_distribution::Real,
+        z::Real,
+        differential_comoving_volume::Real,
+        source_frame_distribution::Real
 )
     return 4π * differential_comoving_volume * source_frame_distribution / (1 + z)
 end
 
 function expected_number_of_events(
-    local_merger_rate_gpc3_yr::Real,
-    redshift_integral_mpc3::Real,
-    observation_time_yr::Real,
+        local_merger_rate_gpc3_yr::Real,
+        redshift_integral_mpc3::Real,
+        observation_time_yr::Real
 )
     return 1e-9 * local_merger_rate_gpc3_yr * redshift_integral_mpc3 * observation_time_yr
 end
@@ -59,38 +59,39 @@ converts to per-second units; they are taken independently rather than assuming 
 seconds-per-year so the cache's stored pair of times round-trips exactly.
 """
 function merger_rate_per_sec(
-    bundle::RedshiftBundle,
-    local_merger_rate_gpc3_yr::Real,
-    observation_time_yr::Real,
-    observation_time_sec::Real,
+        bundle::RedshiftBundle,
+        local_merger_rate_gpc3_yr::Real,
+        observation_time_yr::Real,
+        observation_time_sec::Real
 )
     n_events = expected_number_of_events(
-        local_merger_rate_gpc3_yr, redshift_integral(bundle), observation_time_yr,
+        local_merger_rate_gpc3_yr,
+        redshift_integral(bundle),
+        observation_time_yr
     )
     return n_events / observation_time_sec
 end
 
 function madau_dickinson_source_frame_distribution(
-    z::Real;
-    gamma::Real,
-    kappa::Real,
-    z_peak::Real,
+        z::Real;
+        gamma::Real,
+        kappa::Real,
+        z_peak::Real
 )
     one_plus_z = 1 + z
-    return (
-        (one_plus_z^gamma) / (1 + (one_plus_z / (1 + z_peak))^kappa)
-    ) * (1 + (1 + z_peak)^(-kappa))
+    return ((one_plus_z^gamma) / (1 + (one_plus_z / (1 + z_peak))^kappa)) *
+           (1 + (1 + z_peak)^(-kappa))
 end
 
 power_law_source_frame_distribution(z::Real; lamb::Real) = (1 + z)^lamb
 
 function _build_redshift_grid(
-    source_frame_fn,
-    H0::Real,
-    Omega_m::Real,
-    z_min::Real,
-    z_max::Real,
-    num_interp::Integer,
+        source_frame_fn,
+        H0::Real,
+        Omega_m::Real,
+        z_min::Real,
+        z_max::Real,
+        num_interp::Integer
 )
     z_grid = collect(LinRange(Float64(z_min), Float64(z_max), Int(num_interp)))
     inv_E = w -> inv(E(w, Omega_m))
@@ -113,13 +114,23 @@ function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpe
     )
     spec.family == MadauDickinson || throw(
         ArgumentError(
-            "build_redshift_grid_bundle only supports the MadauDickinson redshift prior family",
-        ),
+        "build_redshift_grid_bundle only supports the MadauDickinson redshift prior family",
+    ),
     )
     sfn = z -> madau_dickinson_source_frame_distribution(
-        z; gamma=h.gamma, kappa=h.kappa, z_peak=h.z_peak,
+        z;
+        gamma = h.gamma,
+        kappa = h.kappa,
+        z_peak = h.z_peak
     )
-    return _build_redshift_grid(sfn, h.H0, h.Omega_m, spec.z_min, spec.z_max, spec.num_interp)
+    return _build_redshift_grid(
+        sfn,
+        h.H0,
+        h.Omega_m,
+        spec.z_min,
+        spec.z_max,
+        spec.num_interp
+    )
 end
 
 function log_prob_from_bundle(value::Real, bundle::RedshiftBundle)

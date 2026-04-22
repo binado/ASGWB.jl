@@ -45,67 +45,97 @@ include("sampling.jl")
 include("turing_model.jl")
 
 # Types
-export ImportanceSamplingProblem, ImportanceCache,
-    importance_sampling_problem,
-    ProposalData, ObservationConfig,
-    RedshiftPriorSpec, RedshiftPriorFamily, MadauDickinson, PowerLaw,
-    parse_redshift_prior_family,
-    HyperParameters,
-    ProposalFiducialParameters,
-    ProposalSampleBundle,
-    FullBNSSamplesSoA, stack_source_masses,
-    FULL_BNS_INTRINSIC_ORDER,
-    PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR, PROPOSAL_SAMPLES_SOURCE_TYPE_BNS,
-    CumulativeIntegral1D,
-    RedshiftBundle,
-    IntrinsicPriorStrategy, FullBNS,
-    ASGWBLogDensity, redshift
+export ImportanceSamplingProblem,
+       ImportanceCache,
+       importance_sampling_problem,
+       ProposalData,
+       ObservationConfig,
+       RedshiftPriorSpec,
+       RedshiftPriorFamily,
+       MadauDickinson,
+       PowerLaw,
+       parse_redshift_prior_family,
+       HyperParameters,
+       ProposalFiducialParameters,
+       ProposalSampleBundle,
+       FullBNSSamplesSoA,
+       stack_source_masses,
+       FULL_BNS_INTRINSIC_ORDER,
+       PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR,
+       PROPOSAL_SAMPLES_SOURCE_TYPE_BNS,
+       CumulativeIntegral1D,
+       RedshiftBundle,
+       IntrinsicPriorStrategy,
+       FullBNS,
+       ASGWBLogDensity,
+       redshift
 
 # IO
-export load_cache, reconstruct_proposal_log_prob, reconstruct_dgw_fid_sq,
-    IMPORTANCE_CACHE_COMMAND_ATTR, IMPORTANCE_CACHE_GIT_REVISION_ATTR
+export load_cache,
+       reconstruct_proposal_log_prob,
+       reconstruct_dgw_fid_sq,
+       IMPORTANCE_CACHE_COMMAND_ATTR,
+       IMPORTANCE_CACHE_GIT_REVISION_ATTR
 
 # Detector network (ORF / PSD covariance; used by `load_cache`)
-export Detector, PowerSpectralDensity, default_detector_data_dir,
-    overlap_reduction_function, pairwise_overlap_reduction_function,
-    covariance_on_grid, gaussian_bin_scale, gaussian_bin_variance,
-    frequency_bin_width, build_observation_config
+export Detector,
+       PowerSpectralDensity,
+       default_detector_data_dir,
+       overlap_reduction_function,
+       pairwise_overlap_reduction_function,
+       covariance_on_grid,
+       gaussian_bin_scale,
+       gaussian_bin_variance,
+       frequency_bin_width,
+       build_observation_config
 
 # Cosmology
-export E, comoving_distance, luminosity_distance,
-    differential_comoving_volume, gravitational_wave_distance
+export E,
+       comoving_distance,
+       luminosity_distance,
+       differential_comoving_volume,
+       gravitational_wave_distance
 
 # Redshift & population
 export madau_dickinson_source_frame_distribution,
-    power_law_source_frame_distribution,
-    detector_frame_merger_rate_density,
-    build_redshift_grid_bundle,
-    log_prob_from_bundle,
-    expected_number_of_events,
-    merger_rate_per_sec
+       power_law_source_frame_distribution,
+       detector_frame_merger_rate_density,
+       build_redshift_grid_bundle,
+       log_prob_from_bundle,
+       expected_number_of_events,
+       merger_rate_per_sec
 
 # Priors
-export logprior, build_uniform_priors,
-    OrderedUniformSourceMassPair, AlignedSpinChiSimple, RedshiftInterpolatedDistribution,
-    intrinsic_prior,
-    intrinsic_log_prob_samples, intrinsic_log_prob_samples!
+export logprior,
+       build_uniform_priors,
+       OrderedUniformSourceMassPair,
+       AlignedSpinChiSimple,
+       RedshiftInterpolatedDistribution,
+       intrinsic_prior,
+       intrinsic_log_prob_samples,
+       intrinsic_log_prob_samples!
 
 # Importance sampling
-export importance_weights, compute_importance_weights,
-    spectral_density, omegagw, evaluate_importance_terms
+export importance_weights,
+       compute_importance_weights, spectral_density, omegagw, evaluate_importance_terms
 
 # Diagnostics
 export normalized_ess, max_normalized_weight, log_ratio_variance
 
 # Posterior
-export loglikelihood, logposterior,
-    fiducial_hyperparameters, fiducial_spectral_density, fiducial_redshift_integral
+export loglikelihood,
+       logposterior,
+       fiducial_hyperparameters,
+       fiducial_spectral_density,
+       fiducial_redshift_integral
 
 # Sampling (AdvancedHMC)
 export DEFAULT_PARAMETER_ORDER,
-    unconstrained_initial_point, constrained_parameters,
-    ad_logdensity, finite_difference_logdensity_and_gradient,
-    sample_with_advancedhmc
+       unconstrained_initial_point,
+       constrained_parameters,
+       ad_logdensity,
+       finite_difference_logdensity_and_gradient,
+       sample_with_advancedhmc
 
 # Turing
 export build_turing_model, sample_with_turing, condition_turing_model

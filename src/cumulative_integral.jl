@@ -22,10 +22,12 @@ Query entry points:
 - `cumulative` : cumulative antiderivative at each node, `cumulative[1] = 0`
 - `itp`        : cached `LinearInterpolation(y, x)` object
 """
-struct CumulativeIntegral1D{TX<:AbstractVector{Float64},
-                            TY<:AbstractVector,
-                            TC<:AbstractVector,
-                            TI}
+struct CumulativeIntegral1D{
+    TX <: AbstractVector{Float64},
+    TY <: AbstractVector,
+    TC <: AbstractVector,
+    TI
+}
     x::TX
     y::TY
     cumulative::TC

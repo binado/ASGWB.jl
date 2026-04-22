@@ -25,9 +25,9 @@ using Test
     spin_dist = AlignedSpinChiSimple()
     expected_spin_at_zero = log(
         max(
-            -log(eps(Float64) / spin_dist.a_max) / (2.0 * spin_dist.a_max),
-            floatmin(Float64),
-        ),
+        -log(eps(Float64) / spin_dist.a_max) / (2.0 * spin_dist.a_max),
+        floatmin(Float64)
+    ),
     )
     @test logpdf(spin_dist, 0.0) ≈ expected_spin_at_zero
     @test logpdf(spin_dist, spin_dist.a_max + 1e-3) == -Inf
@@ -36,11 +36,11 @@ using Test
     @test minimum(spin_dist) <= spin_sample <= maximum(spin_dist)
 
     theta = HyperParameters(;
-        H0=67.0,
-        Omega_m=0.315,
-        gamma=2.7,
-        kappa=3.0,
-        z_peak=2.5,
+        H0 = 67.0,
+        Omega_m = 0.315,
+        gamma = 2.7,
+        kappa = 3.0,
+        z_peak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
@@ -57,18 +57,17 @@ end
 
 @testset "intrinsic_prior factory returns ProductNamedTupleDistribution" begin
     theta = HyperParameters(;
-        H0=67.0,
-        Omega_m=0.315,
-        gamma=2.7,
-        kappa=3.0,
-        z_peak=2.5,
+        H0 = 67.0,
+        Omega_m = 0.315,
+        gamma = 2.7,
+        kappa = 3.0,
+        z_peak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
     prior = intrinsic_prior(FullBNS(), bundle)
     @test prior isa ProductNamedTupleDistribution
-    @test keys(prior.dists) ==
-        (:mass, :redshift, :chi_1, :chi_2, :lambda_1, :lambda_2)
+    @test keys(prior.dists) == (:mass, :redshift, :chi_1, :chi_2, :lambda_1, :lambda_2)
 
     single = rand(MersenneTwister(7), prior)
     @test keys(single) == (:mass, :redshift, :chi_1, :chi_2, :lambda_1, :lambda_2)
@@ -88,34 +87,35 @@ end
 
 @testset "intrinsic_log_prob_samples SoA fast path matches native logpdf" begin
     theta = HyperParameters(;
-        H0=67.0,
-        Omega_m=0.315,
-        gamma=2.7,
-        kappa=3.0,
-        z_peak=2.5,
+        H0 = 67.0,
+        Omega_m = 0.315,
+        gamma = 2.7,
+        kappa = 3.0,
+        z_peak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
     prior = intrinsic_prior(FullBNS(), bundle)
     samples = (
-        mass=stack_source_masses([1.4, 1.5], [1.2, 1.3]),
-        redshift=[0.1, 0.2],
-        chi_1=[0.0, 0.1],
-        chi_2=[0.0, -0.2],
-        lambda_1=[100.0, 200.0],
-        lambda_2=[150.0, 250.0],
+        mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
+        redshift = [0.1, 0.2],
+        chi_1 = [0.0, 0.1],
+        chi_2 = [0.0, -0.2],
+        lambda_1 = [100.0, 200.0],
+        lambda_2 = [150.0, 250.0]
     )
 
-    expected = [
-        logpdf(prior, (
-            mass=[samples.mass[1, i], samples.mass[2, i]],
-            redshift=samples.redshift[i],
-            chi_1=samples.chi_1[i],
-            chi_2=samples.chi_2[i],
-            lambda_1=samples.lambda_1[i],
-            lambda_2=samples.lambda_2[i],
-        )) for i in 1:length(samples.redshift)
-    ]
+    expected = [logpdf(
+                    prior,
+                    (
+                        mass = [samples.mass[1, i], samples.mass[2, i]],
+                        redshift = samples.redshift[i],
+                        chi_1 = samples.chi_1[i],
+                        chi_2 = samples.chi_2[i],
+                        lambda_1 = samples.lambda_1[i],
+                        lambda_2 = samples.lambda_2[i]
+                    )
+                ) for i in 1:length(samples.redshift)]
 
     @test intrinsic_log_prob_samples(prior, samples) ≈ expected
 
@@ -126,18 +126,32 @@ end
 
 @testset "intrinsic_log_prob_samples AoS fallback" begin
     theta = HyperParameters(;
-        H0=67.0,
-        Omega_m=0.315,
-        gamma=2.7,
-        kappa=3.0,
-        z_peak=2.5,
+        H0 = 67.0,
+        Omega_m = 0.315,
+        gamma = 2.7,
+        kappa = 3.0,
+        z_peak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
     prior = intrinsic_prior(FullBNS(), bundle)
     aos = [
-        (mass=[1.4, 1.2], redshift=0.1, chi_1=0.0, chi_2=0.0, lambda_1=100.0, lambda_2=150.0),
-        (mass=[1.5, 1.3], redshift=0.2, chi_1=0.1, chi_2=-0.2, lambda_1=200.0, lambda_2=250.0),
+        (
+            mass = [1.4, 1.2],
+            redshift = 0.1,
+            chi_1 = 0.0,
+            chi_2 = 0.0,
+            lambda_1 = 100.0,
+            lambda_2 = 150.0
+        ),
+        (
+            mass = [1.5, 1.3],
+            redshift = 0.2,
+            chi_1 = 0.1,
+            chi_2 = -0.2,
+            lambda_1 = 200.0,
+            lambda_2 = 250.0
+        )
     ]
     @test intrinsic_log_prob_samples(prior, aos) == [logpdf(prior, s) for s in aos]
 end

@@ -7,12 +7,15 @@ const BNS_MASS_HIGH = 2.5
 const BNS_LAMBDA_HIGH = 5000.0
 const BNS_SPIN_A_MAX = 0.99
 
-struct OrderedUniformSourceMassPair{T<:Real} <: ContinuousMultivariateDistribution
+struct OrderedUniformSourceMassPair{T <: Real} <: ContinuousMultivariateDistribution
     low::T
     high::T
 end
 
-function OrderedUniformSourceMassPair(; low::Real=BNS_MASS_LOW, high::Real=BNS_MASS_HIGH)
+function OrderedUniformSourceMassPair(;
+        low::Real = BNS_MASS_LOW,
+        high::Real = BNS_MASS_HIGH
+)
     low < high || throw(ArgumentError("low must be smaller than high"))
     return OrderedUniformSourceMassPair(Float64(low), Float64(high))
 end
@@ -22,40 +25,34 @@ Base.size(::OrderedUniformSourceMassPair) = (2,)
 Base.eltype(::Type{<:OrderedUniformSourceMassPair}) = Float64
 Base.eltype(::OrderedUniformSourceMassPair) = Float64
 
-function Distributions.insupport(
-    d::OrderedUniformSourceMassPair,
-    value::NTuple{2,<:Real},
-)
+function Distributions.insupport(d::OrderedUniformSourceMassPair, value::NTuple{2, <:Real})
     m1, m2 = value
     return m1 >= m2 && m2 >= d.low && m1 <= d.high
 end
 
 function Distributions.insupport(
-    d::OrderedUniformSourceMassPair,
-    value::AbstractVector{<:Real},
+        d::OrderedUniformSourceMassPair,
+        value::AbstractVector{<:Real}
 )
     length(value) == 2 || return false
     return insupport(d, (value[1], value[2]))
 end
 
-function Distributions.logpdf(
-    d::OrderedUniformSourceMassPair,
-    value::NTuple{2,<:Real},
-)
+function Distributions.logpdf(d::OrderedUniformSourceMassPair, value::NTuple{2, <:Real})
     return insupport(d, value) ? log(2.0) - 2.0 * log(d.high - d.low) : -Inf
 end
 
 function Distributions.logpdf(
-    d::OrderedUniformSourceMassPair,
-    value::AbstractVector{<:Real},
+        d::OrderedUniformSourceMassPair,
+        value::AbstractVector{<:Real}
 )
     length(value) == 2 || throw(ArgumentError("ordered mass pair expects two coordinates"))
     return logpdf(d, (value[1], value[2]))
 end
 
 function Distributions._logpdf(
-    d::OrderedUniformSourceMassPair,
-    value::AbstractVector{<:Real},
+        d::OrderedUniformSourceMassPair,
+        value::AbstractVector{<:Real}
 )
     return logpdf(d, value)
 end
@@ -68,9 +65,9 @@ function Random.rand(rng::AbstractRNG, d::OrderedUniformSourceMassPair)
 end
 
 function Distributions._rand!(
-    rng::AbstractRNG,
-    d::OrderedUniformSourceMassPair,
-    x::AbstractVector{<:Real},
+        rng::AbstractRNG,
+        d::OrderedUniformSourceMassPair,
+        x::AbstractVector{<:Real}
 )
     length(x) == 2 || throw(ArgumentError("ordered mass pair expects length-2 output"))
     span = d.high - d.low
@@ -86,11 +83,11 @@ function Distributions._rand!(
     return x
 end
 
-struct AlignedSpinChiSimple{T<:Real} <: ContinuousUnivariateDistribution
+struct AlignedSpinChiSimple{T <: Real} <: ContinuousUnivariateDistribution
     a_max::T
 end
 
-function AlignedSpinChiSimple(; a_max::Real=BNS_SPIN_A_MAX)
+function AlignedSpinChiSimple(; a_max::Real = BNS_SPIN_A_MAX)
     a_max > 0 || throw(ArgumentError("a_max must be positive"))
     return AlignedSpinChiSimple(Float64(a_max))
 end
@@ -112,7 +109,8 @@ function Random.rand(rng::AbstractRNG, d::AlignedSpinChiSimple)
     return rand(rng, Bool) ? magnitude : -magnitude
 end
 
-struct RedshiftInterpolatedDistribution{B<:RedshiftBundle} <: ContinuousUnivariateDistribution
+struct RedshiftInterpolatedDistribution{B <: RedshiftBundle} <:
+       ContinuousUnivariateDistribution
     bundle::B
 end
 
@@ -136,8 +134,8 @@ function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
     idx = searchsortedlast(cumulative, target)
     idx <= 0 && return x[1]
     idx >= n && return x[end]
-    c0, c1 = cumulative[idx], cumulative[idx+1]
-    x0, x1 = x[idx], x[idx+1]
+    c0, c1 = cumulative[idx], cumulative[idx + 1]
+    x0, x1 = x[idx], x[idx + 1]
     c1 > c0 || return x0
     return x0 + (target - c0) * (x1 - x0) / (c1 - c0)
 end
@@ -150,17 +148,16 @@ Build the seven-parameter uniform hyperparameter prior as a native
 `bounds` is a dict keyed by parameter name (`"H0"`, `"Omega_m"`, `"chi0"`, `"chin"`,
 `"gamma"`, `"kappa"`, `"z_peak"`) carrying `(low, high)` tuples.
 """
-function build_uniform_priors(
-    bounds::AbstractDict{<:AbstractString,<:Tuple{<:Real,<:Real}},
-)
+function build_uniform_priors(bounds::AbstractDict{
+        <:AbstractString, <:Tuple{<:Real, <:Real}})
     return product_distribution((
-        H0=Uniform(Float64(bounds["H0"][1]), Float64(bounds["H0"][2])),
-        Omega_m=Uniform(Float64(bounds["Omega_m"][1]), Float64(bounds["Omega_m"][2])),
-        chi0=Uniform(Float64(bounds["chi0"][1]), Float64(bounds["chi0"][2])),
-        chin=Uniform(Float64(bounds["chin"][1]), Float64(bounds["chin"][2])),
-        gamma=Uniform(Float64(bounds["gamma"][1]), Float64(bounds["gamma"][2])),
-        kappa=Uniform(Float64(bounds["kappa"][1]), Float64(bounds["kappa"][2])),
-        z_peak=Uniform(Float64(bounds["z_peak"][1]), Float64(bounds["z_peak"][2])),
+        H0 = Uniform(Float64(bounds["H0"][1]), Float64(bounds["H0"][2])),
+        Omega_m = Uniform(Float64(bounds["Omega_m"][1]), Float64(bounds["Omega_m"][2])),
+        chi0 = Uniform(Float64(bounds["chi0"][1]), Float64(bounds["chi0"][2])),
+        chin = Uniform(Float64(bounds["chin"][1]), Float64(bounds["chin"][2])),
+        gamma = Uniform(Float64(bounds["gamma"][1]), Float64(bounds["gamma"][2])),
+        kappa = Uniform(Float64(bounds["kappa"][1]), Float64(bounds["kappa"][2])),
+        z_peak = Uniform(Float64(bounds["z_peak"][1]), Float64(bounds["z_peak"][2]))
     ))
 end
 
@@ -189,22 +186,22 @@ and `logpdf(prior, sample)` directly; use [`intrinsic_log_prob_samples`](@ref) f
 batched, allocation-light path on a [`FullBNSSamplesSoA`](@ref) sample container.
 """
 function intrinsic_prior(
-    ::FullBNS,
-    bundle::RedshiftBundle;
-    mass_low::Real=BNS_MASS_LOW,
-    mass_high::Real=BNS_MASS_HIGH,
-    spin_a_max::Real=BNS_SPIN_A_MAX,
-    lambda_high::Real=BNS_LAMBDA_HIGH,
+        ::FullBNS,
+        bundle::RedshiftBundle;
+        mass_low::Real = BNS_MASS_LOW,
+        mass_high::Real = BNS_MASS_HIGH,
+        spin_a_max::Real = BNS_SPIN_A_MAX,
+        lambda_high::Real = BNS_LAMBDA_HIGH
 )
     lambda_dist = Uniform(0.0, Float64(lambda_high))
-    spin_dist = AlignedSpinChiSimple(; a_max=spin_a_max)
+    spin_dist = AlignedSpinChiSimple(; a_max = spin_a_max)
     return product_distribution((
-        mass=OrderedUniformSourceMassPair(; low=mass_low, high=mass_high),
-        redshift=RedshiftInterpolatedDistribution(bundle),
-        chi_1=spin_dist,
-        chi_2=spin_dist,
-        lambda_1=lambda_dist,
-        lambda_2=lambda_dist,
+        mass = OrderedUniformSourceMassPair(; low = mass_low, high = mass_high),
+        redshift = RedshiftInterpolatedDistribution(bundle),
+        chi_1 = spin_dist,
+        chi_2 = spin_dist,
+        lambda_1 = lambda_dist,
+        lambda_2 = lambda_dist
     ))
 end
 
@@ -219,13 +216,14 @@ Per-sample intrinsic log-prior. Two methods:
   evaluates each component `logpdf` over contiguous arrays and sums, with no per-sample
   heap allocation.
 """
-intrinsic_log_prob_samples(prior, samples::AbstractVector{<:NamedTuple}) =
+function intrinsic_log_prob_samples(prior, samples::AbstractVector{<:NamedTuple})
     logpdf.(Ref(prior), samples)
+end
 
 function _full_bns_pointwise_logpdf(
-    prior::ProductNamedTupleDistribution,
-    samples::NamedTuple,
-    i::Integer,
+        prior::ProductNamedTupleDistribution,
+        samples::NamedTuple,
+        i::Integer
 )
     return (
         logpdf(prior.dists.mass, (samples.mass[1, i], samples.mass[2, i])) +
@@ -238,8 +236,8 @@ function _full_bns_pointwise_logpdf(
 end
 
 function intrinsic_log_prob_samples(
-    prior::ProductNamedTupleDistribution,
-    samples::NamedTuple,
+        prior::ProductNamedTupleDistribution,
+        samples::NamedTuple
 )
     n = _require_full_bns_soa_matching_lengths(samples)
     n == 0 && return Float64[]
@@ -259,14 +257,13 @@ In-place SoA variant of [`intrinsic_log_prob_samples`](@ref). Writes per-sample
 log-prior into `out`; `out` must have length equal to `length(samples.redshift)`.
 """
 function intrinsic_log_prob_samples!(
-    out::AbstractVector,
-    prior::ProductNamedTupleDistribution,
-    samples::NamedTuple,
+        out::AbstractVector,
+        prior::ProductNamedTupleDistribution,
+        samples::NamedTuple
 )
     n = _require_full_bns_soa_matching_lengths(samples)
-    length(out) == n || throw(
-        ArgumentError("output length must match the number of samples"),
-    )
+    length(out) == n ||
+        throw(ArgumentError("output length must match the number of samples"))
     @inbounds for i in 1:n
         out[i] = _full_bns_pointwise_logpdf(prior, samples, i)
     end
@@ -275,15 +272,14 @@ end
 
 function _require_full_bns_soa_matching_lengths(samples::NamedTuple)
     n = length(samples.redshift)
-    (length(samples.chi_1) == n &&
-     length(samples.chi_2) == n &&
-     length(samples.lambda_1) == n &&
-     length(samples.lambda_2) == n &&
-     size(samples.mass, 2) == n) || throw(
-        ArgumentError("SoA sample vectors must all have matching lengths"),
-    )
-    size(samples.mass, 1) == 2 || throw(
-        ArgumentError("SoA mass matrix must have two rows (m1, m2)"),
-    )
+    (
+        length(samples.chi_1) == n &&
+        length(samples.chi_2) == n &&
+        length(samples.lambda_1) == n &&
+        length(samples.lambda_2) == n &&
+        size(samples.mass, 2) == n
+    ) || throw(ArgumentError("SoA sample vectors must all have matching lengths"))
+    size(samples.mass, 1) == 2 ||
+        throw(ArgumentError("SoA mass matrix must have two rows (m1, m2)"))
     return n
 end

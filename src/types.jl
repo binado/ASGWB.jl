@@ -29,7 +29,7 @@ struct RedshiftPriorSpec
     z_min::Float64
     z_max::Float64
     num_interp::Int
-    time_delay_model::Union{String,Nothing}
+    time_delay_model::Union{String, Nothing}
 end
 
 abstract type IntrinsicPriorStrategy end
@@ -56,13 +56,13 @@ struct ObservationConfig
 end
 
 function ObservationConfig(
-    frequencies::Vector{Float64},
-    covariance::Vector{Float64},
-    sgwb_scale::Vector{Float64},
-    in_band_mask::BitVector,
-    fiducial_spectral_density::Vector{Float64},
-    observation_time_sec::Float64,
-    observation_time_yr::Float64,
+        frequencies::Vector{Float64},
+        covariance::Vector{Float64},
+        sgwb_scale::Vector{Float64},
+        in_band_mask::BitVector,
+        fiducial_spectral_density::Vector{Float64},
+        observation_time_sec::Float64,
+        observation_time_yr::Float64
 )
     return ObservationConfig(
         frequencies,
@@ -73,7 +73,7 @@ function ObservationConfig(
         observation_time_sec,
         observation_time_yr,
         sgwb_scale[in_band_mask],
-        fiducial_spectral_density[in_band_mask],
+        fiducial_spectral_density[in_band_mask]
     )
 end
 
@@ -89,17 +89,15 @@ Base.@kwdef struct ProposalFiducialParameters
     chi0::Float64
     chin::Float64
     """Madau–Dickinson population scalars for reconstructing proposal redshift density (format v3)."""
-    gamma::Union{Nothing,Float64} = nothing
-    kappa::Union{Nothing,Float64} = nothing
-    z_peak::Union{Nothing,Float64} = nothing
+    gamma::Union{Nothing, Float64} = nothing
+    kappa::Union{Nothing, Float64} = nothing
+    z_peak::Union{Nothing, Float64} = nothing
     """Power-law redshift index `lamb` when `redshift_prior_spec.family` is `PowerLaw`."""
-    lamb::Union{Nothing,Float64} = nothing
+    lamb::Union{Nothing, Float64} = nothing
 end
 
 const FULL_BNS_INTRINSIC_ORDER = [
-    "mass_1_source", "mass_2_source", "redshift",
-    "chi_1", "chi_2", "lambda_1", "lambda_2",
-]
+    "mass_1_source", "mass_2_source", "redshift", "chi_1", "chi_2", "lambda_1", "lambda_2"]
 
 """HDF5 `proposal_samples` group attribute naming the compact-object proposal class."""
 const PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR = "source_type"
@@ -113,9 +111,9 @@ function resolve_intrinsic_strategy(intrinsic_site_order::Vector{String})::FullB
     end
     throw(
         ArgumentError(
-            "unsupported intrinsic_site_order $(repr(intrinsic_site_order)); " *
-            "only the full BNS layout is supported: $(repr(FULL_BNS_INTRINSIC_ORDER)). " *
-            "Redshift-only caches are no longer supported.",
-        ),
+        "unsupported intrinsic_site_order $(repr(intrinsic_site_order)); " *
+        "only the full BNS layout is supported: $(repr(FULL_BNS_INTRINSIC_ORDER)). " *
+        "Redshift-only caches are no longer supported.",
+    ),
     )
 end

@@ -7,13 +7,12 @@ Numerical importance weights: `exp(log_ratio) * dgw_fid_sq / dgw_theta_sq`. All 
 are vectors of equal length; no high-level objects involved.
 """
 function importance_weights(
-    log_ratio::AbstractVector{<:Real},
-    dgw_fid_sq::AbstractVector{<:Real},
-    dgw_theta_sq::AbstractVector{<:Real},
+        log_ratio::AbstractVector{<:Real},
+        dgw_fid_sq::AbstractVector{<:Real},
+        dgw_theta_sq::AbstractVector{<:Real}
 )
-    length(log_ratio) == length(dgw_fid_sq) == length(dgw_theta_sq) || throw(
-        ArgumentError("importance weight inputs must have matching lengths"),
-    )
+    length(log_ratio) == length(dgw_fid_sq) == length(dgw_theta_sq) ||
+        throw(ArgumentError("importance weight inputs must have matching lengths"))
     return exp.(log_ratio) .* dgw_fid_sq ./ dgw_theta_sq
 end
 
@@ -28,9 +27,9 @@ and the parity shim.
 Returns a NamedTuple with fields `weights`, `log_ratio`, `target_log_prob`, `dgw_theta_sq`.
 """
 function compute_importance_weights(
-    problem::ImportanceSamplingProblem,
-    h::HyperParametersNT,
-    bundle::RedshiftBundle,
+        problem::ImportanceSamplingProblem,
+        h::HyperParametersNT,
+        bundle::RedshiftBundle
 )
     z = redshift(problem)
     d_l = luminosity_distance.(z, h.H0, h.Omega_m, Ref(bundle.distance))
@@ -42,9 +41,9 @@ function compute_importance_weights(
     log_ratio = target_log_prob .- problem.proposal.log_prob
     weights = importance_weights(log_ratio, problem.proposal.dgw_fid_sq, dgw_theta_sq)
     return (;
-        weights=weights,
-        log_ratio=log_ratio,
-        target_log_prob=target_log_prob,
-        dgw_theta_sq=dgw_theta_sq,
+        weights = weights,
+        log_ratio = log_ratio,
+        target_log_prob = target_log_prob,
+        dgw_theta_sq = dgw_theta_sq
     )
 end

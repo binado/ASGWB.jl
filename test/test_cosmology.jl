@@ -37,7 +37,8 @@ end
 
             @test luminosity_distance.(z_grid, H0, Omega_m) ≈ expected_dl rtol = 1e-6
             @test differential_comoving_volume.(z_grid, H0, Omega_m) ≈ expected_dvc rtol = 1e-6
-            @test gravitational_wave_distance.(z_grid, expected_dl, chi0, chin) ≈ expected_dgw rtol = 1e-6
+            @test gravitational_wave_distance.(z_grid, expected_dl, chi0, chin) ≈
+                  expected_dgw rtol = 1e-6
         end
     end
 end
@@ -47,9 +48,9 @@ end
         x = collect(LinRange(0.0, 2π, 513))
         r = CumulativeIntegral1D(x, sin)
         # ∫₀^{2π} sin = 0 (grid-aligned endpoint, trapezoidal is exact at nodes)
-        @test isapprox(normalizer(r), 0.0; atol=1e-10)
+        @test isapprox(normalizer(r), 0.0; atol = 1e-10)
         # ∫₀^{π} sin ≈ 2 (trapezoidal antiderivative on a 513-node grid)
-        @test isapprox(cdf(r, π), 2.0; rtol=1e-4)
+        @test isapprox(cdf(r, π), 2.0; rtol = 1e-4)
         # Interpolant matches at nodes and between nodes
         @test interpolate(r, π / 2) ≈ sin(π / 2) atol = 1e-8
         # Outside the grid: DataInterpolations throws an extrapolation error
@@ -66,7 +67,7 @@ end
         r = CumulativeIntegral1D(x, inv_E)
         # Trapezoidal antiderivative error on a 1024-node grid is ≤ 1e-4 everywhere.
         for z in (1e-3, 0.05, 0.17, 1.0, 3.14, 9.87, 19.5)
-            expected, _ = quadgk(inv_E, 0.0, z; rtol=1e-10)
+            expected, _ = quadgk(inv_E, 0.0, z; rtol = 1e-10)
             @test cdf(r, z) ≈ expected rtol = 1e-4
         end
     end

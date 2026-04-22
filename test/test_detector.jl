@@ -1,7 +1,14 @@
 using ASGWB
-using ASGWB: Detector, PowerSpectralDensity, covariance_on_grid, gaussian_bin_scale,
-    frequency_bin_width, build_observation_config, default_detector_data_dir,
-    overlap_reduction_function, pairwise_overlap_reduction_function
+using ASGWB:
+             Detector,
+             PowerSpectralDensity,
+             covariance_on_grid,
+             gaussian_bin_scale,
+             frequency_bin_width,
+             build_observation_config,
+             default_detector_data_dir,
+             overlap_reduction_function,
+             pairwise_overlap_reduction_function
 using HDF5
 using NPZ
 using Test
@@ -26,19 +33,19 @@ using Test
             d2 = Detector(n2)
             jl = overlap_reduction_function(freqs, d1, d2)
             @test size(jl) == size(ref)
-            @test jl ≈ ref atol = 1.0e-4 rtol = 1.0e-6
+            @test jl≈ref atol=1.0e-4 rtol=1.0e-6
         end
         dets = [Detector("H1"), Detector("L1"), Detector("V1")]
         pw = pairwise_overlap_reduction_function(freqs, dets)
-        @test pw[1, 2, :] ≈ Vector{Float64}(vec(data["H1_L1"])) atol = 1.0e-4 rtol = 1.0e-6
-        @test pw[1, 3, :] ≈ Vector{Float64}(vec(data["H1_V1"])) atol = 1.0e-4 rtol = 1.0e-6
-        @test pw[2, 3, :] ≈ Vector{Float64}(vec(data["L1_V1"])) atol = 1.0e-4 rtol = 1.0e-6
+        @test pw[1, 2, :]≈Vector{Float64}(vec(data["H1_L1"])) atol=1.0e-4 rtol=1.0e-6
+        @test pw[1, 3, :]≈Vector{Float64}(vec(data["H1_V1"])) atol=1.0e-4 rtol=1.0e-6
+        @test pw[2, 3, :]≈Vector{Float64}(vec(data["L1_V1"])) atol=1.0e-4 rtol=1.0e-6
     end
 end
 
 @testset "PowerSpectralDensity file load" begin
     noise = joinpath(default_detector_data_dir(), "noise_curves", "AplusDesign_psd.txt")
-    psd = PowerSpectralDensity(noise; curve_type=:psd)
+    psd = PowerSpectralDensity(noise; curve_type = :psd)
     v = psd([20.0, 100.0, 1e6])
     @test isfinite(v[1]) && isfinite(v[2])
     @test v[3] == Inf
@@ -57,16 +64,16 @@ end
 @testset "covariance_on_grid and gaussian_bin_scale" begin
     d1 = Detector("H1")
     d2 = Detector("L1")
-    f = collect(range(20.0; step=20.0, length=16))
+    f = collect(range(20.0; step = 20.0, length = 16))
     cov = covariance_on_grid(f, [d1, d2])
     @test length(cov) == length(f)
     @test all(isfinite, cov) && all(cov .> 0)
     mask = trues(length(f))
     scale = gaussian_bin_scale(;
-        covariance=cov,
-        frequencies=f,
-        in_band_mask=mask,
-        observation_time_sec=3.15576e7,
+        covariance = cov,
+        frequencies = f,
+        in_band_mask = mask,
+        observation_time_sec = 3.15576e7
     )
     @test length(scale) == count(mask)
     @test all(isfinite, scale) && all(scale .> 0)

@@ -6,21 +6,31 @@ using Test
     fixture_path = joinpath(@__DIR__, "fixtures", "deterministic_parity.h5")
 
     cache = load_cache(cache_path, [Detector("H1"), Detector("L1")])
+    @test cache.observation.fiducial_spectral_density ≈ fiducial_spectral_density(cache)
+
+    obs_disk = h5open(cache_path, "r") do f
+        haskey(f, "fiducial_spectral_density") ||
+            error("fixture $(repr(cache_path)) missing fiducial_spectral_density")
+        vec(Float64.(read(f["fiducial_spectral_density"])))
+    end
 
     h5open(fixture_path, "r") do file
         group = file["full_intrinsic_case"]
-        theta = HyperParameters((; (
-            Symbol(name) => Float64(read(group["theta/$(name)"])) for
-            name in ("H0", "Omega_m", "chi0", "chin", "gamma", "kappa", "z_peak")
-        )...,))
+        theta = HyperParameters((;
+            (
+            Symbol(name) => Float64(read(group["theta/$(name)"]))
+        for
+        name in ("H0", "Omega_m", "chi0", "chin", "gamma", "kappa", "z_peak")
+        )...,
+        ))
         priors = build_uniform_priors(
             Dict(
-                name => (
-                    Float64(read(group["prior_bounds/$(name)/low"])),
-                    Float64(read(group["prior_bounds/$(name)/high"])),
-                ) for
-                name in ("H0", "Omega_m", "chi0", "chin", "gamma", "kappa", "z_peak")
-            ),
+            name => (
+                Float64(read(group["prior_bounds/$(name)/low"])),
+                Float64(read(group["prior_bounds/$(name)/high"]))
+            ) for
+        name in ("H0", "Omega_m", "chi0", "chin", "gamma", "kappa", "z_peak")
+        ),
         )
 
         expected_target_log_prob = vec(Float64.(read(group["target_log_prob"])))
@@ -47,7 +57,9 @@ using Test
         @test evaluation.expected_number_of_sources ≈ expected_number_of_sources rtol = parity_rtol
         @test evaluation.spectral_density ≈ expected_spectral_density rtol = parity_rtol
         @test logprior(theta, priors) ≈ expected_log_prior rtol = 1e-6
-        @test loglikelihood(theta, cache) ≈ expected_log_likelihood rtol = parity_rtol
-        @test logposterior(theta, cache, priors) ≈ expected_log_posterior rtol = parity_rtol
+        @test loglikelihood(theta, cache; observed_spectral_density = obs_disk) ≈
+              expected_log_likelihood rtol = parity_rtol
+        @test logposterior(theta, cache, priors; observed_spectral_density = obs_disk) ≈
+              expected_log_posterior rtol = parity_rtol
     end
 end
