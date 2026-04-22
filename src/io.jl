@@ -236,7 +236,7 @@ end
 function bundle_from_hdf5(
     intrinsic_site_order::Vector{String},
     proposal_samples::Dict{String,Vector{Float64}},
-)::FullBNSSamples
+)::FullBNSSamplesSoA
     intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER || throw(
         ArgumentError(
             "unsupported intrinsic_site_order $(repr(intrinsic_site_order)); " *
@@ -248,14 +248,16 @@ function bundle_from_hdf5(
             ArgumentError("proposal_samples must include $(key) for full BNS layout"),
         )
     end
-    return FullBNSSamples(
-        copy(proposal_samples["mass_1_source"]),
-        copy(proposal_samples["mass_2_source"]),
-        copy(proposal_samples["redshift"]),
-        copy(proposal_samples["chi_1"]),
-        copy(proposal_samples["chi_2"]),
-        copy(proposal_samples["lambda_1"]),
-        copy(proposal_samples["lambda_2"]),
+    return (
+        mass=stack_source_masses(
+            proposal_samples["mass_1_source"],
+            proposal_samples["mass_2_source"],
+        ),
+        redshift=copy(proposal_samples["redshift"]),
+        chi_1=copy(proposal_samples["chi_1"]),
+        chi_2=copy(proposal_samples["chi_2"]),
+        lambda_1=copy(proposal_samples["lambda_1"]),
+        lambda_2=copy(proposal_samples["lambda_2"]),
     )
 end
 
@@ -286,7 +288,10 @@ redshifts and fiducial cosmology). Population scalars for reconstruction may app
 The `proposal_samples` group must carry string attribute [`PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR`](@ref)
 with value [`PROPOSAL_SAMPLES_SOURCE_TYPE_BNS`](@ref).
 
-`fiducial_spectral_density` may be omitted; it is then filled using [`fiducial_spectral_density`](@ref).
+Dataset `fiducial_spectral_density` may be present in the file for provenance but is **ignored on load**:
+[`load_cache`](@ref) always fills [`ObservationConfig`](@ref).`fiducial_spectral_density` by calling
+[`fiducial_spectral_density`](@ref) on the assembled problem so the default likelihood data match the
+current Julia forward model.
 
 Equivalent in-memory problems can be built with [`importance_sampling_problem`](@ref).
 """
@@ -339,15 +344,9 @@ function load_cache(
             "frequencies",
         )
         in_band_mask = _read_in_band_mask(_require_child(file, "in_band_mask"))
-        fiducial_spectral_density_on_disk = haskey(file, "fiducial_spectral_density")
-        fiducial_spectral_density_vec = if fiducial_spectral_density_on_disk
-            _read_float_vector(
-                _require_child(file, "fiducial_spectral_density"),
-                "fiducial_spectral_density",
-            )
-        else
-            zeros(Float64, length(frequencies))
-        end
+        # Placeholder only; replaced after `importance_sampling_problem` by `fiducial_spectral_density(p)`.
+        # Any HDF5 `fiducial_spectral_density` dataset is ignored so caches cannot go stale vs Julia code.
+        fiducial_spectral_density_vec = zeros(Float64, length(frequencies))
 
         obs_sec = Float64(_read_attr(attrs, "observation_time_sec"))
         obs_yr = Float64(_read_attr(attrs, "observation_time_yr"))
@@ -505,36 +504,39 @@ function load_cache(
             redshift_integral_fiducial,
             fiducial_parameters,
         )
-        if !fiducial_spectral_density_on_disk
-            fs = try
-                fiducial_spectral_density(p)
-            catch err
-                throw(
-                    ArgumentError(
-                        "cache omits fiducial_spectral_density but recomputation failed; " *
-                        "ensure population keys are present for the redshift prior. " *
-                        "Underlying error: " * sprint(showerror, err),
-                    ),
-                )
-            end
-            observation2 = ObservationConfig(
-                p.observation.frequencies,
-                p.observation.covariance,
-                p.observation.sgwb_scale,
-                p.observation.in_band_mask,
-                fs,
-                p.observation.observation_time_sec,
-                p.observation.observation_time_yr,
-            )
-            p = importance_sampling_problem(
-                p.proposal,
-                observation2,
-                p.redshift_prior_spec,
-                p.local_merger_rate,
-                p.redshift_integral_fiducial,
-                p.fiducial_parameters,
+        fs = try
+            fiducial_spectral_density(p)
+        catch err
+            throw(
+                ArgumentError(
+                    "fiducial_spectral_density recomputation on load failed; " *
+                    "ensure population keys are present for the redshift prior. " *
+                    "Underlying error: " * sprint(showerror, err),
+                ),
             )
         end
+        length(fs) == n_frequencies || throw(
+            ArgumentError(
+                "fiducial_spectral_density recomputation returned length $(length(fs)), expected $n_frequencies",
+            ),
+        )
+        observation2 = ObservationConfig(
+            p.observation.frequencies,
+            p.observation.covariance,
+            p.observation.sgwb_scale,
+            p.observation.in_band_mask,
+            fs,
+            p.observation.observation_time_sec,
+            p.observation.observation_time_yr,
+        )
+        p = importance_sampling_problem(
+            p.proposal,
+            observation2,
+            p.redshift_prior_spec,
+            p.local_merger_rate,
+            p.redshift_integral_fiducial,
+            p.fiducial_parameters,
+        )
         return p
     end
 end

@@ -30,11 +30,10 @@ using Turing
             priors = build_uniform_priors(prior_bounds)
 
             model = build_turing_model(cache, priors)
-            theta_flat = as_flat_constrained(theta0)
-            @test Turing.logjoint(model, theta_flat) ≈
+            @test Turing.logjoint(model, theta0) ≈
                 logposterior(theta0, cache, priors) rtol = 1e-6
 
-            returned_nt = Turing.returned(model, theta_flat)
+            returned_nt = Turing.returned(model, theta0)
             @test haskey(returned_nt, :effective_sample_size)
             @test isfinite(returned_nt.effective_sample_size)
             @test 0 < returned_nt.effective_sample_size <= 1
@@ -42,8 +41,8 @@ using Turing
             chain, sampled_model =
                 sample_with_turing(cache, priors, theta0; n_adapts=3, n_samples=3)
 
-            @test Turing.logjoint(sampled_model, theta_flat) ≈
-                Turing.logjoint(model, theta_flat) rtol = 1e-6
+            @test Turing.logjoint(sampled_model, theta0) ≈
+                Turing.logjoint(model, theta0) rtol = 1e-6
             @test size(chain, 1) == 3
 
             chain_h0, cond_h0 =

@@ -30,6 +30,6 @@ using Test
         # norm; Julia now uses composite Simpson, so the tolerances reflect the trapezoid
         # vs Simpson discretization gap rather than numerical precision.
         @test log_prob_from_bundle.(sample_z, Ref(bundle)) ≈ expected_log_prob rtol = 5e-3
-        @test bundle.norm ≈ expected_integral rtol = 5e-3
+        @test ASGWB.redshift_integral(bundle) ≈ expected_integral rtol = 5e-3
     end
 end

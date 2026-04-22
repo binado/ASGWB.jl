@@ -21,7 +21,7 @@ end
     compute_importance_weights(problem, h, bundle) -> NamedTuple
 
 High-level builder: given the [`ImportanceSamplingProblem`](@ref), live
-[`HyperParameters`](@ref), and a precomputed [`RedshiftGridBundle`](@ref), compute
+[`HyperParameters`](@ref), and a precomputed [`RedshiftBundle`](@ref), compute
 per-sample importance weights and the intermediate quantities used by diagnostics
 and the parity shim.
 
@@ -29,16 +29,16 @@ Returns a NamedTuple with fields `weights`, `log_ratio`, `target_log_prob`, `dgw
 """
 function compute_importance_weights(
     problem::ImportanceSamplingProblem,
-    h::HyperParameters,
-    bundle::RadialInterpolant,
+    h::HyperParametersNT,
+    bundle::RedshiftBundle,
 )
     z = redshift(problem)
-    d_l = luminosity_distance.(z, h.cosmological.H0, h.cosmological.Omega_m, Ref(bundle.companion))
-    dgw_theta = gravitational_wave_distance.(z, d_l, h.propagation.chi0, h.propagation.chin)
+    d_l = luminosity_distance.(z, h.H0, h.Omega_m, Ref(bundle.distance))
+    dgw_theta = gravitational_wave_distance.(z, d_l, h.chi0, h.chin)
     dgw_theta_sq = dgw_theta .^ 2
 
-    redshift_log_prob = log_prob_from_bundle.(z, Ref(bundle))
-    target_log_prob = bns_intrinsic_log_prob_samples(problem.proposal.samples, redshift_log_prob)
+    prior = intrinsic_prior(problem.strategy, bundle)
+    target_log_prob = intrinsic_log_prob_samples(prior, problem.proposal.samples)
     log_ratio = target_log_prob .- problem.proposal.log_prob
     weights = importance_weights(log_ratio, problem.proposal.dgw_fid_sq, dgw_theta_sq)
     return (;

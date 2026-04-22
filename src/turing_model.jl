@@ -1,4 +1,4 @@
-using Distributions: MvNormal
+using Distributions: MvNormal, ProductNamedTupleDistribution
 using LinearAlgebra: Diagonal
 using Turing
 
@@ -8,7 +8,7 @@ using Turing
 If `sample_only === nothing`, return `model` unchanged (all hyperparameters are sampled).
 
 Otherwise `sample_only` lists the subset of [`DEFAULT_PARAMETER_ORDER`](@ref) that remain
-stochastic; all other hyperparameters are **fixed** to their values in `as_flat_constrained(theta0)`
+stochastic; all other hyperparameters are **fixed** to the corresponding entries of `theta0`
 using Turing’s conditioning operator `|` (see
 [Turing docs: conditioning on data](https://turinglang.org/docs/core-functionality/#conditioning-on-data)).
 """
@@ -18,10 +18,9 @@ function condition_turing_model(
     sample_only::Union{Nothing,Tuple{Vararg{Symbol}}},
 )
     sample_only === nothing && return model
-    as = as_flat_constrained(theta0)
     fixed = Tuple(s for s in DEFAULT_PARAMETER_ORDER if s ∉ sample_only)
     isempty(fixed) && return model
-    return model | (; (s => as[s] for s in fixed)...)
+    return model | (; (s => theta0[s] for s in fixed)...)
 end
 
 function _validate_sample_only(sample_only::Union{Nothing,Tuple{Vararg{Symbol}}})
@@ -47,29 +46,25 @@ function _turing_initial_params(
     theta0::HyperParameters,
     sample_only::Union{Nothing,Tuple{Vararg{Symbol}}},
 )
-    as = as_flat_constrained(theta0)
-    sample_only === nothing && return InitFromParams(as)
-    return InitFromParams((; (s => as[s] for s in sample_only)...))
+    sample_only === nothing && return InitFromParams(theta0)
+    return InitFromParams((; (s => theta0[s] for s in sample_only)...))
 end
 
 @model function asgwb_importance_turing_model(
     problem::ImportanceSamplingProblem,
-    priors::InferencePriors,
+    prior::ProductNamedTupleDistribution,
     observed_in_band::AbstractVector{<:Real},
 )
-    H0 ~ priors.H0
-    Omega_m ~ priors.Omega_m
-    chi0 ~ priors.chi0
-    chin ~ priors.chin
-    gamma ~ priors.gamma
-    kappa ~ priors.kappa
-    z_peak ~ priors.z_peak
+    d = prior.dists
+    H0      ~ d.H0
+    Omega_m ~ d.Omega_m
+    chi0    ~ d.chi0
+    chin    ~ d.chin
+    gamma   ~ d.gamma
+    kappa   ~ d.kappa
+    z_peak  ~ d.z_peak
 
-    h = HyperParameters(
-        CosmologicalParameters(H0, Omega_m),
-        ModifiedPropagationParameters(chi0, chin),
-        MadauDickinsonParameters(gamma, kappa, z_peak),
-    )
+    h = (; H0, Omega_m, chi0, chin, gamma, kappa, z_peak)
 
     bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec)
     iw = compute_importance_weights(problem, h, bundle)
@@ -98,27 +93,26 @@ end
 
 function build_turing_model(
     problem::ImportanceSamplingProblem,
-    priors::InferencePriors;
+    prior::ProductNamedTupleDistribution;
     observed_spectral_density::AbstractVector{<:Real}=problem.observation.fiducial_spectral_density,
 )
     return asgwb_importance_turing_model(
         problem,
-        priors,
+        prior,
         observed_spectral_density[problem.observation.in_band_mask],
     )
 end
 
 """
-    sample_with_turing(problem, priors, theta0; kwargs...) -> (chain, model)
+    sample_with_turing(problem, prior, theta0; kwargs...) -> (chain, model)
 
 NUTS sampling for the importance likelihood model. Keyword `sample_only` lists which of
 `DEFAULT_PARAMETER_ORDER` remain stochastic; all others are fixed to the corresponding entries
-in `as_flat_constrained(theta0)` using Turing’s `|` operator (see
-[`condition_turing_model`](@ref)).
+of `theta0` using Turing’s `|` operator (see [`condition_turing_model`](@ref)).
 """
 function sample_with_turing(
     problem::ImportanceSamplingProblem,
-    priors::InferencePriors,
+    prior::ProductNamedTupleDistribution,
     theta0::HyperParameters;
     n_adapts::Int=25,
     n_samples::Int=25,
@@ -129,7 +123,7 @@ function sample_with_turing(
     _validate_sample_only(sample_only)
     model = build_turing_model(
         problem,
-        priors;
+        prior;
         observed_spectral_density=observed_spectral_density,
     )
     conditioned = condition_turing_model(model, theta0, sample_only)

@@ -35,7 +35,7 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
     )
     bundle = build_redshift_grid_bundle(h, spec)
     expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)
-    expected_ri = Float64(bundle.norm)
+    expected_ri = Float64(ASGWB.redshift_integral(bundle))
 
     path, io = mktemp()
     close(io)
@@ -60,8 +60,8 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
             g = create_group(f, "proposal_samples")
             attributes(g)[PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR] = PROPOSAL_SAMPLES_SOURCE_TYPE_BNS
             s = ref.proposal.samples
-            write(g, "mass_1_source", s.mass_1_source)
-            write(g, "mass_2_source", s.mass_2_source)
+            write(g, "mass_1_source", Vector(s.mass[1, :]))
+            write(g, "mass_2_source", Vector(s.mass[2, :]))
             write(g, "redshift", s.redshift)
             write(g, "chi_1", s.chi_1)
             write(g, "chi_2", s.chi_2)
@@ -100,14 +100,13 @@ end
     fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
     from_file = load_cache(fixture_path, _TEST_LOAD_DETS)
 
-    samples = FullBNSSamples(
-        [1.4, 1.4],
-        [1.2, 1.2],
-        [0.1, 0.2],
-        [0.0, 0.0],
-        [0.0, 0.0],
-        [100.0, 100.0],
-        [100.0, 100.0],
+    samples = (
+        mass=stack_source_masses([1.4, 1.4], [1.2, 1.2]),
+        redshift=[0.1, 0.2],
+        chi_1=[0.0, 0.0],
+        chi_2=[0.0, 0.0],
+        lambda_1=[100.0, 100.0],
+        lambda_2=[100.0, 100.0],
     )
     lp = reconstruct_proposal_log_prob(
         samples,
@@ -173,8 +172,8 @@ end
     @test problem.proposal.intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER
     s = problem.proposal.samples
     @test s.redshift ≈ [0.1, 0.2]
-    @test s.mass_1_source ≈ [1.4, 1.4]
-    @test s.mass_2_source ≈ [1.2, 1.2]
+    @test Vector(s.mass[1, :]) ≈ [1.4, 1.4]
+    @test Vector(s.mass[2, :]) ≈ [1.2, 1.2]
     @test s.chi_1 ≈ [0.0, 0.0]
     @test s.chi_2 ≈ [0.0, 0.0]
     @test s.lambda_1 ≈ [100.0, 100.0]
@@ -192,9 +191,10 @@ end
     @test length(problem.observation.covariance) == length(problem.observation.frequencies)
     @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
     @test problem.observation.in_band_mask == BitVector([true, true])
-    @test problem.observation.fiducial_spectral_density ≈ [0.0, 0.0]
+    ev = evaluate_importance_terms(fiducial_hyperparameters(problem), problem)
+    @test problem.observation.fiducial_spectral_density ≈ ev.spectral_density
     @test problem.observation.sgwb_scale_in_band ≈ problem.observation.sgwb_scale
-    @test problem.observation.fiducial_spectral_density_in_band ≈ [0.0, 0.0]
+    @test problem.observation.fiducial_spectral_density_in_band ≈ ev.spectral_density_in_band
     @test problem.fiducial_parameters.H0 == 67.0
     @test problem.fiducial_parameters.Omega_m == 0.315
     @test problem.fiducial_parameters.chi0 == 1.0
@@ -236,14 +236,13 @@ end
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     ri = fiducial_redshift_integral(fid, spec)
-    samples = FullBNSSamples(
-        [1.4],
-        [1.2],
-        [0.1],
-        [0.0],
-        [0.0],
-        [100.0],
-        [100.0],
+    samples = (
+        mass=stack_source_masses([1.4], [1.2]),
+        redshift=[0.1],
+        chi_1=[0.0],
+        chi_2=[0.0],
+        lambda_1=[100.0],
+        lambda_2=[100.0],
     )
     lp = reconstruct_proposal_log_prob(samples, spec, fid)
     proposal = ProposalData(

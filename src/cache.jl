@@ -6,39 +6,34 @@ Build [`HyperParameters`](@ref) from cache `hyperparameters` scalars and the fil
 from redshift grids (e.g. caches that omit `proposal_log_prob`).
 
 Requires `gamma`, `kappa`, and `z_peak` on `fid` when `spec.family` is Madau–Dickinson,
-and `lamb` when the family is power-law.
+Power-law caches are rejected: live hyperparameter reconstruction is MadauDickinson-only.
 """
 function hyperparameters_from_fiducial(
     fid::ProposalFiducialParameters,
     spec::RedshiftPriorSpec,
 )::HyperParameters
-    if spec.family == MadauDickinson
-        g, κ, zp = fid.gamma, fid.kappa, fid.z_peak
-        if isnothing(g) || isnothing(κ) || isnothing(zp)
-            throw(
-                ArgumentError(
-                    "reconstructing proposal log-density requires hyperparameters gamma, kappa, and z_peak for MadauDickinson redshift prior",
-                ),
-            )
-        end
-        return HyperParameters(;
-            H0=fid.H0,
-            Omega_m=fid.Omega_m,
-            chi0=fid.chi0,
-            chin=fid.chin,
-            gamma=g,
-            kappa=κ,
-            z_peak=zp,
-        )
-    else
-        λ = fid.lamb
-        isnothing(λ) && throw(
+    spec.family == MadauDickinson || throw(
+        ArgumentError(
+            "live hyperparameter reconstruction supports MadauDickinson only; PowerLaw caches are metadata-only",
+        ),
+    )
+    g, κ, zp = fid.gamma, fid.kappa, fid.z_peak
+    if isnothing(g) || isnothing(κ) || isnothing(zp)
+        throw(
             ArgumentError(
-                "reconstructing proposal log-density requires hyperparameter lamb for PowerLaw redshift prior",
+                "reconstructing proposal log-density requires hyperparameters gamma, kappa, and z_peak for MadauDickinson redshift prior",
             ),
         )
-        return HyperParameters(; H0=fid.H0, Omega_m=fid.Omega_m, chi0=fid.chi0, chin=fid.chin, lamb=λ)
     end
+    return HyperParameters(;
+        H0=fid.H0,
+        Omega_m=fid.Omega_m,
+        chi0=fid.chi0,
+        chin=fid.chin,
+        gamma=g,
+        kappa=κ,
+        z_peak=zp,
+    )
 end
 
 """
@@ -54,7 +49,7 @@ function fiducial_redshift_integral(
 )::Float64
     h = hyperparameters_from_fiducial(fid, spec)
     bundle = build_redshift_grid_bundle(h, spec)
-    return Float64(bundle.norm)
+    return Float64(redshift_integral(bundle))
 end
 
 """
@@ -98,18 +93,17 @@ end
 
 Proposal log-density per sample: redshift grid log-density from
 [`hyperparameters_from_fiducial`](@ref) / [`build_redshift_grid_bundle`](@ref), plus
-full-BNS intrinsic uniform factors on [`FullBNSSamples`](@ref).
+full-BNS intrinsic uniform factors on [`FullBNSSamplesSoA`](@ref).
 """
 function reconstruct_proposal_log_prob(
-    samples::FullBNSSamples,
+    samples::FullBNSSamplesSoA,
     spec::RedshiftPriorSpec,
     fid::ProposalFiducialParameters,
 )::Vector{Float64}
     h = hyperparameters_from_fiducial(fid, spec)
     bundle = build_redshift_grid_bundle(h, spec)
-    z = redshift(samples)
-    rz = log_prob_from_bundle.(z, Ref(bundle))
-    return Float64.(bns_intrinsic_log_prob_samples(samples, rz))
+    prior = intrinsic_prior(FullBNS(), bundle)
+    return intrinsic_log_prob_samples(prior, samples)
 end
 
 function importance_sampling_problem(
