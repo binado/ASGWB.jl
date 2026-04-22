@@ -66,3 +66,65 @@ end
 function omegagw(spectral_density, frequency, parameters::HyperParameters)
     omegagw(spectral_density, frequency, parameters.H0)
 end
+
+function _validate_spectral_snr_inputs(
+        spectral_density::AbstractVector,
+        sgwb_scale::AbstractVector,
+        frequencies::AbstractVector
+)
+    n = length(spectral_density)
+    (length(sgwb_scale) == n && length(frequencies) == n) || throw(
+        ArgumentError(
+        "spectral_density, sgwb_scale, and frequencies must have the same length " *
+        "(got $(length(spectral_density)), $(length(sgwb_scale)), $(length(frequencies)))",
+    ),
+    )
+    n >= 1 || throw(ArgumentError("at least one frequency bin is required"))
+    all(>(0), sgwb_scale) ||
+        throw(ArgumentError("all sgwb_scale entries must be positive"))
+    if n >= 2
+        @inbounds for i in 2:n
+            frequencies[i] > frequencies[i - 1] || throw(
+                ArgumentError("frequencies must be strictly increasing"),
+            )
+        end
+    end
+    return nothing
+end
+
+"""
+    spectral_snr_squared(spectral_density, sgwb_scale, frequencies) -> Real
+
+Discrete matched-filter **SNR²** for a diagonal Gaussian noise model:
+
+``\\mathrm{SNR}^2 = \\sum_i S_{h,i}^2 / \\sigma_i^2``,
+
+where ``S_{h,i}`` is the strain spectral density in bin ``i`` and ``\\sigma_i`` is the
+per-bin standard deviation from [`ObservationConfig`](@ref).`sgwb_scale` (same scale as
+[`loglikelihood`](@ref) and the Turing `MvNormal` on `observed_in_band`).
+
+`spectral_density`, `sgwb_scale`, and `frequencies` must have equal length; `frequencies`
+must be strictly increasing when there are at least two bins.
+"""
+function spectral_snr_squared(
+        spectral_density::AbstractVector{<:Real},
+        sgwb_scale::AbstractVector{<:Real},
+        frequencies::AbstractVector{<:Real}
+)
+    _validate_spectral_snr_inputs(spectral_density, sgwb_scale, frequencies)
+    return sum(abs2, spectral_density ./ sgwb_scale)
+end
+
+"""
+    spectral_snr(spectral_density, sgwb_scale, frequencies) -> Real
+
+``\\mathrm{SNR} = \\sqrt{\\mathrm{SNR}^2}`` with ``\\mathrm{SNR}^2`` from
+[`spectral_snr_squared`](@ref).
+"""
+function spectral_snr(
+        spectral_density::AbstractVector{<:Real},
+        sgwb_scale::AbstractVector{<:Real},
+        frequencies::AbstractVector{<:Real}
+)
+    return sqrt(spectral_snr_squared(spectral_density, sgwb_scale, frequencies))
+end

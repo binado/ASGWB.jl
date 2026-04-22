@@ -40,6 +40,13 @@ using Turing
             @test isfinite(returned_nt.effective_sample_size)
             @test 0 < returned_nt.effective_sample_size <= 1
 
+            @test haskey(returned_nt, :spectral_snr_squared)
+            @test haskey(returned_nt, :spectral_snr)
+            @test isfinite(returned_nt.spectral_snr_squared)
+            @test isfinite(returned_nt.spectral_snr)
+            @test returned_nt.spectral_snr >= 0
+            @test returned_nt.spectral_snr^2 ≈ returned_nt.spectral_snr_squared
+
             chain,
             sampled_model = sample_with_turing(
                 cache, priors, theta0; n_adapts = 3, n_samples = 3)

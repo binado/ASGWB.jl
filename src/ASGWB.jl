@@ -117,7 +117,12 @@ export logprior,
 
 # Importance sampling
 export importance_weights,
-       compute_importance_weights, spectral_density, omegagw, evaluate_importance_terms
+       compute_importance_weights,
+       spectral_density,
+       spectral_snr_squared,
+       spectral_snr,
+       omegagw,
+       evaluate_importance_terms
 
 # Diagnostics
 export normalized_ess, max_normalized_weight, log_ratio_variance

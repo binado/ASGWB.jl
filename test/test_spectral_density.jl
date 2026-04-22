@@ -1,4 +1,4 @@
-using ASGWB: HyperParameters
+using ASGWB: HyperParameters, spectral_snr, spectral_snr_squared
 using Statistics
 using Test
 
@@ -54,4 +54,22 @@ end
         @test length(spectral_density(fluxes, rate; weights = rand(n_samples))) ==
               size(fluxes, 1)
     end
+end
+
+@testset "spectral_snr / spectral_snr_squared" begin
+    s = [1.0, 2.0, 3.0]
+    σ = [0.5, 1.0, 0.25]
+    f = [10.0, 20.0, 30.0]
+    expected_sq = sum(s .^ 2 ./ σ .^ 2)
+    @test spectral_snr_squared(s, σ, f) ≈ expected_sq
+    @test spectral_snr(s, σ, f) ≈ sqrt(expected_sq)
+    @test spectral_snr(s, σ, f) ≈ sqrt(spectral_snr_squared(s, σ, f))
+
+    @test spectral_snr_squared([2.0], [4.0], [100.0]) == 0.25
+    @test spectral_snr([2.0], [4.0], [100.0]) == 0.5
+
+    @test_throws ArgumentError spectral_snr_squared([1.0], [1.0, 2.0], [1.0, 2.0])
+    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [1.0, 2.0], [2.0, 1.0])
+    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [0.0, 1.0], [1.0, 2.0])
+    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [-1.0, 1.0], [1.0, 2.0])
 end

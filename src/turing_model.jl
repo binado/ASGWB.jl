@@ -80,10 +80,16 @@ end
     observed_in_band ~
     MvNormal(sd_in_band, Diagonal(problem.observation.sgwb_scale_in_band .^ 2))
 
+    m = problem.observation.in_band_mask
+    obs = problem.observation
+    snr_sq = spectral_snr_squared(sd[m], obs.sgwb_scale[m], obs.frequencies[m])
+
     return (;
         number_of_sources = rate * problem.observation.observation_time_sec,
         spectral_density = sd,
-        effective_sample_size = normalized_ess(iw.weights)
+        effective_sample_size = normalized_ess(iw.weights),
+        spectral_snr_squared = snr_sq,
+        spectral_snr = sqrt(snr_sq)
     )
 end
 
