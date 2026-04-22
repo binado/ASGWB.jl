@@ -4,7 +4,7 @@ using InteractiveUtils
 using ASGWB
 
 # Synthetic FullBNSSamples for a type-stability smoke test; requires a real
-# RadialInterpolant for `intrinsic_prior(FullBNS(), bundle)`, so construct one via
+# RedshiftBundle for `intrinsic_prior(FullBNS(), bundle)`, so construct one via
 # `build_redshift_grid_bundle` from representative hyperparameters.
 
 theta = HyperParameters(;

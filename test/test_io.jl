@@ -35,7 +35,7 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
     )
     bundle = build_redshift_grid_bundle(h, spec)
     expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)
-    expected_ri = Float64(bundle.norm)
+    expected_ri = Float64(ASGWB.redshift_integral(bundle))
 
     path, io = mktemp()
     close(io)

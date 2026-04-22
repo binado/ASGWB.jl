@@ -112,12 +112,12 @@ function Random.rand(rng::AbstractRNG, d::AlignedSpinChiSimple)
     return rand(rng, Bool) ? magnitude : -magnitude
 end
 
-struct RedshiftInterpolatedDistribution{B<:RadialInterpolant} <: ContinuousUnivariateDistribution
+struct RedshiftInterpolatedDistribution{B<:RedshiftBundle} <: ContinuousUnivariateDistribution
     bundle::B
 end
 
-Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.bundle.x)
-Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.bundle.x)
+Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.bundle.pdf.x)
+Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.bundle.pdf.x)
 
 function Distributions.insupport(d::RedshiftInterpolatedDistribution, value::Real)
     return minimum(d) <= value <= maximum(d)
@@ -129,9 +129,9 @@ function Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real)
 end
 
 function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
-    target = rand(rng) * d.bundle.norm
-    cumulative = d.bundle.cumulative
-    x = d.bundle.x
+    target = rand(rng) * redshift_integral(d.bundle)
+    cumulative = d.bundle.pdf.cumulative
+    x = d.bundle.pdf.x
     n = length(cumulative)
     idx = searchsortedlast(cumulative, target)
     idx <= 0 && return x[1]
@@ -190,7 +190,7 @@ batched, allocation-light path on a [`FullBNSSamplesSoA`](@ref) sample container
 """
 function intrinsic_prior(
     ::FullBNS,
-    bundle::RadialInterpolant;
+    bundle::RedshiftBundle;
     mass_low::Real=BNS_MASS_LOW,
     mass_high::Real=BNS_MASS_HIGH,
     spin_a_max::Real=BNS_SPIN_A_MAX,

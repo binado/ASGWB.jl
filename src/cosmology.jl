@@ -22,19 +22,20 @@ function differential_comoving_volume(z::Real, H0::Real, Omega_m::Real)
 end
 
 """
-    comoving_distance(z, H0, Omega_m, dist::RadialInterpolant) -> Real
+    comoving_distance(z, H0, Omega_m, dist::CumulativeIntegral1D) -> Real
 
-Comoving distance using a precomputed `RadialInterpolant` of `w -> 1/E(w, Omega_m)`.
-Equivalent to the scalar `quadgk` path but O(1) per call.
+Comoving distance using a precomputed [`CumulativeIntegral1D`](@ref) of
+`w -> 1/E(w, Omega_m)`. Uses [`cdf`](@ref) which returns the exact integral under
+the linear interpolant (analytic trapezoidal rule).
 """
-comoving_distance(z::Real, H0::Real, Omega_m::Real, dist::RadialInterpolant) =
-    (SPEED_OF_LIGHT_KM_S / H0) * integrate(dist, z, w -> inv(E(w, Omega_m)))
+comoving_distance(z::Real, H0::Real, Omega_m::Real, dist::CumulativeIntegral1D) =
+    (SPEED_OF_LIGHT_KM_S / H0) * cdf(dist, z)
 
-luminosity_distance(z::Real, H0::Real, Omega_m::Real, dist::RadialInterpolant) =
+luminosity_distance(z::Real, H0::Real, Omega_m::Real, dist::CumulativeIntegral1D) =
     (1 + z) * comoving_distance(z, H0, Omega_m, dist)
 
 function differential_comoving_volume(
-    z::Real, H0::Real, Omega_m::Real, dist::RadialInterpolant,
+    z::Real, H0::Real, Omega_m::Real, dist::CumulativeIntegral1D,
 )
     d_h = SPEED_OF_LIGHT_KM_S / H0
     d_c = comoving_distance(z, H0, Omega_m, dist)

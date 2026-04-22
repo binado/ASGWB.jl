@@ -21,7 +21,7 @@ end
     compute_importance_weights(problem, h, bundle) -> NamedTuple
 
 High-level builder: given the [`ImportanceSamplingProblem`](@ref), live
-[`HyperParameters`](@ref), and a precomputed [`RedshiftGridBundle`](@ref), compute
+[`HyperParameters`](@ref), and a precomputed [`RedshiftBundle`](@ref), compute
 per-sample importance weights and the intermediate quantities used by diagnostics
 and the parity shim.
 
@@ -30,10 +30,10 @@ Returns a NamedTuple with fields `weights`, `log_ratio`, `target_log_prob`, `dgw
 function compute_importance_weights(
     problem::ImportanceSamplingProblem,
     h::HyperParametersNT,
-    bundle::RadialInterpolant,
+    bundle::RedshiftBundle,
 )
     z = redshift(problem)
-    d_l = luminosity_distance.(z, h.H0, h.Omega_m, Ref(bundle.companion))
+    d_l = luminosity_distance.(z, h.H0, h.Omega_m, Ref(bundle.distance))
     dgw_theta = gravitational_wave_distance.(z, d_l, h.chi0, h.chin)
     dgw_theta_sq = dgw_theta .^ 2
 

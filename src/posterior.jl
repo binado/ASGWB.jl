@@ -30,7 +30,7 @@ function evaluate_importance_terms(h::HyperParametersNT, problem::ImportanceSamp
         target_log_prob=iw.target_log_prob,
         log_ratio=iw.log_ratio,
         weights=iw.weights,
-        redshift_integral=bundle.norm,
+        redshift_integral=redshift_integral(bundle),
         expected_number_of_sources=rate * problem.observation.observation_time_sec,
         spectral_density=sd,
         spectral_density_in_band=sd[problem.observation.in_band_mask],

@@ -1,4 +1,29 @@
-const RedshiftGridBundle = RadialInterpolant
+"""
+    RedshiftBundle(distance, pdf)
+
+Domain bundle pairing the comoving-distance cumulative integral with the
+detector-frame merger-rate PDF cumulative integral, both sampled on the same
+uniform redshift grid.
+
+- `distance::CumulativeIntegral1D` : antiderivative of `1/E(z, Ω_m)` used by
+  [`comoving_distance`](@ref) / [`luminosity_distance`](@ref).
+- `pdf::CumulativeIntegral1D`      : detector-frame merger-rate density; its
+  [`normalizer`](@ref) is the redshift integral ``∫ p(z)\\,dz`` driving
+  [`merger_rate_per_sec`](@ref) and its cumulative table supports inverse-CDF
+  sampling in [`RedshiftInterpolatedDistribution`](@ref).
+"""
+struct RedshiftBundle{D<:CumulativeIntegral1D, P<:CumulativeIntegral1D}
+    distance::D
+    pdf::P
+end
+
+"""
+    redshift_integral(bundle::RedshiftBundle) -> Real
+
+Convenience wrapper for `normalizer(bundle.pdf)` — the detector-frame
+redshift-integrated merger-rate density on the grid.
+"""
+redshift_integral(bundle::RedshiftBundle) = normalizer(bundle.pdf)
 
 function trapezoid_integral(x::AbstractVector{<:Real}, y::AbstractVector{<:Real})
     length(x) == length(y) || throw(ArgumentError("x and y must have the same length"))
@@ -27,19 +52,20 @@ end
         bundle, local_merger_rate_gpc3_yr, observation_time_yr, observation_time_sec,
     ) -> Float64
 
-Detector-frame merger rate in events/sec: `expected_number_of_events(local_rate, bundle.norm,
-observation_time_yr) / observation_time_sec`. `observation_time_yr` sets the events count,
-`observation_time_sec` converts to per-second units; they are taken independently rather than
-assuming a fixed seconds-per-year so the cache's stored pair of times round-trips exactly.
+Detector-frame merger rate in events/sec:
+`expected_number_of_events(local_rate, redshift_integral(bundle), observation_time_yr) /
+observation_time_sec`. `observation_time_yr` sets the events count, `observation_time_sec`
+converts to per-second units; they are taken independently rather than assuming a fixed
+seconds-per-year so the cache's stored pair of times round-trips exactly.
 """
 function merger_rate_per_sec(
-    bundle::RadialInterpolant,
+    bundle::RedshiftBundle,
     local_merger_rate_gpc3_yr::Real,
     observation_time_yr::Real,
     observation_time_sec::Real,
 )
     n_events = expected_number_of_events(
-        local_merger_rate_gpc3_yr, bundle.norm, observation_time_yr,
+        local_merger_rate_gpc3_yr, redshift_integral(bundle), observation_time_yr,
     )
     return n_events / observation_time_sec
 end
@@ -68,17 +94,17 @@ function _build_redshift_grid(
 )
     z_grid = collect(LinRange(Float64(z_min), Float64(z_max), Int(num_interp)))
     inv_E = w -> inv(E(w, Omega_m))
-    distance = RadialInterpolant(z_grid, inv_E)
+    distance = CumulativeIntegral1D(z_grid, inv_E)
     d_h = SPEED_OF_LIGHT_KM_S / H0
     pdf_integrand = let dist = distance, sf = source_frame_fn, Ω = Omega_m, dh = d_h
         function (w)
-            d_c = dh * integrate(dist, w, inv_E)
+            d_c = dh * cdf(dist, w)
             dvc_dz = dh * d_c^2 / E(w, Ω)
             return detector_frame_merger_rate_density(w, dvc_dz, sf(w))
         end
     end
-    pdf = RadialInterpolant(z_grid, pdf_integrand; companion=distance)
-    return pdf
+    pdf = CumulativeIntegral1D(z_grid, pdf_integrand)
+    return RedshiftBundle(distance, pdf)
 end
 
 function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpec)
@@ -96,9 +122,10 @@ function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpe
     return _build_redshift_grid(sfn, h.H0, h.Omega_m, spec.z_min, spec.z_max, spec.num_interp)
 end
 
-function log_prob_from_bundle(value::Real, bundle::RadialInterpolant)
-    T = promote_type(eltype(bundle.y), typeof(bundle.norm))
+function log_prob_from_bundle(value::Real, bundle::RedshiftBundle)
+    norm = redshift_integral(bundle)
+    T = promote_type(eltype(bundle.pdf.y), typeof(norm))
     tiny = floatmin(T)
-    pdf_at_value = integrand(bundle, value)
-    return log(max(pdf_at_value / max(bundle.norm, tiny), tiny))
+    pdf_at_value = interpolate(bundle.pdf, value)
+    return log(max(pdf_at_value / max(norm, tiny), tiny))
 end

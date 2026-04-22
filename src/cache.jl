@@ -49,7 +49,7 @@ function fiducial_redshift_integral(
 )::Float64
     h = hyperparameters_from_fiducial(fid, spec)
     bundle = build_redshift_grid_bundle(h, spec)
-    return Float64(bundle.norm)
+    return Float64(redshift_integral(bundle))
 end
 
 """

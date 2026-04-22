@@ -2,7 +2,7 @@ using HDF5
 using QuadGK
 using Test
 using ForwardDiff
-using ASGWB: RadialInterpolant
+using ASGWB: CumulativeIntegral1D, cdf, interpolate, normalizer
 
 @testset "basic cosmology helpers" begin
     @test E(0.0, 0.315) ≈ 1.0
@@ -42,48 +42,52 @@ end
     end
 end
 
-@testset "RadialInterpolant" begin
-    @testset "exact Simpson norm on smooth integrand" begin
+@testset "CumulativeIntegral1D" begin
+    @testset "analytic linear antiderivative on smooth integrand" begin
         x = collect(LinRange(0.0, 2π, 513))
-        r = RadialInterpolant(x, sin)
-        # ∫₀^{2π} sin = 0
-        @test isapprox(r.norm, 0.0; atol=1e-10)
-        # ∫₀^{π} sin = 2
-        @test isapprox(ASGWB.integrate(r, π, sin), 2.0; atol=1e-8)
-        # Integrand matches at nodes and between nodes
-        @test ASGWB.integrand(r, π / 2) ≈ sin(π / 2) atol = 1e-8
-        # Outside the grid: Interpolations throws (callers keep evaluations in-bounds via z_max)
-        @test_throws BoundsError ASGWB.integrand(r, 2π + 0.1)
+        r = CumulativeIntegral1D(x, sin)
+        # ∫₀^{2π} sin = 0 (grid-aligned endpoint, trapezoidal is exact at nodes)
+        @test isapprox(normalizer(r), 0.0; atol=1e-10)
+        # ∫₀^{π} sin ≈ 2 (trapezoidal antiderivative on a 513-node grid)
+        @test isapprox(cdf(r, π), 2.0; rtol=1e-4)
+        # Interpolant matches at nodes and between nodes
+        @test interpolate(r, π / 2) ≈ sin(π / 2) atol = 1e-8
+        # Outside the grid: DataInterpolations throws an extrapolation error
+        @test_throws Exception interpolate(r, 2π + 0.1)
+        # cdf clamps outside the grid instead of throwing
+        @test cdf(r, -1.0) == 0.0
+        @test cdf(r, 2π + 0.1) == normalizer(r)
     end
 
-    @testset "integrate agrees with quadgk on cosmology kernel" begin
+    @testset "cdf agrees with quadgk on cosmology kernel (trapezoidal bound)" begin
         Omega_m = 0.315
         inv_E = w -> inv(E(w, Omega_m))
         x = collect(LinRange(0.0, 20.0, 1024))
-        r = RadialInterpolant(x, inv_E)
-        for z in (0.0, 1e-3, 0.05, 0.17, 1.0, 3.14, 9.87, 19.5)
+        r = CumulativeIntegral1D(x, inv_E)
+        # Trapezoidal antiderivative error on a 1024-node grid is ≤ 1e-4 everywhere.
+        for z in (1e-3, 0.05, 0.17, 1.0, 3.14, 9.87, 19.5)
             expected, _ = quadgk(inv_E, 0.0, z; rtol=1e-10)
-            @test ASGWB.integrate(r, z, inv_E) ≈ expected rtol = 1e-6
+            @test cdf(r, z) ≈ expected rtol = 1e-4
         end
     end
 
     @testset "luminosity_distance overload matches scalar path" begin
         H0, Omega_m = 67.0, 0.315
         x = collect(LinRange(0.0, 10.0, 1024))
-        dist = RadialInterpolant(x, w -> inv(E(w, Omega_m)))
+        dist = CumulativeIntegral1D(x, w -> inv(E(w, Omega_m)))
         for z in (0.05, 0.3, 1.2, 4.5, 8.0)
             @test luminosity_distance(z, H0, Omega_m, dist) ≈
-                  luminosity_distance(z, H0, Omega_m) rtol = 1e-6
+                  luminosity_distance(z, H0, Omega_m) rtol = 1e-4
             @test differential_comoving_volume(z, H0, Omega_m, dist) ≈
-                  differential_comoving_volume(z, H0, Omega_m) rtol = 1e-6
+                  differential_comoving_volume(z, H0, Omega_m) rtol = 1e-4
         end
     end
 
-    @testset "ForwardDiff Duals propagate through RadialInterpolant" begin
+    @testset "ForwardDiff Duals propagate through CumulativeIntegral1D" begin
         x = collect(LinRange(0.0, 10.0, 257))
         # Derivative of d_c(H0, Ωm) w.r.t. Ωm, evaluated at a catalog z.
         f = Omega_m -> begin
-            dist = RadialInterpolant(x, w -> inv(E(w, Omega_m)))
+            dist = CumulativeIntegral1D(x, w -> inv(E(w, Omega_m)))
             luminosity_distance(1.2, 67.0, Omega_m, dist)
         end
         grad = ForwardDiff.derivative(f, 0.315)
