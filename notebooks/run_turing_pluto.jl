@@ -9,6 +9,8 @@ begin
 	import Pkg
     # Activates the environment in the directory where the notebook lives
     Pkg.activate(@__DIR__)
+    # Ensure dependencies are installed for fresh clones or clean depots
+    Pkg.instantiate()
 	using ASGWB
 	using ASGWB:
 		load_cache,
