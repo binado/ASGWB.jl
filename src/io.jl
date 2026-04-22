@@ -293,8 +293,8 @@ The cache must contain dataset `cached_flux` (per-frequency flux before the fidu
 `(D_L/D_gw)^2` factor), which is converted to internal `cached_flux_over_dgw2` on load.
 Two-dimensional datasets `cached_flux` and `proposal_intrinsic_vector` use HDF5 extent
 `(n_columns, n_samples)` and are normalized to `(n_samples, n_columns)` in memory.
-Datasets `covariance` and `sgwb_scale` must **not** be present; pass `detectors` as a vector
-of at least two [`Detector`](@ref) values so those vectors are built from tabulated PSDs and
+Datasets `covariance`, `effective_psd`, and `sgwb_scale` must **not** be present; pass `detectors` as a vector
+of at least two [`Detector`](@ref) values so [`effective_psd`](@ref) and `sgwb_scale` are built from tabulated PSDs and
 overlap reduction functions.
 
 Dataset `proposal_log_prob` may be omitted (reconstructed from samples, prior spec, and
@@ -319,7 +319,7 @@ function load_cache(
     isempty(detectors) && throw(ArgumentError("load_cache: detectors must be non-empty"))
     length(detectors) < 2 && throw(
         ArgumentError(
-        "load_cache: at least two detectors are required to build covariance",
+        "load_cache: at least two detectors are required to build effective_psd and sgwb_scale",
     ),
     )
     return h5open(path, "r") do file
@@ -327,9 +327,11 @@ function load_cache(
         _read_nonempty_string_attr(attrs, IMPORTANCE_CACHE_COMMAND_ATTR)
         _read_nonempty_string_attr(attrs, IMPORTANCE_CACHE_GIT_REVISION_ATTR)
 
-        (haskey(file, "covariance") || haskey(file, "sgwb_scale")) && throw(
+        (haskey(file, "covariance") ||
+         haskey(file, "effective_psd") ||
+         haskey(file, "sgwb_scale")) && throw(
             ArgumentError(
-            "cache must not contain covariance or sgwb_scale datasets; " *
+            "cache must not contain covariance, effective_psd, or sgwb_scale datasets; " *
             "pass detectors to reconstruct them from tabulated PSDs and ORFs",
         ),
         )
@@ -373,7 +375,7 @@ function load_cache(
             obs_sec,
             obs_yr
         )
-        covariance = observation0.covariance
+        effective_psd = observation0.effective_psd
         sgwb_scale = observation0.sgwb_scale
 
         for key in intrinsic_site_order
@@ -457,8 +459,8 @@ function load_cache(
         n_frequencies = length(frequencies)
         size(cached_flux_over_dgw2, 1) == n_frequencies ||
             throw(ArgumentError("cached flux row count must match frequencies length"))
-        length(covariance) == n_frequencies ||
-            throw(ArgumentError("covariance length must match frequencies length"))
+        length(effective_psd) == n_frequencies ||
+            throw(ArgumentError("effective_psd length must match frequencies length"))
         length(sgwb_scale) == n_frequencies ||
             throw(ArgumentError("sgwb_scale length must match frequencies length"))
         length(in_band_mask) == n_frequencies ||
@@ -478,7 +480,7 @@ function load_cache(
 
         observation = ObservationConfig(
             frequencies,
-            covariance,
+            effective_psd,
             sgwb_scale,
             in_band_mask,
             fiducial_spectral_density_vec,
@@ -531,7 +533,7 @@ function load_cache(
         )
         observation2 = ObservationConfig(
             p.observation.frequencies,
-            p.observation.covariance,
+            p.observation.effective_psd,
             p.observation.sgwb_scale,
             p.observation.in_band_mask,
             fs,

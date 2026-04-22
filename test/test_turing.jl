@@ -32,17 +32,25 @@ using Turing
             )
             priors = build_uniform_priors(prior_bounds)
 
-            model = build_turing_model(cache, priors)
+            model = build_turing_model(cache, priors; track = false)
             @test Turing.logjoint(model, theta0) ≈ logposterior(theta0, cache, priors) rtol = 1e-6
 
-            returned_nt = Turing.returned(model, theta0)
+            model_track = build_turing_model(cache, priors; track = true)
+            returned_nt = Turing.returned(model_track, theta0)
             @test haskey(returned_nt, :effective_sample_size)
             @test isfinite(returned_nt.effective_sample_size)
             @test 0 < returned_nt.effective_sample_size <= 1
 
+            @test haskey(returned_nt, :spectral_snr_squared)
+            @test haskey(returned_nt, :spectral_snr)
+            @test isfinite(returned_nt.spectral_snr_squared)
+            @test isfinite(returned_nt.spectral_snr)
+            @test returned_nt.spectral_snr >= 0
+            @test returned_nt.spectral_snr^2 ≈ returned_nt.spectral_snr_squared
+
             chain,
             sampled_model = sample_with_turing(
-                cache, priors, theta0; n_adapts = 3, n_samples = 3)
+                cache, priors, theta0; n_adapts = 3, n_samples = 3, track = false)
 
             @test Turing.logjoint(sampled_model, theta0) ≈ Turing.logjoint(model, theta0) rtol = 1e-6
             @test size(chain, 1) == 3
@@ -54,6 +62,7 @@ using Turing
                 theta0;
                 n_adapts = 3,
                 n_samples = 3,
+                track = false,
                 sample_only = (:H0,)
             )
             pnames = sort(collect(Symbol.(Turing.MCMCChains.names(chain_h0, :parameters))))

@@ -51,8 +51,10 @@ function _turing_initial_params(
 end
 
 @model function asgwb_importance_turing_model(
+        track::Bool,
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution,
+        z_grid::AbstractVector{<:Real},
         observed_in_band::AbstractVector{<:Real}
 )
     d = prior.dists
@@ -66,7 +68,7 @@ end
 
     h = (; H0, Omega_m, chi0, chin, gamma, kappa, z_peak)
 
-    bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec)
+    bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec, z_grid)
     iw = compute_importance_weights(problem, h, bundle)
     rate = merger_rate_per_sec(
         bundle,
@@ -80,21 +82,37 @@ end
     observed_in_band ~
     MvNormal(sd_in_band, Diagonal(problem.observation.sgwb_scale_in_band .^ 2))
 
-    return (;
-        number_of_sources = rate * problem.observation.observation_time_sec,
-        spectral_density = sd,
-        effective_sample_size = normalized_ess(iw.weights)
-    )
+    if track
+        m = problem.observation.in_band_mask
+        obs = problem.observation
+        df = frequency_bin_width(obs.frequencies)
+        snr_sq = spectral_snr_squared(
+            sd[m], obs.effective_psd[m], obs.frequencies[m], obs.observation_time_sec, df
+        )
+
+        return (;
+            number_of_sources = rate * problem.observation.observation_time_sec,
+            effective_sample_size = normalized_ess(iw.weights),
+            spectral_snr_squared = snr_sq,
+            spectral_snr = sqrt(snr_sq)
+        )
+    end
+
+    return nothing
 end
 
 function build_turing_model(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
+        track::Bool = false,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
+    z_grid = redshift_grid(problem.redshift_prior_spec)
     return asgwb_importance_turing_model(
+        track,
         problem,
         prior,
+        z_grid,
         observed_spectral_density[problem.observation.in_band_mask]
     )
 end
@@ -113,6 +131,7 @@ function sample_with_turing(
         n_adapts::Int = 25,
         n_samples::Int = 25,
         target_acceptance::Float64 = 0.8,
+        track::Bool = false,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density,
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}} = nothing
 )
@@ -120,6 +139,7 @@ function sample_with_turing(
     model = build_turing_model(
         problem,
         prior;
+        track = track,
         observed_spectral_density = observed_spectral_density
     )
     conditioned = condition_turing_model(model, theta0, sample_only)

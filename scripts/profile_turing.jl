@@ -160,7 +160,7 @@ function _run(
     ad_ld = ad_logdensity(ld)
 
     # Turing / DynamicPPL path
-    model = build_turing_model(problem, priors; observed_spectral_density = observed)
+    model = build_turing_model(problem, priors; track = false, observed_spectral_density = observed)
     lf, z0_turing = _build_turing_logdensity(model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)
 

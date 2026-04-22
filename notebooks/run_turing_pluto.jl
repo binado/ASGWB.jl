@@ -235,7 +235,7 @@ begin
     @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
 
     t_sample = time()
-    model = build_turing_model(problem, priors_turing; observed_spectral_density = observed)
+    model = build_turing_model(problem, priors_turing; track = false, observed_spectral_density = observed)
     conditioned = model | fixed_sites
     nuts = NUTS(sam.n_adapts, sam.target_acceptance)
     chain = sample(
@@ -257,6 +257,12 @@ begin
     end
 
     idata = from_mcmcchains(chain; library = "Turing")
+    model_track = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
+    conditioned_track = model_track | fixed_sites
+    extras = Turing.returned(conditioned_track, chain)
+    idata.posterior["spectral_snr"] = map(x -> x.spectral_snr, extras)
+    idata.posterior["effective_sample_size"] = map(x -> x.effective_sample_size, extras)
+    idata.posterior["number_of_sources"] = map(x -> x.number_of_sources, extras)
     if output_netcdf !== nothing
         @info "writing InferenceData to NetCDF" path = output_netcdf
         to_netcdf(idata, output_netcdf)

@@ -2,7 +2,7 @@ using ASGWB
 using ASGWB:
              Detector,
              PowerSpectralDensity,
-             covariance_on_grid,
+             effective_psd,
              gaussian_bin_scale,
              frequency_bin_width,
              build_observation_config,
@@ -61,16 +61,16 @@ end
     @test v.length == 3.0
 end
 
-@testset "covariance_on_grid and gaussian_bin_scale" begin
+@testset "effective_psd and gaussian_bin_scale" begin
     d1 = Detector("H1")
     d2 = Detector("L1")
     f = collect(range(20.0; step = 20.0, length = 16))
-    cov = covariance_on_grid(f, [d1, d2])
-    @test length(cov) == length(f)
-    @test all(isfinite, cov) && all(cov .> 0)
+    eff = effective_psd(f, [d1, d2])
+    @test length(eff) == length(f)
+    @test all(isfinite, eff) && all(eff .> 0)
     mask = trues(length(f))
     scale = gaussian_bin_scale(;
-        covariance = cov,
+        effective_psd = eff,
         frequencies = f,
         in_band_mask = mask,
         observation_time_sec = 3.15576e7
@@ -79,14 +79,14 @@ end
     @test all(isfinite, scale) && all(scale .> 0)
 end
 
-@testset "load_cache reconstructs covariance from detectors" begin
+@testset "load_cache reconstructs effective_psd from detectors" begin
     path = joinpath(@__DIR__, "fixtures", "posterior_cache_julia_v2_minimal.h5")
     isfile(path) || error("missing fixture $path")
     d1 = Detector("H1")
     d2 = Detector("L1")
     p = load_cache(path, [d1, d2])
-    @test length(p.observation.covariance) == length(p.observation.frequencies)
-    @test all(isfinite, p.observation.covariance)
+    @test length(p.observation.effective_psd) == length(p.observation.frequencies)
+    @test all(isfinite, p.observation.effective_psd)
     @test length(p.observation.sgwb_scale) == length(p.observation.frequencies)
 end
 
@@ -95,6 +95,6 @@ end
     dets = [Detector("H1"), Detector("L1")]
     p1 = load_cache(path, dets)
     p2 = load_cache(path, dets)
-    @test p1.observation.covariance == p2.observation.covariance
+    @test p1.observation.effective_psd == p2.observation.effective_psd
     @test p1.observation.sgwb_scale == p2.observation.sgwb_scale
 end

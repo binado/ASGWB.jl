@@ -143,7 +143,7 @@ end
           from_file.proposal.cached_flux_over_dgw2
     @test from_memory.proposal.dgw_fid_sq ≈ from_file.proposal.dgw_fid_sq
     @test from_memory.observation.frequencies ≈ from_file.observation.frequencies
-    @test from_memory.observation.covariance ≈ from_file.observation.covariance
+    @test from_memory.observation.effective_psd ≈ from_file.observation.effective_psd
     @test from_memory.observation.sgwb_scale ≈ from_file.observation.sgwb_scale
     @test from_memory.observation.in_band_mask == from_file.observation.in_band_mask
     @test from_memory.observation.fiducial_spectral_density ≈
@@ -191,7 +191,7 @@ end
         problem.fiducial_parameters
     )
     @test problem.observation.frequencies ≈ [1.0, 2.0]
-    @test length(problem.observation.covariance) == length(problem.observation.frequencies)
+    @test length(problem.observation.effective_psd) == length(problem.observation.frequencies)
     @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
     @test problem.observation.in_band_mask == BitVector([true, true])
     ev = evaluate_importance_terms(fiducial_hyperparameters(problem), problem)

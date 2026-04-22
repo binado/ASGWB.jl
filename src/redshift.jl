@@ -25,12 +25,6 @@ redshift-integrated merger-rate density on the grid.
 """
 redshift_integral(bundle::RedshiftBundle) = normalizer(bundle.pdf)
 
-function trapezoid_integral(x::AbstractVector{<:Real}, y::AbstractVector{<:Real})
-    length(x) == length(y) || throw(ArgumentError("x and y must have the same length"))
-    length(x) >= 2 || throw(ArgumentError("at least two grid points are required"))
-    @views sum((y[1:(end - 1)] .+ y[2:end]) .* (x[2:end] .- x[1:(end - 1)])) / 2
-end
-
 function detector_frame_merger_rate_density(
         z::Real,
         differential_comoving_volume::Real,
@@ -85,6 +79,16 @@ end
 
 power_law_source_frame_distribution(z::Real; lamb::Real) = (1 + z)^lamb
 
+"""
+    redshift_grid(spec::RedshiftPriorSpec) -> Vector{Float64}
+
+Uniform redshift grid implied by `spec` (materialized as `Vector{Float64}`).
+This is safe to precompute once and reuse across likelihood evaluations.
+"""
+function redshift_grid(spec::RedshiftPriorSpec)
+    return collect(LinRange(spec.z_min, spec.z_max, spec.num_interp))
+end
+
 function _build_redshift_grid(
         source_frame_fn,
         H0::Real,
@@ -108,7 +112,32 @@ function _build_redshift_grid(
     return RedshiftBundle(distance, pdf)
 end
 
-function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpec)
+function _build_redshift_grid(
+        source_frame_fn,
+        H0::Real,
+        Omega_m::Real,
+        z_grid::AbstractVector{<:Real},
+)
+    z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
+    inv_E = w -> inv(E(w, Omega_m))
+    distance = CumulativeIntegral1D(z_grid_f, inv_E)
+    d_h = SPEED_OF_LIGHT_KM_S / H0
+    pdf_integrand = let dist = distance, sf = source_frame_fn, Ω = Omega_m, dh = d_h
+        function (w)
+            d_c = dh * cdf(dist, w)
+            dvc_dz = dh * d_c^2 / E(w, Ω)
+            return detector_frame_merger_rate_density(w, dvc_dz, sf(w))
+        end
+    end
+    pdf = CumulativeIntegral1D(z_grid_f, pdf_integrand)
+    return RedshiftBundle(distance, pdf)
+end
+
+function build_redshift_grid_bundle(
+        h::HyperParametersNT,
+        spec::RedshiftPriorSpec,
+        z_grid::AbstractVector{<:Real},
+)
     isnothing(spec.time_delay_model) || throw(
         ArgumentError("time-delay redshift models are not supported in the Julia v0 port"),
     )
@@ -127,10 +156,12 @@ function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpe
         sfn,
         h.H0,
         h.Omega_m,
-        spec.z_min,
-        spec.z_max,
-        spec.num_interp
+        z_grid
     )
+end
+
+function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpec)
+    return build_redshift_grid_bundle(h, spec, redshift_grid(spec))
 end
 
 function log_prob_from_bundle(value::Real, bundle::RedshiftBundle)

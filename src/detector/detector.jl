@@ -3,7 +3,7 @@ using TOML
 """
     Detector
 
-Interferometer metadata and tabulated PSD used for isotropic SGWB network covariance.
+Interferometer metadata and tabulated PSD used for isotropic SGWB network effective PSD.
 Mirrors the Python `asgwb.detector.Detector` schema (angles in degrees).
 """
 struct Detector
