@@ -82,7 +82,9 @@ end
 
     m = problem.observation.in_band_mask
     obs = problem.observation
-    snr_sq = spectral_snr_squared(sd[m], obs.sgwb_scale[m], obs.frequencies[m])
+    snr_sq = spectral_snr_squared(
+        sd[m], obs.effective_psd[m], obs.frequencies[m], obs.observation_time_sec
+    )
 
     return (;
         number_of_sources = rate * problem.observation.observation_time_sec,

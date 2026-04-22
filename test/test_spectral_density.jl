@@ -60,16 +60,22 @@ end
     s = [1.0, 2.0, 3.0]
     σ = [0.5, 1.0, 0.25]
     f = [10.0, 20.0, 30.0]
+    T = 1.0
+    # Same σ as the old `sgwb_scale` path: σ = effective_psd / sqrt(2 T df), df = 10 Hz
+    eff = @. σ * sqrt(2.0 * T * (f[2] - f[1]))
     expected_sq = sum(s .^ 2 ./ σ .^ 2)
-    @test spectral_snr_squared(s, σ, f) ≈ expected_sq
-    @test spectral_snr(s, σ, f) ≈ sqrt(expected_sq)
-    @test spectral_snr(s, σ, f) ≈ sqrt(spectral_snr_squared(s, σ, f))
+    @test spectral_snr_squared(s, eff, f, T) ≈ expected_sq
+    @test spectral_snr(s, eff, f, T) ≈ sqrt(expected_sq)
+    @test spectral_snr(s, eff, f, T) ≈ sqrt(spectral_snr_squared(s, eff, f, T))
 
-    @test spectral_snr_squared([2.0], [4.0], [100.0]) == 0.25
-    @test spectral_snr([2.0], [4.0], [100.0]) == 0.5
+    T1 = 1.0
+    df0 = 0.5
+    @test spectral_snr_squared([2.0], [4.0], [100.0], T1; df = df0) == 0.25
+    @test spectral_snr([2.0], [4.0], [100.0], T1; df = df0) == 0.5
 
-    @test_throws ArgumentError spectral_snr_squared([1.0], [1.0, 2.0], [1.0, 2.0])
-    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [1.0, 2.0], [2.0, 1.0])
-    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [0.0, 1.0], [1.0, 2.0])
-    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [-1.0, 1.0], [1.0, 2.0])
+    @test_throws ArgumentError spectral_snr_squared([2.0], [4.0], [100.0], T1)
+    @test_throws ArgumentError spectral_snr_squared([1.0], [1.0, 2.0], [1.0, 2.0], T1)
+    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [1.0, 2.0], [2.0, 1.0], T1)
+    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [0.0, 1.0], [1.0, 2.0], T1)
+    @test_throws ArgumentError spectral_snr_squared([1.0, 2.0], [-1.0, 1.0], [1.0, 2.0], T1)
 end

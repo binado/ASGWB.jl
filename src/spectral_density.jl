@@ -69,19 +69,19 @@ end
 
 function _validate_spectral_snr_inputs(
         spectral_density::AbstractVector,
-        sgwb_scale::AbstractVector,
+        effective_psd::AbstractVector,
         frequencies::AbstractVector
 )
     n = length(spectral_density)
-    (length(sgwb_scale) == n && length(frequencies) == n) || throw(
+    (length(effective_psd) == n && length(frequencies) == n) || throw(
         ArgumentError(
-        "spectral_density, sgwb_scale, and frequencies must have the same length " *
-        "(got $(length(spectral_density)), $(length(sgwb_scale)), $(length(frequencies)))",
+        "spectral_density, effective_psd, and frequencies must have the same length " *
+        "(got $(length(spectral_density)), $(length(effective_psd)), $(length(frequencies)))",
     ),
     )
     n >= 1 || throw(ArgumentError("at least one frequency bin is required"))
-    all(>(0), sgwb_scale) ||
-        throw(ArgumentError("all sgwb_scale entries must be positive"))
+    all(>(0), effective_psd) ||
+        throw(ArgumentError("all effective_psd entries must be positive"))
     if n >= 2
         @inbounds for i in 2:n
             frequencies[i] > frequencies[i - 1] || throw(
@@ -92,39 +92,84 @@ function _validate_spectral_snr_inputs(
     return nothing
 end
 
+function _spectral_snr_df(
+        frequencies::AbstractVector{<:Real},
+        df::Union{Nothing, Real}
+)
+    n = length(frequencies)
+    if n >= 2
+        return frequency_bin_width(frequencies)
+    end
+    if df === nothing
+        throw(
+            ArgumentError(
+            "df must be provided when frequencies has a single element " *
+            "(bin width from the full grid, same as for gaussian_bin_scale / sgwb_scale)",
+        ),
+    )
+    end
+    df > 0 || throw(ArgumentError("df must be positive"))
+    return Float64(df)
+end
+
 """
-    spectral_snr_squared(spectral_density, sgwb_scale, frequencies) -> Real
+    spectral_snr_squared(spectral_density, effective_psd, frequencies, observation_time_sec; df=nothing) -> Real
 
 Discrete matched-filter **SNR²** for a diagonal Gaussian noise model:
 
 ``\\mathrm{SNR}^2 = \\sum_i S_{h,i}^2 / \\sigma_i^2``,
 
-where ``S_{h,i}`` is the strain spectral density in bin ``i`` and ``\\sigma_i`` is the
-per-bin standard deviation from [`ObservationConfig`](@ref).`sgwb_scale` (same scale as
-[`loglikelihood`](@ref) and the Turing `MvNormal` on `observed_in_band`).
+where ``S_{h,i}`` is the strain spectral density in bin ``i`` and
 
-`spectral_density`, `sgwb_scale`, and `frequencies` must have equal length; `frequencies`
+``\\sigma_i = \\mathrm{effective\\_psd}_i / \\sqrt{2 T \\Delta f}``,
+
+with observation time ``T`` in seconds, frequency bin width ``\\Delta f`` in Hz, and
+network [`effective_psd`](@ref) in the same convention as [`gaussian_bin_scale`](@ref) and
+[`ObservationConfig`](@ref) (per-bin `sgwb_scale` from [`build_observation_config`](@ref) matches
+this `σ` path).
+
+When `length(frequencies) >= 2`, ``\\Delta f`` is the uniform spacing from `frequencies` (see
+[`frequency_bin_width`](@ref)). For a **single** frequency value, `df` must be passed (the
+analysis bin width, e.g. from the full grid before masking).
+
+`spectral_density`, `effective_psd`, and `frequencies` must have equal length; `frequencies`
 must be strictly increasing when there are at least two bins.
 """
 function spectral_snr_squared(
         spectral_density::AbstractVector{<:Real},
-        sgwb_scale::AbstractVector{<:Real},
-        frequencies::AbstractVector{<:Real}
+        effective_psd::AbstractVector{<:Real},
+        frequencies::AbstractVector{<:Real},
+        observation_time_sec::Real;
+        df::Union{Nothing, Real} = nothing
 )
-    _validate_spectral_snr_inputs(spectral_density, sgwb_scale, frequencies)
+    _validate_spectral_snr_inputs(spectral_density, effective_psd, frequencies)
+    df_val = _spectral_snr_df(frequencies, df)
+    t = Float64(observation_time_sec)
+    denom = sqrt(2.0 * t * df_val)
+    sgwb_scale = effective_psd ./ denom
     return sum(abs2, spectral_density ./ sgwb_scale)
 end
 
 """
-    spectral_snr(spectral_density, sgwb_scale, frequencies) -> Real
+    spectral_snr(spectral_density, effective_psd, frequencies, observation_time_sec; df=nothing) -> Real
 
 ``\\mathrm{SNR} = \\sqrt{\\mathrm{SNR}^2}`` with ``\\mathrm{SNR}^2`` from
 [`spectral_snr_squared`](@ref).
 """
 function spectral_snr(
         spectral_density::AbstractVector{<:Real},
-        sgwb_scale::AbstractVector{<:Real},
-        frequencies::AbstractVector{<:Real}
+        effective_psd::AbstractVector{<:Real},
+        frequencies::AbstractVector{<:Real},
+        observation_time_sec::Real;
+        df::Union{Nothing, Real} = nothing
 )
-    return sqrt(spectral_snr_squared(spectral_density, sgwb_scale, frequencies))
+    return sqrt(
+        spectral_snr_squared(
+        spectral_density,
+        effective_psd,
+        frequencies,
+        observation_time_sec;
+        df = df
+    ),
+    )
 end
