@@ -99,6 +99,6 @@ end
 function log_prob_from_bundle(value::Real, bundle::RadialInterpolant)
     T = promote_type(eltype(bundle.y), typeof(bundle.norm))
     tiny = floatmin(T)
-    pdf_at_value = integrand(bundle, value; left=0.0, right=0.0)
+    pdf_at_value = integrand(bundle, value)
     return log(max(pdf_at_value / max(bundle.norm, tiny), tiny))
 end

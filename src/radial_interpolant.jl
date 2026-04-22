@@ -1,23 +1,4 @@
-function _interp_linear(
-    x_grid::AbstractVector{<:Real},
-    y_grid::AbstractVector,
-    x::Real;
-    left::Real=0.0,
-    right::Real=0.0,
-)
-    length(x_grid) == length(y_grid) || throw(ArgumentError("grid and values must align"))
-    T = promote_type(eltype(y_grid), typeof(left), typeof(right))
-    x < x_grid[1] && return convert(T, left)
-    x > x_grid[end] && return convert(T, right)
-
-    idx = searchsortedlast(x_grid, x)
-    idx == 0 && return convert(T, left)
-    x0, y0 = x_grid[idx], y_grid[idx]
-    (x == x0 || idx == length(x_grid)) && return y0
-    x1, y1 = x_grid[idx+1], y_grid[idx+1]
-    t = (x - x0) / (x1 - x0)
-    return y0 + t * (y1 - y0)
-end
+using Interpolations: linear_interpolation
 
 """
     RadialInterpolant(x, f; companion=nothing)
@@ -31,6 +12,9 @@ carry a pointer to the distance interpolant it was derived from through
 `companion`, so downstream consumers (e.g. `compute_importance_weights`) can pull
 cached distance values without recomputing.
 
+[`integrand`](@ref) evaluates linear interpolation via Interpolations.jl only on
+`[x[1], x[end]]`; out-of-domain queries throw `BoundsError`.
+
 # Fields
 - `x`            : uniform grid nodes (`Float64`)
 - `y`            : `f` evaluated at each node
@@ -38,18 +22,21 @@ cached distance values without recomputing.
 - `norm`         : `cumulative[end]` (stored for zero-overhead access)
 - `h`            : uniform step size
 - `companion`    : optional linked `RadialInterpolant` (or `nothing`)
+- `itp`          : cached `linear_interpolation(x, y)` object (throws outside the grid)
 """
 struct RadialInterpolant{TX<:AbstractVector{<:Real},
                          TY<:AbstractVector,
                          TC<:AbstractVector,
                          TN<:Real,
-                         TP}
+                         TP,
+                         TI}
     x::TX
     y::TY
     cumulative::TC
     norm::TN
     h::Float64
     companion::TP
+    itp::TI
 end
 
 """
@@ -72,17 +59,17 @@ function RadialInterpolant(x::AbstractVector{<:Real}, f; companion=nothing)
         y_mid_k = f(x_float[k] + h / 2)
         cumulative[k+1] = cumulative[k] + (h / 6) * (y[k] + 4 * y_mid_k + y[k+1])
     end
-    return RadialInterpolant(x_float, y, cumulative, cumulative[end], Float64(h), companion)
+    itp = linear_interpolation(x_float, y)
+    return RadialInterpolant(x_float, y, cumulative, cumulative[end], Float64(h), companion, itp)
 end
 
 """
-    integrand(r::RadialInterpolant, x0; left=0.0, right=0.0) -> Real
+    integrand(r::RadialInterpolant, x0) -> Real
 
-Linear interpolation of `r.y` at `x0`. Values outside the grid return `left` /
-`right` (defaults are zero).
+Linear interpolation of `r.y` at `x0` using Interpolations.jl. Only defined for
+`x0 ∈ [r.x[1], r.x[end]]`; otherwise throws `BoundsError`.
 """
-integrand(r::RadialInterpolant, x0::Real; left::Real=0.0, right::Real=0.0) =
-    _interp_linear(r.x, r.y, x0; left=left, right=right)
+integrand(r::RadialInterpolant, x0::Real) = r.itp(x0)
 
 """
     integrate(r::RadialInterpolant, x0, f) -> Real
