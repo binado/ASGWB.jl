@@ -25,12 +25,6 @@ redshift-integrated merger-rate density on the grid.
 """
 redshift_integral(bundle::RedshiftBundle) = normalizer(bundle.pdf)
 
-function trapezoid_integral(x::AbstractVector{<:Real}, y::AbstractVector{<:Real})
-    length(x) == length(y) || throw(ArgumentError("x and y must have the same length"))
-    length(x) >= 2 || throw(ArgumentError("at least two grid points are required"))
-    @views sum((y[1:(end - 1)] .+ y[2:end]) .* (x[2:end] .- x[1:(end - 1)])) / 2
-end
-
 function detector_frame_merger_rate_density(
         z::Real,
         differential_comoving_volume::Real,
