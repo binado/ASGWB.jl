@@ -13,14 +13,15 @@ begin
     Pkg.instantiate()
     using ASGWB
     using ASGWB:
-                 load_cache,
-                 build_turing_model,
-                 evaluate_importance_terms,
-                 omegagw,
-                 HyperParameters,
-                 Detector,
-                 DEFAULT_PARAMETER_ORDER
+		load_cache,
+		build_turing_model,
+		evaluate_importance_terms,
+		omegagw,
+		HyperParameters,
+		Detector,
+		DEFAULT_PARAMETER_ORDER
     using Turing
+	using AdvancedHMC
     using Random
     using Serialization
     using Logging
@@ -68,8 +69,8 @@ begin
     # --- edit everything below (same role as the JSON used by `scripts/run_turing.jl`) ---
 
     cache = "analysis_numpyro_julia_cache.h5"
-    detectors = [Detector("E1"), Detector("E2"), Detector("E3")]
-    sample_only = [:Ξ₀]
+    detectors = [Detector("S1"), Detector("R1")]
+    sample_only = [:H0, :γ, :κ, :zpeak]
 
     priors = (
         H0 = Uniform(20, 140),
@@ -88,8 +89,9 @@ begin
 
     seed = 1
     observed_spectral_density_csv = nothing
-    output_jls = nothing
-    output_netcdf = nothing
+	output_suffix = join(map(string, sample_only), "-")
+    output_jls = "chains-$output_suffix.jls"
+    output_netcdf = "chains-$output_suffix.nc"
 
     validate_init_against_priors(priors, init)
     priors_turing = product_distribution((
@@ -120,6 +122,9 @@ begin
     num_threads = Base.Threads.nthreads()
     print(num_threads)
 end
+
+# ╔═╡ 38ea9c8a-235e-4a6e-a937-639c8c251e37
+fixed_sites
 
 # ╔═╡ aa7c7572-36b3-11f1-a66c-f1c2e7b4f465
 begin
@@ -216,45 +221,49 @@ end
 # ╔═╡ 23f963ee-0675-4f7f-875d-a8afd443e166
 begin
     @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
-
-    t_sample = time()
-    model = build_turing_model(problem, priors_turing; track = false, observed_spectral_density = observed)
+    model = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
     conditioned = model | fixed_sites
-    nuts = NUTS(sam.n_adapts, sam.target_acceptance)
+    nuts = Turing.NUTS(
+		sam.n_adapts, 
+		sam.target_acceptance;
+		metricT = AdvancedHMC.DenseEuclideanMetric
+	)
     chain = sample(
         conditioned,
         nuts,
         MCMCThreads(),
         sam.n_samples,
         num_threads;
-        progress = true
+        progress = true,
+		save_state = true
     )
-    @info "NUTS finished" seconds=round(time()-t_sample; digits = 2) chain_size=size(chain)
+    @info "NUTS finished" chain_size=size(chain)
+    chain
+end
 
-    if output_jls !== nothing
-        @info "serializing chain" path = output_jls
-        open(output_jls, "w") do io
-            serialize(io, chain)
-        end
-        @info "wrote chain to disk" path = output_jls
-    end
 
-    idata = from_mcmcchains(chain; library = "Turing")
-    model_track = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
-    conditioned_track = model_track | fixed_sites
-    extras = Turing.returned(conditioned_track, chain)
-    idata.posterior["spectral_snr"] = map(x -> x.spectral_snr, extras)
-    idata.posterior["effective_sample_size"] = map(x -> x.effective_sample_size, extras)
-    idata.posterior["number_of_sources"] = map(x -> x.number_of_sources, extras)
+# ╔═╡ 1d839d95-75c8-4cce-9294-282dd28e997a
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	    model_track = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
+	    conditioned_track = model_track | fixed_sites
+	    extras = Turing.returned(conditioned_track, chain)
+end
+  ╠═╡ =#
+
+# ╔═╡ afdcabf6-2ddc-44dd-9c22-3e2a382270a7
+begin
+	idata = from_mcmcchains(chain; library = "Turing")
     if output_netcdf !== nothing
         @info "writing InferenceData to NetCDF" path = output_netcdf
         to_netcdf(idata, output_netcdf)
         @info "wrote InferenceData to NetCDF" path = output_netcdf
     end
-
-    @info "sampling cell complete" chain_size = size(chain)
-    chain
+	nothing
 end
+
+# ╔═╡ ffbc68c4-9548-4cf9-9121-96fc5565216f
 
 
 # ╔═╡ e4fcf73c-7193-445b-8d55-1ad9a9645caa
@@ -270,7 +279,7 @@ autocorplot(chain)
 # ╔═╡ aa7c759a-36b3-11f1-af66-b5a6a831a0c8
 let pnames = names(chain, :parameters)
     if length(pnames) >= 2
-        StatsPlots.corner(chain)
+        MCMCChains.corner(chain)
     else
         StatsPlots.density(chain)
     end
@@ -282,10 +291,14 @@ end
 # ╠═a9aeb877-2396-49b6-856e-c719be5db6d7
 # ╠═bb8c74e6-36b3-11f1-84a9-df5091ee4210
 # ╠═aa7c7524-36b3-11f1-bd4e-1121e886c676
+# ╠═38ea9c8a-235e-4a6e-a937-639c8c251e37
 # ╠═aa7c7572-36b3-11f1-a66c-f1c2e7b4f465
 # ╠═954323e3-b79e-4b1e-9200-dcf074777345
 # ╠═949e4bd9-1ce8-44f0-a8d6-04c8e966641a
 # ╠═23f963ee-0675-4f7f-875d-a8afd443e166
+# ╠═1d839d95-75c8-4cce-9294-282dd28e997a
+# ╠═afdcabf6-2ddc-44dd-9c22-3e2a382270a7
+# ╠═ffbc68c4-9548-4cf9-9121-96fc5565216f
 # ╠═e4fcf73c-7193-445b-8d55-1ad9a9645caa
 # ╠═aa7c7584-36b3-11f1-9894-cd9b12e6b4fe
 # ╠═622dc36b-a0f2-482e-b562-70ee63d5904a
