@@ -1,6 +1,8 @@
 fmt:
     julia -e 'using JuliaFormatter; format(".")'
 
+test:
+    julia --project=. -e 'using Pkg; Pkg.test()'
 
 notebook-dir := "notebooks"
 pluto:
