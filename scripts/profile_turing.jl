@@ -3,7 +3,7 @@
 # the cosmology `quadgk` path.
 #
 # Run from the package root, for example:
-#   julia --project=. scripts/profile_turing.jl --config-file=scripts/examples/minimal_turing.json
+#   julia --project=. scripts/profile_turing.jl --config-file=scripts/profile_turing.toml
 #
 # Sites under investigation:
 #   - src/cosmology.jl:9-13     quadgk inside comoving_distance
@@ -20,7 +20,6 @@ using ASGWB:
              build_uniform_priors,
              load_cache,
              build_turing_model,
-             asgwb_importance_turing_model,
              ASGWBLogDensity,
              ad_logdensity,
              unconstrained_initial_point,
@@ -31,10 +30,12 @@ using ASGWB:
              logprior,
              logposterior,
              luminosity_distance,
-             redshift
+             redshift,
+             HyperParameters,
+             Detector
 using BenchmarkTools
 using Comonicon: @main
-using Turing: DynamicPPL
+using DelimitedFiles
 using LogDensityProblems
 using LogDensityProblemsAD
 using Printf
@@ -42,8 +43,81 @@ using Profile
 using Random
 using Serialization
 using Statistics: mean
+using TOML
+using Turing: DynamicPPL
 
-include(joinpath(@__DIR__, "turing_settings.jl"))
+# ---------------------------------------------------------------------------
+# TOML config helpers
+# ---------------------------------------------------------------------------
+
+function _require(settings::Dict, key::AbstractString)
+    haskey(settings, key) || throw(ArgumentError("missing required TOML key $(repr(key))"))
+    return settings[key]
+end
+
+function _require_table(settings::Dict, key::AbstractString)
+    v = _require(settings, key)
+    v isa Dict || throw(ArgumentError("TOML key $(repr(key)) must be a table"))
+    return v
+end
+
+function _require_string_array(settings::Dict, key::AbstractString)
+    v = _require(settings, key)
+    v isa Vector || throw(ArgumentError("TOML key $(repr(key)) must be an array"))
+    all(x -> x isa AbstractString, v) ||
+        throw(ArgumentError("TOML key $(repr(key)) must be an array of strings"))
+    return Vector{String}(v)
+end
+
+function _load_observed_spectral_density(path::AbstractString, expected_len::Int)
+    isfile(path) || throw(ArgumentError("observed spectrum file not found: $(repr(path))"))
+    v = vec(readdlm(path, ',', Float64))
+    length(v) == expected_len || throw(
+        ArgumentError(
+            "observed_spectral_density_csv has length $(length(v)), expected $expected_len",
+        ),
+    )
+    return v
+end
+
+function _prior_bounds_from_toml(priors_tbl::Dict)
+    bounds = Dict{String, Tuple{Float64, Float64}}()
+    for (key, sub) in priors_tbl
+        sub isa Dict || throw(ArgumentError("priors.$key must be a table with 'low' and 'high'"))
+        lo = Float64(sub["low"])
+        hi = Float64(sub["high"])
+        isfinite(lo) && isfinite(hi) ||
+            throw(ArgumentError("priors.$key: low and high must be finite"))
+        lo < hi || throw(ArgumentError("priors.$key: require low < high, got ($lo, $hi)"))
+        bounds[key] = (lo, hi)
+    end
+    return bounds
+end
+
+function _theta0_from_toml(init_tbl::Dict)
+    return HyperParameters(;
+        H0 = Float64(init_tbl["H0"]),
+        Ωm = Float64(init_tbl["Omega_m"]),
+        Ξ₀ = Float64(init_tbl["chi0"]),
+        Ξₙ = Float64(init_tbl["chin"]),
+        γ = Float64(init_tbl["gamma"]),
+        κ = Float64(init_tbl["kappa"]),
+        zpeak = Float64(init_tbl["z_peak"]),
+    )
+end
+
+function _validate_init_in_priors(prior_bounds::Dict, init_tbl::Dict)
+    for (key, sub) in prior_bounds
+        lo, hi = sub
+        v = get(init_tbl, key, nothing)
+        v === nothing && continue
+        v = Float64(v)
+        lo <= v <= hi || throw(
+            ArgumentError("init.$key = $v is outside prior bounds [$lo, $hi]"),
+        )
+    end
+    return nothing
+end
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -114,40 +188,42 @@ end
 # Main profiling entrypoint
 # ---------------------------------------------------------------------------
 
-function _run(
-        s::Settings;
+function _run(;
+        cache_path::String,
+        detectors::Vector{Detector},
+        prior_bounds::Dict,
+        θ0::HyperParameters,
+        seed::Union{Nothing, Int},
+        observed_spectral_density_csv::Union{Nothing, String},
         seconds::Float64,
         profile_samples::Int,
         do_alloc::Bool,
         profile_out::Union{Nothing, String}
 )
     t0 = time()
-    @info "validating initial point against prior bounds"
-    validate_init_in_priors(s)
 
-    @info "loading importance cache" path=s.cache detectors=join(
+    @info "loading importance cache" path=cache_path detectors=join(
         (d.name
-        for d in s.detectors), ",")
-    problem = load_cache(s.cache, s.detectors)
+        for d in detectors), ",")
+    problem = load_cache(cache_path, detectors)
     @info "cache loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 
-    priors = build_uniform_priors(prior_dict(s))
-    θ0 = theta0(s)
+    priors = build_uniform_priors(prior_bounds)
 
-    observed = if s.observed_spectral_density_csv === nothing
+    observed = if observed_spectral_density_csv === nothing
         @info "using fiducial in-band spectrum from cache as observed data"
         problem.observation.fiducial_spectral_density
     else
-        @info "loading observed spectrum from CSV" path = s.observed_spectral_density_csv
-        load_observed_spectral_density(
-            s.observed_spectral_density_csv,
+        @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
+        _load_observed_spectral_density(
+            observed_spectral_density_csv,
             length(problem.observation.fiducial_spectral_density)
         )
     end
 
-    if s.seed !== nothing
-        @info "seeding RNG" seed = s.seed
-        Random.seed!(s.seed)
+    if seed !== nothing
+        @info "seeding RNG" seed = seed
+        Random.seed!(seed)
     end
 
     # ------------------------------------------------------------------
@@ -400,7 +476,7 @@ Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation pr
 
 # Options
 
-- `-c, --config-file=<path>`: JSON settings (same schema as `run_turing.jl`).
+- `-c, --config-file=<path>`: TOML settings file.
 
 - `--seconds=<float>`: wall-time budget per benchmark entry (default 2.0).
 
@@ -409,29 +485,42 @@ Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation pr
 - `--alloc`: also run an allocation profile via `Profile.Allocs`.
 
 - `--profile-out=<path>`: write raw `Profile.retrieve()` snapshot via `Serialization`.
-
-- `--sample-only=<names>`: comma-separated hyperparameter subset (only affects the Turing
-  model construction; the native path always uses all seven parameters).
 """
 @main function profile_turing(;
         config_file::String,
         seconds::Float64 = 2.0,
         profile_samples::Int = 500,
         alloc::Bool = false,
-        profile_out::String = "",
-        sample_only::String = ""
+        profile_out::String = ""
 )
     @info "loading config" path = config_file
-    base = load_settings(config_file)
-    so_cli = parse_sample_only_cli(sample_only)
-    s = merge_settings(base; sample_only = so_cli)
+    cfg = TOML.parsefile(config_file)
 
-    @info "effective settings" cache=s.cache detectors=join((d.name for d in s.detectors), ",") sample_only=s.sample_only seed=s.seed
+    cache_path = _require(cfg, "cache_path")::String
+    detectors = [Detector(n) for n in _require_string_array(cfg, "detectors")]
+    seed = get(cfg, "seed", nothing)
+    observed_csv = get(cfg, "observed_spectral_density_csv", nothing)
+    if observed_csv !== nothing
+        observed_csv = String(observed_csv)
+    end
 
-    return _run(
-        s;
-        seconds = seconds,
-        profile_samples = profile_samples,
+    priors_tbl = _require_table(cfg, "priors")
+    init_tbl = _require_table(cfg, "init")
+    _validate_init_in_priors(priors_tbl, init_tbl)
+    prior_bounds = _prior_bounds_from_toml(priors_tbl)
+    θ0 = _theta0_from_toml(init_tbl)
+
+    @info "effective settings" cache=cache_path detectors=join((d.name for d in detectors), ",") seed=seed
+
+    return _run(;
+        cache_path,
+        detectors,
+        prior_bounds,
+        θ0,
+        seed,
+        observed_spectral_density_csv = observed_csv,
+        seconds,
+        profile_samples,
         do_alloc = alloc,
         profile_out = isempty(profile_out) ? nothing : profile_out
     )
