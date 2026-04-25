@@ -243,6 +243,22 @@ function _full_bns_pointwise_logpdf(
     )
 end
 
+function _full_bns_pointwise_logpdf(
+        prior::ProductNamedTupleDistribution,
+        samples::NamedTuple,
+        redshift_log_prob::AbstractVector,
+        i::Integer
+)
+    return (
+        logpdf(prior.dists.mass, (samples.mass[1, i], samples.mass[2, i])) +
+        redshift_log_prob[i] +
+        logpdf(prior.dists.χ₁, samples.χ₁[i]) +
+        logpdf(prior.dists.χ₂, samples.χ₂[i]) +
+        logpdf(prior.dists.Λ₁, samples.Λ₁[i]) +
+        logpdf(prior.dists.Λ₂, samples.Λ₂[i])
+    )
+end
+
 function intrinsic_log_prob_samples(
         prior::ProductNamedTupleDistribution,
         samples::NamedTuple
@@ -270,35 +286,15 @@ function intrinsic_log_prob_samples(
         samples.redshift,
         sample_interpolant
     )
-    first_val = (
-        logpdf(prior.dists.mass, (samples.mass[1, 1], samples.mass[2, 1])) +
-        redshift_log_prob[1] +
-        logpdf(prior.dists.χ₁, samples.χ₁[1]) +
-        logpdf(prior.dists.χ₂, samples.χ₂[1]) +
-        logpdf(prior.dists.Λ₁, samples.Λ₁[1]) +
-        logpdf(prior.dists.Λ₂, samples.Λ₂[1])
-    )
+    first_val = _full_bns_pointwise_logpdf(prior, samples, redshift_log_prob, 1)
     out = Vector{typeof(first_val)}(undef, n)
     @inbounds out[1] = first_val
     @inbounds for i in 2:n
-        out[i] = (
-            logpdf(prior.dists.mass, (samples.mass[1, i], samples.mass[2, i])) +
-            redshift_log_prob[i] +
-            logpdf(prior.dists.χ₁, samples.χ₁[i]) +
-            logpdf(prior.dists.χ₂, samples.χ₂[i]) +
-            logpdf(prior.dists.Λ₁, samples.Λ₁[i]) +
-            logpdf(prior.dists.Λ₂, samples.Λ₂[i])
-        )
+        out[i] = _full_bns_pointwise_logpdf(prior, samples, redshift_log_prob, i)
     end
     return out
 end
 
-"""
-    intrinsic_log_prob_samples!(out, prior, samples) -> out
-
-In-place SoA variant of [`intrinsic_log_prob_samples`](@ref). Writes per-sample
-log-prior into `out`; `out` must have length equal to `length(samples.redshift)`.
-"""
 function intrinsic_log_prob_samples!(
         out::AbstractVector,
         prior::ProductNamedTupleDistribution,
@@ -328,14 +324,7 @@ function intrinsic_log_prob_samples!(
         sample_interpolant
     )
     @inbounds for i in 1:n
-        out[i] = (
-            logpdf(prior.dists.mass, (samples.mass[1, i], samples.mass[2, i])) +
-            redshift_log_prob[i] +
-            logpdf(prior.dists.χ₁, samples.χ₁[i]) +
-            logpdf(prior.dists.χ₂, samples.χ₂[i]) +
-            logpdf(prior.dists.Λ₁, samples.Λ₁[i]) +
-            logpdf(prior.dists.Λ₂, samples.Λ₂[i])
-        )
+        out[i] = _full_bns_pointwise_logpdf(prior, samples, redshift_log_prob, i)
     end
     return out
 end
