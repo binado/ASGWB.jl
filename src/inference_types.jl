@@ -151,11 +151,14 @@ In-memory importance-sampling context. See [`importance_sampling_problem`](@ref)
 may differ from [`fiducial_redshift_integral`](@ref) when the file’s optional
 `redshift_integral_fiducial` attribute overrides the recomputed value; likelihood evaluation uses
 the integral implied by the live [`HyperParameters`](@ref), not this field.
+`sample_interpolant` caches proposal-redshift cell locations on the shared grid so
+the hot path can reuse exact within-cell interpolation metadata across evaluations.
 """
 struct ImportanceSamplingProblem
     proposal::ProposalData
     observation::ObservationConfig
     redshift_prior_spec::RedshiftPriorSpec
+    sample_interpolant::SampleInterpolant
     local_merger_rate::Float64
     redshift_integral_fiducial::Float64
     fiducial_parameters::ProposalFiducialParameters
@@ -200,10 +203,15 @@ function importance_sampling_problem(
 )
     strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
     _validate_strategy_bundle(strategy, proposal)
+    sample_interpolant = SampleInterpolant(
+        redshift(proposal.samples),
+        redshift_grid(redshift_prior_spec)
+    )
     return ImportanceSamplingProblem(
         proposal,
         observation,
         redshift_prior_spec,
+        sample_interpolant,
         Float64(local_merger_rate),
         Float64(redshift_integral_fiducial),
         fiducial_parameters,

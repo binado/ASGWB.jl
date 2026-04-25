@@ -102,7 +102,11 @@ function reconstruct_proposal_log_prob(
     h = hyperparameters_from_fiducial(fid, spec)
     bundle = build_redshift_grid_bundle(h, spec)
     prior = intrinsic_prior(FullBNS(), bundle)
-    return intrinsic_log_prob_samples(prior, samples)
+    return intrinsic_log_prob_samples(
+        prior,
+        samples,
+        SampleInterpolant(redshift(samples), redshift_grid(spec))
+    )
 end
 
 function importance_sampling_problem(

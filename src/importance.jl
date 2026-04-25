@@ -32,12 +32,32 @@ function compute_importance_weights(
         bundle::RedshiftBundle
 )
     z = redshift(problem)
-    d_l = luminosity_distance.(z, h.H0, h.Ωm, Ref(bundle.distance))
-    dgw_theta = gravitational_wave_distance.(z, d_l, h.Ξ₀, h.Ξₙ)
-    dgw_theta_sq = dgw_theta .^ 2
+    d_c_over_d_h = cdf_at_samples(
+        bundle.distance.cumulative,
+        bundle.distance.y,
+        problem.sample_interpolant,
+        bundle.distance.x
+    )
+    d_h = SPEED_OF_LIGHT_KM_S / h.H0
+    dgw_theta_sq = Vector{promote_type(
+        eltype(d_c_over_d_h),
+        typeof(d_h),
+        typeof(h.Ξ₀),
+        typeof(h.Ξₙ),
+        eltype(z)
+    )}(undef, length(z))
+    @inbounds for i in eachindex(z)
+        d_l = (1 + z[i]) * d_h * d_c_over_d_h[i]
+        dgw_theta = gravitational_wave_distance(z[i], d_l, h.Ξ₀, h.Ξₙ)
+        dgw_theta_sq[i] = dgw_theta^2
+    end
 
     prior = intrinsic_prior(problem.strategy, bundle)
-    target_log_prob = intrinsic_log_prob_samples(prior, problem.proposal.samples)
+    target_log_prob = intrinsic_log_prob_samples(
+        prior,
+        problem.proposal.samples,
+        problem.sample_interpolant
+    )
     log_ratio = target_log_prob .- problem.proposal.log_prob
     weights = importance_weights(log_ratio, problem.proposal.dgw_fid_sq, dgw_theta_sq)
     return (;

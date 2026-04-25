@@ -220,6 +220,14 @@ function intrinsic_log_prob_samples(prior, samples::AbstractVector{<:NamedTuple}
     logpdf.(Ref(prior), samples)
 end
 
+function _redshift_log_prob_samples(
+        dist::RedshiftInterpolatedDistribution,
+        values::AbstractVector{<:Real},
+        sample_interpolant::SampleInterpolant
+)
+    return log_prob_from_bundle(values, dist.bundle, sample_interpolant)
+end
+
 function _full_bns_pointwise_logpdf(
         prior::ProductNamedTupleDistribution,
         samples::NamedTuple,
@@ -250,6 +258,41 @@ function intrinsic_log_prob_samples(
     return out
 end
 
+function intrinsic_log_prob_samples(
+        prior::ProductNamedTupleDistribution,
+        samples::NamedTuple,
+        sample_interpolant::SampleInterpolant
+)
+    n = _require_full_bns_soa_matching_lengths(samples)
+    n == 0 && return Float64[]
+    redshift_log_prob = _redshift_log_prob_samples(
+        prior.dists.redshift,
+        samples.redshift,
+        sample_interpolant
+    )
+    first_val = (
+        logpdf(prior.dists.mass, (samples.mass[1, 1], samples.mass[2, 1])) +
+        redshift_log_prob[1] +
+        logpdf(prior.dists.χ₁, samples.χ₁[1]) +
+        logpdf(prior.dists.χ₂, samples.χ₂[1]) +
+        logpdf(prior.dists.Λ₁, samples.Λ₁[1]) +
+        logpdf(prior.dists.Λ₂, samples.Λ₂[1])
+    )
+    out = Vector{typeof(first_val)}(undef, n)
+    @inbounds out[1] = first_val
+    @inbounds for i in 2:n
+        out[i] = (
+            logpdf(prior.dists.mass, (samples.mass[1, i], samples.mass[2, i])) +
+            redshift_log_prob[i] +
+            logpdf(prior.dists.χ₁, samples.χ₁[i]) +
+            logpdf(prior.dists.χ₂, samples.χ₂[i]) +
+            logpdf(prior.dists.Λ₁, samples.Λ₁[i]) +
+            logpdf(prior.dists.Λ₂, samples.Λ₂[i])
+        )
+    end
+    return out
+end
+
 """
     intrinsic_log_prob_samples!(out, prior, samples) -> out
 
@@ -266,6 +309,33 @@ function intrinsic_log_prob_samples!(
         throw(ArgumentError("output length must match the number of samples"))
     @inbounds for i in 1:n
         out[i] = _full_bns_pointwise_logpdf(prior, samples, i)
+    end
+    return out
+end
+
+function intrinsic_log_prob_samples!(
+        out::AbstractVector,
+        prior::ProductNamedTupleDistribution,
+        samples::NamedTuple,
+        sample_interpolant::SampleInterpolant
+)
+    n = _require_full_bns_soa_matching_lengths(samples)
+    length(out) == n ||
+        throw(ArgumentError("output length must match the number of samples"))
+    redshift_log_prob = _redshift_log_prob_samples(
+        prior.dists.redshift,
+        samples.redshift,
+        sample_interpolant
+    )
+    @inbounds for i in 1:n
+        out[i] = (
+            logpdf(prior.dists.mass, (samples.mass[1, i], samples.mass[2, i])) +
+            redshift_log_prob[i] +
+            logpdf(prior.dists.χ₁, samples.χ₁[i]) +
+            logpdf(prior.dists.χ₂, samples.χ₂[i]) +
+            logpdf(prior.dists.Λ₁, samples.Λ₁[i]) +
+            logpdf(prior.dists.Λ₂, samples.Λ₂[i])
+        )
     end
     return out
 end

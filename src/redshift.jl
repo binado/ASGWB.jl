@@ -89,6 +89,86 @@ function redshift_grid(spec::RedshiftPriorSpec)
     return collect(LinRange(spec.z_min, spec.z_max, spec.num_interp))
 end
 
+function SampleInterpolant(
+        samples::AbstractVector{<:Real},
+        z_grid::AbstractVector{<:Real}
+)
+    n_grid = length(z_grid)
+    n_grid >= 2 || throw(ArgumentError("SampleInterpolant requires at least 2 grid points"))
+    bin_idx = Vector{Int}(undef, length(samples))
+    t = Vector{Float64}(undef, length(samples))
+    z_min = @inbounds z_grid[1]
+    z_max = @inbounds z_grid[end]
+    last_bin = n_grid - 1
+
+    @inbounds for i in eachindex(samples)
+        z = samples[i]
+        if z == z_max
+            bin_idx[i] = last_bin
+            t[i] = 1.0
+            continue
+        end
+        if z < z_min || z > z_max
+            throw(
+                ArgumentError(
+                "proposal redshift $(z) lies outside the interpolation support [$(z_min), $(z_max)]",
+            ),
+            )
+        end
+        idx = searchsortedlast(z_grid, z)
+        1 <= idx < n_grid || throw(
+            ArgumentError(
+            "proposal redshift $(z) could not be assigned to an interpolation cell on [$(z_min), $(z_max)]",
+        ),
+        )
+        z_lo = z_grid[idx]
+        z_hi = z_grid[idx + 1]
+        bin_idx[i] = idx
+        t[i] = (z - z_lo) / (z_hi - z_lo)
+    end
+
+    return SampleInterpolant(bin_idx, t)
+end
+
+function interpolate_at_samples(
+        y::AbstractVector,
+        interp::SampleInterpolant,
+        z_grid::AbstractVector{<:Real}
+)
+    length(y) == length(z_grid) ||
+        throw(ArgumentError("y and z_grid must have matching lengths"))
+    out = Vector{promote_type(eltype(y), Float64)}(undef, length(interp.bin_idx))
+    @inbounds for i in eachindex(interp.bin_idx)
+        idx = interp.bin_idx[i]
+        y_lo = y[idx]
+        out[i] = y_lo + interp.t[i] * (y[idx + 1] - y_lo)
+    end
+    return out
+end
+
+function cdf_at_samples(
+        cumulative::AbstractVector,
+        y::AbstractVector,
+        interp::SampleInterpolant,
+        z_grid::AbstractVector{<:Real}
+)
+    length(cumulative) == length(y) == length(z_grid) ||
+        throw(ArgumentError("cumulative, y, and z_grid must have matching lengths"))
+    out = Vector{promote_type(eltype(cumulative), eltype(y), Float64)}(
+        undef,
+        length(interp.bin_idx)
+    )
+    @inbounds for i in eachindex(interp.bin_idx)
+        idx = interp.bin_idx[i]
+        t = interp.t[i]
+        y_lo = y[idx]
+        y_hi = y[idx + 1]
+        dx = z_grid[idx + 1] - z_grid[idx]
+        out[i] = cumulative[idx] + dx * (y_lo * t + 0.5 * (y_hi - y_lo) * t^2)
+    end
+    return out
+end
+
 function _build_redshift_grid(
         source_frame_fn,
         H0::Real,
@@ -98,18 +178,7 @@ function _build_redshift_grid(
         num_interp::Integer
 )
     z_grid = collect(LinRange(Float64(z_min), Float64(z_max), Int(num_interp)))
-    inv_E = w -> inv(E(w, Ωm))
-    distance = CumulativeIntegral1D(z_grid, inv_E)
-    d_h = SPEED_OF_LIGHT_KM_S / H0
-    pdf_integrand = let dist = distance, sf = source_frame_fn, Ωm′ = Ωm, dh = d_h
-        function (w)
-            d_c = dh * cdf(dist, w)
-            dvc_dz = dh * d_c^2 / E(w, Ωm′)
-            return detector_frame_merger_rate_density(w, dvc_dz, sf(w))
-        end
-    end
-    pdf = CumulativeIntegral1D(z_grid, pdf_integrand)
-    return RedshiftBundle(distance, pdf)
+    return _build_redshift_grid(source_frame_fn, H0, Ωm, z_grid)
 end
 
 function _build_redshift_grid(
@@ -119,17 +188,14 @@ function _build_redshift_grid(
         z_grid::AbstractVector{<:Real}
 )
     z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
-    inv_E = w -> inv(E(w, Ωm))
-    distance = CumulativeIntegral1D(z_grid_f, inv_E)
+    inv_E_vals = map(w -> inv(E(w, Ωm)), z_grid_f)
+    distance = _cumulative_integral_from_values(z_grid_f, inv_E_vals)
     d_h = SPEED_OF_LIGHT_KM_S / H0
-    pdf_integrand = let dist = distance, sf = source_frame_fn, Ωm′ = Ωm, dh = d_h
-        function (w)
-            d_c = dh * cdf(dist, w)
-            dvc_dz = dh * d_c^2 / E(w, Ωm′)
-            return detector_frame_merger_rate_density(w, dvc_dz, sf(w))
-        end
-    end
-    pdf = CumulativeIntegral1D(z_grid_f, pdf_integrand)
+    d_c = d_h .* distance.cumulative
+    dvc_dz = d_h .* (d_c .^ 2) .* inv_E_vals
+    source_frame_vals = map(source_frame_fn, z_grid_f)
+    pdf_vals = detector_frame_merger_rate_density.(z_grid_f, dvc_dz, source_frame_vals)
+    pdf = _cumulative_integral_from_values(z_grid_f, pdf_vals)
     return RedshiftBundle(distance, pdf)
 end
 
@@ -170,4 +236,23 @@ function log_prob_from_bundle(value::Real, bundle::RedshiftBundle)
     tiny = floatmin(T)
     pdf_at_value = interpolate(bundle.pdf, value)
     return log(max(pdf_at_value / max(norm, tiny), tiny))
+end
+
+function log_prob_from_bundle(
+        values::AbstractVector{<:Real},
+        bundle::RedshiftBundle,
+        interp::SampleInterpolant
+)
+    length(values) == length(interp.bin_idx) ||
+        throw(ArgumentError("values and sample interpolant must have matching lengths"))
+    pdf_at_values = interpolate_at_samples(bundle.pdf.y, interp, bundle.pdf.x)
+    norm = redshift_integral(bundle)
+    T = promote_type(eltype(pdf_at_values), typeof(norm))
+    tiny = floatmin(T)
+    norm_floor = max(norm, tiny)
+    out = Vector{T}(undef, length(pdf_at_values))
+    @inbounds for i in eachindex(pdf_at_values)
+        out[i] = log(max(pdf_at_values[i] / norm_floor, tiny))
+    end
+    return out
 end

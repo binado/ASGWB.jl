@@ -166,6 +166,8 @@ end
     @test from_memory.local_merger_rate == from_file.local_merger_rate
     @test from_memory.redshift_integral_fiducial == from_file.redshift_integral_fiducial
     @test typeof(from_memory.strategy) == typeof(from_file.strategy)
+    @test from_memory.sample_interpolant.bin_idx == from_file.sample_interpolant.bin_idx
+    @test from_memory.sample_interpolant.t ≈ from_file.sample_interpolant.t
 end
 
 @testset "load_cache" begin
@@ -215,6 +217,10 @@ end
     @test problem.redshift_integral_fiducial == 1.0
     @test problem.strategy isa FullBNS
     @test redshift(problem) ≈ [0.1, 0.2]
+    @test length(problem.sample_interpolant.bin_idx) ==
+          length(problem.proposal.samples.redshift)
+    @test all((0.0 .<= problem.sample_interpolant.t) .&
+              (problem.sample_interpolant.t .<= 1.0))
 end
 
 @testset "load_cache rejects unsupported proposal_samples source_type" begin

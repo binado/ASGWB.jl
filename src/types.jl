@@ -38,6 +38,18 @@ abstract type IntrinsicPriorStrategy end
 struct FullBNS <: IntrinsicPriorStrategy end
 
 """
+    SampleInterpolant
+
+Per-sample interpolation metadata for a fixed proposal-redshift vector on a
+shared redshift grid. `bin_idx[i]` is the lower node of the containing cell,
+and `t[i] ∈ [0, 1]` is the normalized coordinate within that cell.
+"""
+struct SampleInterpolant
+    bin_idx::Vector{Int}
+    t::Vector{Float64}
+end
+
+"""
     ObservationConfig
 
 Detector-side SGWB observation layout: frequency grid, per-bin effective strain PSD

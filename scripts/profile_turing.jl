@@ -41,6 +41,7 @@ using LogDensityProblemsAD
 using Printf
 using Profile
 using Random
+using ReverseDiff
 using Serialization
 using Statistics: mean
 using TOML
@@ -107,14 +108,16 @@ function _theta0_from_toml(init_tbl::Dict)
 end
 
 function _validate_init_in_priors(prior_bounds::Dict, init_tbl::Dict)
-    for (key, sub) in prior_bounds
-        lo, hi = sub
+    for (key, bounds) in prior_bounds
+        lo, hi = bounds
         v = get(init_tbl, key, nothing)
         v === nothing && continue
         v = Float64(v)
-        lo <= v <= hi || throw(
-            ArgumentError("init.$key = $v is outside prior bounds [$lo, $hi]"),
-        )
+        if !(lo <= v <= hi)
+            throw(
+                ArgumentError("init.$key = $v is outside prior bounds [$lo, $hi]"),
+            )
+        end
     end
     return nothing
 end
@@ -184,6 +187,19 @@ function _build_turing_logdensity(model)
     return lf, z
 end
 
+function _maybe_build_reverse_adgradient(ld, z0)
+    try
+        ad_ld_reverse = LogDensityProblemsAD.ADgradient(:ReverseDiff, ld)
+        # Probe the path once before benchmarking so unsupported code paths
+        # fail early and the rest of the profile can still run.
+        LogDensityProblems.logdensity_and_gradient(ad_ld_reverse, z0)
+        return ad_ld_reverse
+    catch err
+        @warn "skipping native ReverseDiff benchmark" exception = (err, catch_backtrace())
+        return nothing
+    end
+end
+
 # ---------------------------------------------------------------------------
 # Main profiling entrypoint
 # ---------------------------------------------------------------------------
@@ -234,6 +250,7 @@ function _run(;
     ld = ASGWBLogDensity(problem, priors)
     z0 = unconstrained_initial_point(ld, θ0)
     ad_ld = ad_logdensity(ld)
+    ad_ld_reverse = _maybe_build_reverse_adgradient(ld, z0)
 
     # Turing / DynamicPPL path
     model = build_turing_model(problem, priors; track = false, observed_spectral_density = observed)
@@ -262,6 +279,9 @@ function _run(;
     @info "warming up (JIT + AD compile)"
     LogDensityProblems.logdensity(ld, z0)
     LogDensityProblems.logdensity_and_gradient(ad_ld, z0)
+    if ad_ld_reverse !== nothing
+        LogDensityProblems.logdensity_and_gradient(ad_ld_reverse, z0)
+    end
     LogDensityProblems.logdensity(lf, z0_turing)
     LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
     logposterior(h, problem, priors; observed_spectral_density = observed)
@@ -291,6 +311,10 @@ function _run(;
     # polluted by GC pauses from previous samples (AD allocates a lot).
     suite["gradient"]["native"] = @benchmarkable(LogDensityProblems.logdensity_and_gradient($ad_ld, $z0),
         gcsample = true)
+    if ad_ld_reverse !== nothing
+        suite["gradient"]["native_reverse"] = @benchmarkable(LogDensityProblems.logdensity_and_gradient($ad_ld_reverse, $z0),
+            gcsample = true)
+    end
     suite["gradient"]["turing"] = @benchmarkable(LogDensityProblems.logdensity_and_gradient($ad_lf, $z0_turing),
         gcsample = true)
 
@@ -332,16 +356,32 @@ function _run(;
 
     @info "=== gradient ==="
     t_grad_native = results["gradient"]["native"]
+    t_grad_native_reverse = haskey(results["gradient"], "native_reverse") ?
+                            results["gradient"]["native_reverse"] : nothing
     t_grad_turing = results["gradient"]["turing"]
     _print_trial_row("native (ForwardDiff)", t_grad_native)
+    if t_grad_native_reverse !== nothing
+        _print_trial_row("native (ReverseDiff)", t_grad_native_reverse)
+    end
     _print_trial_row("turing (ForwardDiff)", t_grad_turing)
 
     # AD cost multiplier via BenchmarkTools.ratio
     r_native = ratio(median(t_grad_native), median(t_primal_native))
+    r_native_reverse = t_grad_native_reverse === nothing ? nothing :
+                       ratio(median(t_grad_native_reverse), median(t_primal_native))
     r_turing = ratio(median(t_grad_turing), median(t_primal_turing))
-    @info @sprintf("AD multiplier (gradient/primal): native=%.2fx  turing=%.2fx",
-        time(r_native),
-        time(r_turing),)
+    if r_native_reverse === nothing
+        @info @sprintf("AD multiplier (gradient/primal): native-forward=%.2fx  turing-forward=%.2fx",
+            time(r_native),
+            time(r_turing),)
+    else
+        @info @sprintf(
+            "AD multiplier (gradient/primal): native-forward=%.2fx  native-reverse=%.2fx  turing-forward=%.2fx",
+            time(r_native),
+            time(r_native_reverse),
+            time(r_turing),
+        )
+    end
 
     @info "=== per-stage breakdown (denominator: median of logposterior primal) ==="
     primal_ns = _median_ns(t_primal_logpost)
@@ -353,9 +393,9 @@ function _run(;
     # Sampling profile on the gradient
     # ------------------------------------------------------------------
     # NUTS evaluates the same log-posterior body as `logposterior`; the native
-    # `ASGWBLogDensity` + ForwardDiff path is used here so hot spots map cleanly
-    # to `src/` without DynamicPPL stack noise (benchmarks above already compare
-    # native vs Turing gradient wall times).
+    # `ASGWBLogDensity` + ForwardDiff path is kept here so the sampled hot spots
+    # remain directly comparable to the earlier profiling runs. ReverseDiff is
+    # measured side by side in the benchmark suite above.
     @info "sampling-profile: running $profile_samples native ForwardDiff gradient evals under Profile.@profile"
     Profile.clear()
     # 100µs sampling delay: one gradient eval is ~100µs, so the default 1ms
@@ -446,17 +486,31 @@ function _run(;
     _mdrow("primal", "native", t_primal_native; pct_of = primal_ns)
     _mdrow("primal", "turing", t_primal_turing; pct_of = primal_ns)
     _mdrow("primal", "logposterior", t_primal_logpost; pct_of = primal_ns)
-    _mdrow("gradient", "native", t_grad_native; pct_of = primal_ns)
-    _mdrow("gradient", "turing", t_grad_turing; pct_of = primal_ns)
+    _mdrow("gradient", "native-forward", t_grad_native; pct_of = primal_ns)
+    if t_grad_native_reverse !== nothing
+        _mdrow("gradient", "native-reverse", t_grad_native_reverse; pct_of = primal_ns)
+    end
+    _mdrow("gradient", "turing-forward", t_grad_turing; pct_of = primal_ns)
     for key in ("bundle", "weights", "rate", "spectral", "prior", "lumdist")
         _mdrow("stage", key, results["stage"][key]; pct_of = primal_ns)
     end
     println()
-    println(
-        @sprintf("AD multiplier (gradient/primal): native=%.2fx, turing=%.2fx",
-        time(r_native),
-        time(r_turing))
-    )
+    if r_native_reverse === nothing
+        println(
+            @sprintf("AD multiplier (gradient/primal): native-forward=%.2fx, turing-forward=%.2fx",
+            time(r_native),
+            time(r_turing))
+        )
+    else
+        println(
+            @sprintf(
+                "AD multiplier (gradient/primal): native-forward=%.2fx, native-reverse=%.2fx, turing-forward=%.2fx",
+                time(r_native),
+                time(r_native_reverse),
+                time(r_turing),
+            )
+        )
+    end
     println()
     println("Tip: save a baseline with")
     println("  BenchmarkTools.save(\"baseline.json\", results)")
@@ -506,8 +560,8 @@ Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation pr
 
     priors_tbl = _require_table(cfg, "priors")
     init_tbl = _require_table(cfg, "init")
-    _validate_init_in_priors(priors_tbl, init_tbl)
     prior_bounds = _prior_bounds_from_toml(priors_tbl)
+    _validate_init_in_priors(prior_bounds, init_tbl)
     θ0 = _theta0_from_toml(init_tbl)
 
     @info "effective settings" cache=cache_path detectors=join((d.name for d in detectors), ",") seed=seed

@@ -60,14 +60,25 @@ function _cumulative_at_nodes_trapezoid(x::AbstractVector{Float64}, y::AbstractV
     return cumulative
 end
 
+function _cumulative_integral_from_values(
+        x::AbstractVector{<:Real},
+        y::AbstractVector
+)
+    n = length(x)
+    n >= 2 || throw(ArgumentError("CumulativeIntegral1D requires at least 2 grid points"))
+    length(y) == n || throw(ArgumentError("x and y must have the same length"))
+    x_float = x isa AbstractVector{Float64} ? x : collect(Float64, x)
+    itp = LinearInterpolation(y, x_float)
+    cumulative = _cumulative_at_nodes_trapezoid(x_float, y)
+    return CumulativeIntegral1D(x_float, y, cumulative, itp)
+end
+
 function CumulativeIntegral1D(x::AbstractVector{<:Real}, f)
     n = length(x)
     n >= 2 || throw(ArgumentError("CumulativeIntegral1D requires at least 2 grid points"))
     x_float = x isa AbstractVector{Float64} ? x : collect(Float64, x)
     y = map(f, x_float)
-    itp = LinearInterpolation(y, x_float)
-    cumulative = _cumulative_at_nodes_trapezoid(x_float, y)
-    return CumulativeIntegral1D(x_float, y, cumulative, itp)
+    return _cumulative_integral_from_values(x_float, y)
 end
 
 """
