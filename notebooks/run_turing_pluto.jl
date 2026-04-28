@@ -13,15 +13,15 @@ begin
     Pkg.instantiate()
     using ASGWB
     using ASGWB:
-		load_cache,
-		build_turing_model,
-		evaluate_importance_terms,
-		omegagw,
-		HyperParameters,
-		Detector,
-		DEFAULT_PARAMETER_ORDER
+                 load_cache,
+                 build_turing_model,
+                 evaluate_importance_terms,
+                 omegagw,
+                 HyperParameters,
+                 Detector,
+                 DEFAULT_PARAMETER_ORDER
     using Turing
-	using AdvancedHMC
+    using AdvancedHMC
     using Random
     using Serialization
     using Logging
@@ -70,7 +70,7 @@ begin
 
     cache = "analysis_numpyro_julia_cache.h5"
     detectors = [Detector("S1"), Detector("R1")]
-    sample_only = [:H0, :γ, :κ, :zpeak]
+    sample_only = [:Ξ₀, :γ, :zpeak]
 
     priors = (
         H0 = Uniform(20, 140),
@@ -89,7 +89,7 @@ begin
 
     seed = 1
     observed_spectral_density_csv = nothing
-	output_suffix = join(map(string, sample_only), "-")
+    output_suffix = join(map(string, sample_only), "-")
     output_jls = "chains-$output_suffix.jls"
     output_netcdf = "chains-$output_suffix.nc"
 
@@ -224,10 +224,10 @@ begin
     model = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
     conditioned = model | fixed_sites
     nuts = Turing.NUTS(
-		sam.n_adapts, 
-		sam.target_acceptance;
-		metricT = AdvancedHMC.DenseEuclideanMetric
-	)
+        sam.n_adapts,
+        sam.target_acceptance;
+        metricT = AdvancedHMC.DenseEuclideanMetric
+    )
     chain = sample(
         conditioned,
         nuts,
@@ -235,7 +235,7 @@ begin
         sam.n_samples,
         num_threads;
         progress = true,
-		save_state = true
+        save_state = true
     )
     @info "NUTS finished" chain_size=size(chain)
     chain
@@ -254,13 +254,13 @@ end
 
 # ╔═╡ afdcabf6-2ddc-44dd-9c22-3e2a382270a7
 begin
-	idata = from_mcmcchains(chain; library = "Turing")
+    idata = from_mcmcchains(chain; library = "Turing")
     if output_netcdf !== nothing
         @info "writing InferenceData to NetCDF" path = output_netcdf
         to_netcdf(idata, output_netcdf)
         @info "wrote InferenceData to NetCDF" path = output_netcdf
     end
-	nothing
+    nothing
 end
 
 # ╔═╡ ffbc68c4-9548-4cf9-9121-96fc5565216f

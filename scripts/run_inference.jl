@@ -9,11 +9,11 @@ module RunInferenceCLI
 
 using ASGWB
 using ASGWB:
-    load_cache,
-    build_turing_model,
-    HyperParameters,
-    Detector,
-    DEFAULT_PARAMETER_ORDER
+             load_cache,
+             build_turing_model,
+             HyperParameters,
+             Detector,
+             DEFAULT_PARAMETER_ORDER
 
 using Turing
 using AdvancedHMC
@@ -49,12 +49,12 @@ function validate_init_against_priors(priors, init)
     return nothing
 end
 
-function validate_sample_only(sample_only::Union{Nothing,Tuple{Vararg{Symbol}}})
+function validate_sample_only(sample_only::Union{Nothing, Tuple{Vararg{Symbol}}})
     sample_only === nothing && return nothing
     isempty(sample_only) && throw(
         ArgumentError(
-            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
-        ),
+        "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
+    ),
     )
     for s in sample_only
         s in DEFAULT_PARAMETER_ORDER || throw(
@@ -111,7 +111,7 @@ function _run(settings::Dict)
         Ξₙ = Uniform(0.05, 3),
         γ = Uniform(0.5, 10),
         κ = Uniform(0.05, 10),
-        zpeak = Uniform(0.05, 10),
+        zpeak = Uniform(0.05, 10)
     )
 
     init = (H0 = 67.66, Ωm = 0.3096, Ξ₀ = 1.0, Ξₙ = 1.91, γ = 2.7, κ = 5.7, zpeak = 2.0)
@@ -131,7 +131,7 @@ function _run(settings::Dict)
         Ξₙ = priors.Ξₙ,
         γ = priors.γ,
         κ = priors.κ,
-        zpeak = priors.zpeak,
+        zpeak = priors.zpeak
     ))
     θ0 = HyperParameters(; init...)
 
@@ -143,7 +143,7 @@ function _run(settings::Dict)
     @info "loading importance cache" path=cache
     t_cache = time()
     problem = load_cache(cache, detectors)
-    @info "cache loaded" seconds=round(time() - t_cache; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    @info "cache loaded" seconds=round(time()-t_cache; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing
         @info "using fiducial in-band spectrum from cache as observed data"
@@ -152,7 +152,7 @@ function _run(settings::Dict)
         @info "loading observed spectrum from CSV" path=observed_spectral_density_csv
         load_observed_spectral_density(
             observed_spectral_density_csv,
-            length(problem.observation.fiducial_spectral_density),
+            length(problem.observation.fiducial_spectral_density)
         )
     end
 
@@ -172,7 +172,7 @@ function _run(settings::Dict)
     nuts = Turing.NUTS(
         n_adapts,
         target_acceptance;
-        metricT = AdvancedHMC.DenseEuclideanMetric,
+        metricT = AdvancedHMC.DenseEuclideanMetric
     )
     chain = sample(
         conditioned,
@@ -181,7 +181,7 @@ function _run(settings::Dict)
         n_samples,
         num_threads;
         progress = true,
-        save_state = true,
+        save_state = true
     )
     @info "NUTS finished" chain_size=size(chain)
 
@@ -210,4 +210,3 @@ end
 end # module RunInferenceCLI
 
 Base.invokelatest(RunInferenceCLI.command_main)
-

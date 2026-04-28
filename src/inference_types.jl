@@ -142,6 +142,30 @@ struct ProposalData
 end
 
 """
+    RedshiftLogProbTerm
+
+Dynamic intrinsic term: per-sample redshift log-density from the live
+[`RedshiftBundle`](@ref) (via [`log_prob_from_bundle`](@ref))). Additional
+hyperparameter-dependent terms (e.g. mass prior) can be added as further tuple
+elements on [`IntrinsicLogProbPlan`](@ref) in the future.
+"""
+struct RedshiftLogProbTerm end
+
+"""
+    IntrinsicLogProbPlan{T}
+
+Precomputed per-sample intrinsic log-probability contributions that do not depend
+on the current MCMC hyperparameters, plus a small tuple of dynamic terms recomputed
+each likelihood evaluation (typically redshift from the live bundle).
+
+See [`intrinsic_log_prob_plan`](@ref) and [`intrinsic_log_prob_samples!`](@ref).
+"""
+struct IntrinsicLogProbPlan{T <: Tuple}
+    fixed_log_prob::Vector{Float64}
+    dynamic_terms::T
+end
+
+"""
     ImportanceSamplingProblem
 
 In-memory importance-sampling context. See [`importance_sampling_problem`](@ref) and
@@ -151,8 +175,11 @@ In-memory importance-sampling context. See [`importance_sampling_problem`](@ref)
 may differ from [`fiducial_redshift_integral`](@ref) when the file’s optional
 `redshift_integral_fiducial` attribute overrides the recomputed value; likelihood evaluation uses
 the integral implied by the live [`HyperParameters`](@ref), not this field.
+
+`intrinsic_log_prob_plan` caches hyperparameter-independent full-BNS intrinsic terms
+(mass, spins, tidal deformability); redshift terms are filled from the bundle each step.
 """
-struct ImportanceSamplingProblem
+struct ImportanceSamplingProblem{T <: Tuple}
     proposal::ProposalData
     observation::ObservationConfig
     redshift_prior_spec::RedshiftPriorSpec
@@ -160,6 +187,7 @@ struct ImportanceSamplingProblem
     redshift_integral_fiducial::Float64
     fiducial_parameters::ProposalFiducialParameters
     strategy::FullBNS
+    intrinsic_log_prob_plan::IntrinsicLogProbPlan{T}
 end
 
 redshift(s::NamedTuple) = s.redshift
@@ -200,6 +228,7 @@ function importance_sampling_problem(
 )
     strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
     _validate_strategy_bundle(strategy, proposal)
+    plan = intrinsic_log_prob_plan(strategy, proposal.samples)
     return ImportanceSamplingProblem(
         proposal,
         observation,
@@ -207,7 +236,8 @@ function importance_sampling_problem(
         Float64(local_merger_rate),
         Float64(redshift_integral_fiducial),
         fiducial_parameters,
-        strategy
+        strategy,
+        plan
     )
 end
 
