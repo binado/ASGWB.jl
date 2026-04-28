@@ -108,8 +108,7 @@ end
 
 function _validate_init_in_priors(prior_bounds::Dict, init_tbl::Dict)
     for (key, sub) in prior_bounds
-        tup = convert(Tuple{Float64, Float64}, sub)
-        lo, hi = tup
+        lo, hi = sub
         v = get(init_tbl, key, nothing)
         v === nothing && continue
         v = Float64(v)
@@ -507,8 +506,8 @@ Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation pr
 
     priors_tbl = _require_table(cfg, "priors")
     init_tbl = _require_table(cfg, "init")
+    _validate_init_in_priors(priors_tbl, init_tbl)
     prior_bounds = _prior_bounds_from_toml(priors_tbl)
-    _validate_init_in_priors(prior_bounds, init_tbl)
     θ0 = _theta0_from_toml(init_tbl)
 
     @info "effective settings" cache=cache_path detectors=join((d.name for d in detectors), ",") seed=seed

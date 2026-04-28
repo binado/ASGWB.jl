@@ -1,5 +1,5 @@
-cache_path = "analysis_numpyro_julia_cache.h5"
-detectors = ["S1", "R1"]
+cache_path = "test/fixtures/posterior_cache_julia.h5"
+detectors = ["H1", "L1"]
 seed = 1
 
 [priors.H0]
@@ -7,34 +7,34 @@ low = 20.0
 high = 140.0
 
 [priors.Omega_m]
-low = 0.05
-high = 0.95
+low = 0.0
+high = 1.0
 
 [priors.chi0]
-low = 0.5
-high = 5.0
+low = 0.0
+high = 2.0
 
 [priors.chin]
-low = 0.05
-high = 3.0
+low = -1.0
+high = 1.0
 
 [priors.gamma]
-low = 0.5
-high = 10.0
+low = 0.0
+high = 5.0
 
 [priors.kappa]
-low = 0.05
+low = 0.0
 high = 10.0
 
 [priors.z_peak]
-low = 0.05
-high = 10.0
+low = 0.0
+high = 5.0
 
 [init]
-H0 = 67.66
-Omega_m = 0.3096
-chi0 = 1.0
-chin = 1.91
-gamma = 2.7
-kappa = 5.7
-z_peak = 2.0
+H0 = 70.0
+Omega_m = 0.3
+chi0 = 1.1
+chin = 0.2
+gamma = 2.9
+kappa = 6.0
+z_peak = 2.2

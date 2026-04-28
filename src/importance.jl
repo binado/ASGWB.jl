@@ -28,14 +28,14 @@ end
 )
     pdf_at_z = _interpolate_at_sample(bundle.pdf.y, interp, sample_index)
     redshift_log_prob = _normalized_log_density(pdf_at_z, norm, tiny)
-    target_log_prob = problem.intrinsic_log_prob_plan.fixed_log_prob[sample_index] +
+    target_log_prob = problem.redshift_cache.intrinsic_log_prob_plan.fixed_log_prob[sample_index] +
                       redshift_log_prob
     log_ratio = target_log_prob - problem.proposal.log_prob[sample_index]
     d_l = luminosity_distance_at_sample(
         bundle,
         h.H0,
         interp,
-        problem.redshift_grid,
+        problem.redshift_cache.redshift_grid,
         z,
         sample_index
     )
@@ -72,9 +72,9 @@ function compute_importance_weights(
     norm = redshift_integral(bundle)
     T = promote_type(eltype(bundle.pdf.y), typeof(norm))
     tiny = floatmin(T)
-    interp = problem.sample_interpolant
-    first_target, first_ratio, first_dgw_sq, first_weight =
-        _importance_terms_at_sample(problem, h, bundle, norm, tiny, z, interp, 1)
+    interp = problem.redshift_cache.sample_interpolant
+    first_terms = _importance_terms_at_sample(problem, h, bundle, norm, tiny, z, interp, 1)
+    first_target, first_ratio, first_dgw_sq, first_weight = first_terms
     target_log_prob = Vector{typeof(first_target)}(undef, n)
     log_ratio = Vector{typeof(first_ratio)}(undef, n)
     dgw_theta_sq = Vector{typeof(first_dgw_sq)}(undef, n)
@@ -86,8 +86,9 @@ function compute_importance_weights(
         dgw_theta_sq[1] = first_dgw_sq
         weights[1] = first_weight
         for i in 2:n
-            target, ratio, dgw_sq, weight =
-                _importance_terms_at_sample(problem, h, bundle, norm, tiny, z, interp, i)
+            terms = _importance_terms_at_sample(
+                problem, h, bundle, norm, tiny, z, interp, i)
+            target, ratio, dgw_sq, weight = terms
             target_log_prob[i] = target
             log_ratio[i] = ratio
             dgw_theta_sq[i] = dgw_sq

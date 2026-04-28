@@ -111,7 +111,7 @@ function build_turing_model(
         track,
         problem,
         prior,
-        problem.redshift_grid,
+        problem.redshift_cache.redshift_grid,
         observed_spectral_density[problem.observation.in_band_mask]
     )
 end

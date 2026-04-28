@@ -6,4 +6,4 @@ test:
 
 notebook-dir := "notebooks"
 pluto:
-    julia -tauto --project={{notebook-dir}} -e 'using Pkg; using Pluto; Pkg.instantiate(); Pluto.run()'
+    julia --project={{notebook-dir}} -e 'using Pkg; using Pluto; Pkg.instantiate(); Pluto.run()'
