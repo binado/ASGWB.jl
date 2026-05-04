@@ -48,8 +48,6 @@ include("turing_model.jl")
 export ImportanceSamplingProblem,
        ImportanceCache,
        importance_sampling_problem,
-       IntrinsicLogProbPlan,
-       RedshiftLogProbTerm,
        RedshiftGridCache,
        ProposalData,
        ObservationConfig,
@@ -115,7 +113,7 @@ export logprior,
        AlignedSpinChiSimple,
        RedshiftInterpolatedDistribution,
        intrinsic_prior,
-       intrinsic_log_prob_plan,
+       fixed_intrinsic_log_prob,
        intrinsic_log_prob_samples,
        intrinsic_log_prob_samples!
 

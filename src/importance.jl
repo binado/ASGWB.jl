@@ -28,7 +28,7 @@ end
 )
     pdf_at_z = _interpolate_at_sample(bundle.pdf.y, interp, sample_index)
     redshift_log_prob = _normalized_log_density(pdf_at_z, norm, tiny)
-    target_log_prob = problem.redshift_cache.intrinsic_log_prob_plan.fixed_log_prob[sample_index] +
+    target_log_prob = problem.redshift_cache.fixed_intrinsic_log_prob[sample_index] +
                       redshift_log_prob
     log_ratio = target_log_prob - problem.proposal.log_prob[sample_index]
     d_l = luminosity_distance_at_sample(

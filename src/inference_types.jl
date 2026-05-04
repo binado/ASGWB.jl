@@ -154,40 +154,18 @@ struct SampleInterpolant
 end
 
 """
-    RedshiftLogProbTerm
-
-Dynamic intrinsic term: per-sample redshift log-density from the live
-[`RedshiftBundle`](@ref) (via [`log_prob_from_bundle`](@ref))). Additional
-hyperparameter-dependent terms (e.g. mass prior) can be added as further tuple
-elements on [`IntrinsicLogProbPlan`](@ref) in the future.
-"""
-struct RedshiftLogProbTerm end
-
-"""
-    IntrinsicLogProbPlan{T}
-
-Precomputed per-sample intrinsic log-probability contributions that do not depend
-on the current MCMC hyperparameters, plus a small tuple of dynamic terms recomputed
-each likelihood evaluation (typically redshift from the live bundle).
-
-See [`intrinsic_log_prob_plan`](@ref) and [`intrinsic_log_prob_samples!`](@ref).
-"""
-struct IntrinsicLogProbPlan{T <: Tuple}
-    fixed_log_prob::Vector{Float64}
-    dynamic_terms::T
-end
-
-"""
-    RedshiftGridCache{T}
+    RedshiftGridCache
 
 Precomputed redshift-grid state attached to an [`ImportanceSamplingProblem`](@ref):
 the fixed redshift grid, interpolation metadata for proposal redshifts on that grid,
-and cached intrinsic log-probability terms used when recomputing sample weights.
+and cached hyperparameter-independent full-BNS intrinsic log-probability terms
+(mass, spins, tidal deformability). Redshift log-probability is evaluated from the
+live [`RedshiftBundle`](@ref) each likelihood call.
 """
-struct RedshiftGridCache{T <: Tuple}
+struct RedshiftGridCache
     redshift_grid::Vector{Float64}
     sample_interpolant::SampleInterpolant
-    intrinsic_log_prob_plan::IntrinsicLogProbPlan{T}
+    fixed_intrinsic_log_prob::Vector{Float64}
 end
 
 """
@@ -203,13 +181,13 @@ the integral implied by the live [`HyperParameters`](@ref), not this field.
 
 `redshift_cache` groups the fixed grid, per-sample interpolation metadata, and cached
 hyperparameter-independent full-BNS intrinsic terms (mass, spins, tidal deformability);
-redshift terms are filled from the bundle each step.
+redshift terms are evaluated from the bundle each step.
 """
-struct ImportanceSamplingProblem{T <: Tuple}
+struct ImportanceSamplingProblem
     proposal::ProposalData
     observation::ObservationConfig
     redshift_prior_spec::RedshiftPriorSpec
-    redshift_cache::RedshiftGridCache{T}
+    redshift_cache::RedshiftGridCache
     local_merger_rate::Float64
     redshift_integral_fiducial::Float64
     fiducial_parameters::ProposalFiducialParameters
@@ -254,10 +232,10 @@ function importance_sampling_problem(
 )
     strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
     _validate_strategy_bundle(strategy, proposal)
-    plan = intrinsic_log_prob_plan(strategy, proposal.samples)
+    fixed_log_prob = fixed_intrinsic_log_prob(strategy, proposal.samples)
     z_grid = redshift_grid(redshift_prior_spec)
     interp = SampleInterpolant(proposal.samples.redshift, z_grid)
-    redshift_cache = RedshiftGridCache(z_grid, interp, plan)
+    redshift_cache = RedshiftGridCache(z_grid, interp, fixed_log_prob)
     return ImportanceSamplingProblem(
         proposal,
         observation,

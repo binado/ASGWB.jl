@@ -284,18 +284,19 @@ function _require_full_bns_soa_matching_lengths(samples::NamedTuple)
     return n
 end
 
-# --- Intrinsic log-probability plan (cached fixed terms + dynamic extension points) ---
+# --- Cached full-BNS intrinsic log-probability terms ---
 
 """
-    _full_bns_fixed_intrinsic_log_prob(samples; kwargs...) -> Vector{Float64}
+    fixed_intrinsic_log_prob(::FullBNS, samples; kwargs...) -> Vector{Float64}
 
 Per-sample sum of mass, aligned-spin, and tidal-uniform log-pdfs for full-BNS
 proposal samples. Matches the corresponding terms in [`intrinsic_prior`](@ref)
-(`mass`, `χ₁`, `χ₂`, `Λ₁`, `Λ₂`); redshift is excluded and supplied via dynamic terms
-on [`IntrinsicLogProbPlan`](@ref).
+(`mass`, `χ₁`, `χ₂`, `Λ₁`, `Λ₂`); redshift is excluded because it depends on
+the live [`RedshiftBundle`](@ref).
 """
-function _full_bns_fixed_intrinsic_log_prob(
-        samples::NamedTuple;
+function fixed_intrinsic_log_prob(
+        ::FullBNS,
+        samples::FullBNSSamplesSoA;
         mass_low::Real = BNS_MASS_LOW,
         mass_high::Real = BNS_MASS_HIGH,
         spin_a_max::Real = BNS_SPIN_A_MAX,
@@ -307,39 +308,13 @@ function _full_bns_fixed_intrinsic_log_prob(
     lambda_dist = Uniform(0.0, Float64(lambda_high))
     out = Vector{Float64}(undef, n)
     @inbounds for i in 1:n
-        out[i] =
-            logpdf(mass_dist, (samples.mass[1, i], samples.mass[2, i])) +
-            logpdf(spin_dist, samples.χ₁[i]) +
-            logpdf(spin_dist, samples.χ₂[i]) +
-            logpdf(lambda_dist, samples.Λ₁[i]) +
-            logpdf(lambda_dist, samples.Λ₂[i])
+        out[i] = logpdf(mass_dist, (samples.mass[1, i], samples.mass[2, i])) +
+                 logpdf(spin_dist, samples.χ₁[i]) +
+                 logpdf(spin_dist, samples.χ₂[i]) +
+                 logpdf(lambda_dist, samples.Λ₁[i]) +
+                 logpdf(lambda_dist, samples.Λ₂[i])
     end
     return out
-end
-
-"""
-    intrinsic_log_prob_plan(::FullBNS, samples; kwargs...) -> IntrinsicLogProbPlan
-
-Build a plan for [`FullBNSSamplesSoA`](@ref): precompute hyperparameter-independent
-intrinsic log-pdfs (mass, spins, tidal) and register [`RedshiftLogProbTerm`](@ref)
-for the bundle-dependent redshift factor. Keyword arguments match [`intrinsic_prior`](@ref).
-"""
-function intrinsic_log_prob_plan(
-        ::FullBNS,
-        samples::FullBNSSamplesSoA;
-        mass_low::Real = BNS_MASS_LOW,
-        mass_high::Real = BNS_MASS_HIGH,
-        spin_a_max::Real = BNS_SPIN_A_MAX,
-        lambda_high::Real = BNS_LAMBDA_HIGH
-)
-    fixed = _full_bns_fixed_intrinsic_log_prob(
-        samples;
-        mass_low = mass_low,
-        mass_high = mass_high,
-        spin_a_max = spin_a_max,
-        lambda_high = lambda_high
-    )
-    return IntrinsicLogProbPlan(fixed, (RedshiftLogProbTerm(),))
 end
 
 @inline function _redshift_logpdf(bundle::RedshiftBundle, z::Real)
@@ -350,87 +325,46 @@ end
 end
 
 """
-    add_logpdf_term!(out, term, h, bundle, samples) -> out
+    intrinsic_log_prob_samples!(out, fixed_log_prob, bundle, samples) -> out
 
-Add one dynamic intrinsic log-pdf contribution per sample into `out` (in-place).
-`h` is reserved for future hyperparameter-dependent terms (e.g. mass prior with
-population hyperparameters).
-"""
-function add_logpdf_term!(
-        out::AbstractVector,
-        ::RedshiftLogProbTerm,
-        ::HyperParametersNT,
-        bundle::RedshiftBundle,
-        samples::NamedTuple
-)
-    n = length(out)
-    @inbounds for i in 1:n
-        out[i] = out[i] + _redshift_logpdf(bundle, samples.redshift[i])
-    end
-    return out
-end
-
-@inline function _apply_dynamic_terms!(
-        out::AbstractVector,
-        terms::Tuple{},
-        ::HyperParametersNT,
-        ::RedshiftBundle,
-        ::NamedTuple
-)
-    return out
-end
-
-@inline function _apply_dynamic_terms!(
-        out::AbstractVector,
-        terms::Tuple,
-        h::HyperParametersNT,
-        bundle::RedshiftBundle,
-        samples::NamedTuple
-)
-    add_logpdf_term!(out, first(terms), h, bundle, samples)
-    return _apply_dynamic_terms!(out, Base.tail(terms), h, bundle, samples)
-end
-
-"""
-    intrinsic_log_prob_samples!(out, plan, h, bundle, samples) -> out
-
-Fill `out` with per-sample intrinsic log-prior using a precomputed
-[`IntrinsicLogProbPlan`](@ref) and the live [`RedshiftBundle`](@ref).
+Fill `out` with per-sample intrinsic log-prior using precomputed fixed full-BNS
+terms and the live redshift density from [`RedshiftBundle`](@ref).
 """
 function intrinsic_log_prob_samples!(
         out::AbstractVector,
-        plan::IntrinsicLogProbPlan,
-        h::HyperParametersNT,
+        fixed_log_prob::AbstractVector{<:Real},
         bundle::RedshiftBundle,
         samples::NamedTuple
 )
     n = _require_full_bns_soa_matching_lengths(samples)
     length(out) == n ||
         throw(ArgumentError("output length must match the number of samples"))
+    length(fixed_log_prob) == n ||
+        throw(ArgumentError("fixed log-probability length must match the number of samples"))
     @inbounds for i in 1:n
-        out[i] = plan.fixed_log_prob[i]
+        out[i] = fixed_log_prob[i] + _redshift_logpdf(bundle, samples.redshift[i])
     end
-    _apply_dynamic_terms!(out, plan.dynamic_terms, h, bundle, samples)
     return out
 end
 
 """
-    intrinsic_log_prob_samples(plan, h, bundle, samples) -> Vector
+    intrinsic_log_prob_samples(fixed_log_prob, bundle, samples) -> Vector
 
 Allocating variant of [`intrinsic_log_prob_samples!`](@ref) for an
-[`IntrinsicLogProbPlan`](@ref). Element type promotes with the redshift contribution
+already-computed fixed intrinsic log-probability vector. Element type promotes with the redshift contribution
 (e.g. `ForwardDiff.Dual` when `bundle` was built under AD).
 """
 function intrinsic_log_prob_samples(
-        plan::IntrinsicLogProbPlan,
-        h::HyperParametersNT,
+        fixed_log_prob::AbstractVector{<:Real},
         bundle::RedshiftBundle,
         samples::NamedTuple
 )
     n = _require_full_bns_soa_matching_lengths(samples)
     n == 0 && return Float64[]
-    first_val = plan.fixed_log_prob[1] + _redshift_logpdf(bundle, samples.redshift[1])
+    length(fixed_log_prob) == n ||
+        throw(ArgumentError("fixed log-probability length must match the number of samples"))
+    first_val = fixed_log_prob[1] + _redshift_logpdf(bundle, samples.redshift[1])
     out = Vector{typeof(first_val)}(undef, n)
-    intrinsic_log_prob_samples!(out, plan, h, bundle, samples)
+    intrinsic_log_prob_samples!(out, fixed_log_prob, bundle, samples)
     return out
 end

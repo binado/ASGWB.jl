@@ -157,7 +157,7 @@ end
     @test intrinsic_log_prob_samples(prior, aos) == [logpdf(prior, s) for s in aos]
 end
 
-@testset "intrinsic_log_prob_plan matches intrinsic_prior SoA path" begin
+@testset "fixed_intrinsic_log_prob matches intrinsic_prior SoA path" begin
     theta = HyperParameters(;
         H0 = 67.0,
         Ωm = 0.315,
@@ -176,17 +176,17 @@ end
         Λ₁ = [100.0, 200.0],
         Λ₂ = [150.0, 250.0]
     )
-    plan = intrinsic_log_prob_plan(FullBNS(), samples)
-    @test plan.fixed_log_prob isa Vector{Float64}
-    @test length(plan.fixed_log_prob) == length(samples.redshift)
+    fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
+    @test fixed_log_prob isa Vector{Float64}
+    @test length(fixed_log_prob) == length(samples.redshift)
     expected = intrinsic_log_prob_samples(prior, samples)
-    @test intrinsic_log_prob_samples(plan, theta, bundle, samples) ≈ expected
+    @test intrinsic_log_prob_samples(fixed_log_prob, bundle, samples) ≈ expected
     out = similar(expected)
-    intrinsic_log_prob_samples!(out, plan, theta, bundle, samples)
+    intrinsic_log_prob_samples!(out, fixed_log_prob, bundle, samples)
     @test out ≈ expected
 end
 
-@testset "intrinsic_log_prob_plan with ForwardDiff.Dual population parameter" begin
+@testset "fixed_intrinsic_log_prob with ForwardDiff.Dual population parameter" begin
     theta = HyperParameters(;
         H0 = 67.0,
         Ωm = 0.315,
@@ -203,12 +203,12 @@ end
         Λ₁ = [100.0, 200.0],
         Λ₂ = [150.0, 250.0]
     )
-    plan = intrinsic_log_prob_plan(FullBNS(), samples)
+    fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
     h_dual = (; theta..., γ = ForwardDiff.Dual(2.7, 1.0))
     bundle_dual = build_redshift_grid_bundle(h_dual, spec)
     prior_dual = intrinsic_prior(FullBNS(), bundle_dual)
     expected = intrinsic_log_prob_samples(prior_dual, samples)
-    got = intrinsic_log_prob_samples(plan, h_dual, bundle_dual, samples)
+    got = intrinsic_log_prob_samples(fixed_log_prob, bundle_dual, samples)
     @test expected ≈ got
     @test eltype(got) <: ForwardDiff.Dual
 end
