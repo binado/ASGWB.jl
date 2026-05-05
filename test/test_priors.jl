@@ -211,4 +211,21 @@ end
     got = intrinsic_log_prob_samples(fixed_log_prob, bundle_dual, samples)
     @test expected ≈ got
     @test eltype(got) <: ForwardDiff.Dual
+
+    empty_samples = (
+        mass = zeros(2, 0),
+        redshift = Float64[],
+        χ₁ = Float64[],
+        χ₂ = Float64[],
+        Λ₁ = Float64[],
+        Λ₂ = Float64[]
+    )
+    empty_fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), empty_samples)
+    empty_got = intrinsic_log_prob_samples(
+        empty_fixed_log_prob,
+        bundle_dual,
+        empty_samples
+    )
+    @test isempty(empty_got)
+    @test eltype(empty_got) <: ForwardDiff.Dual
 end

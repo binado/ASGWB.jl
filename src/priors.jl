@@ -324,6 +324,10 @@ end
     return log_prob_from_bundle(z, bundle)
 end
 
+function _redshift_logpdf_type(bundle::RedshiftBundle)
+    return promote_type(eltype(bundle.pdf.y), typeof(redshift_integral(bundle)))
+end
+
 """
     intrinsic_log_prob_samples!(out, fixed_log_prob, bundle, samples) -> out
 
@@ -360,9 +364,11 @@ function intrinsic_log_prob_samples(
         samples::NamedTuple
 )
     n = _require_full_bns_soa_matching_lengths(samples)
-    n == 0 && return Float64[]
     length(fixed_log_prob) == n ||
         throw(ArgumentError("fixed log-probability length must match the number of samples"))
+    if n == 0
+        return Vector{promote_type(eltype(fixed_log_prob), _redshift_logpdf_type(bundle))}()
+    end
     first_val = fixed_log_prob[1] + _redshift_logpdf(bundle, samples.redshift[1])
     out = Vector{typeof(first_val)}(undef, n)
     intrinsic_log_prob_samples!(out, fixed_log_prob, bundle, samples)
