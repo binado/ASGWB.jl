@@ -47,6 +47,9 @@ function _spectral_density_weighted(
     return _spectral_density_weighted_generic(fluxes, merger_rate_per_sec, weights)
 end
 
+# Avoid `Matrix{Float64} * Vector{Dual}` here: on realistic caches the generic
+# Dual matvec dominated ForwardDiff/Turing gradient profiles. Splitting primal
+# values and partials lets BLAS handle the two dense contractions.
 function _spectral_density_weighted(
         fluxes::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real,
@@ -56,14 +59,11 @@ function _spectral_density_weighted(
         return _spectral_density_weighted_generic(fluxes, merger_rate_per_sec, weights)
     rate_value = V(merger_rate_per_sec)
     rate_partials = ntuple(_ -> zero(V), Val(N))
-    return _spectral_density_weighted_dual(
+    return _spectral_density_weighted_forwarddiff(
         fluxes,
         rate_value,
         rate_partials,
-        weights,
-        Val(N),
-        Tag,
-        V
+        weights
     )
 end
 
@@ -72,26 +72,21 @@ function _spectral_density_weighted(
         merger_rate_per_sec::ForwardDiff.Dual{Tag, V, N},
         weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
 ) where {Tag, V, N}
+    rate_value = ForwardDiff.value(merger_rate_per_sec)
     rate_partials = ntuple(j -> ForwardDiff.partials(merger_rate_per_sec)[j], Val(N))
-    return _spectral_density_weighted_dual(
+    return _spectral_density_weighted_forwarddiff(
         fluxes,
-        ForwardDiff.value(merger_rate_per_sec),
+        rate_value,
         rate_partials,
-        weights,
-        Val(N),
-        Tag,
-        V
+        weights
     )
 end
 
-function _spectral_density_weighted_dual(
+function _spectral_density_weighted_forwarddiff(
         fluxes::AbstractMatrix{<:Real},
         rate_value::V,
         rate_partials::NTuple{N, V},
-        weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}},
-        ::Val{N},
-        ::Type{Tag},
-        ::Type{V}
+        weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
 ) where {Tag, V, N}
     n_freq, n_samples = size(fluxes)
     length(weights) == n_samples ||
