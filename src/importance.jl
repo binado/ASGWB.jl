@@ -45,6 +45,37 @@ end
     return target_log_prob, log_ratio, dgw_theta_sq, weight
 end
 
+function _importance_output_eltypes(
+        problem::ImportanceSamplingProblem,
+        h::HyperParametersNT,
+        bundle::RedshiftBundle
+)
+    target_log_prob_type = promote_type(
+        eltype(problem.redshift_cache.fixed_intrinsic_log_prob),
+        _redshift_logpdf_type(bundle)
+    )
+    log_ratio_type = promote_type(target_log_prob_type, eltype(problem.proposal.log_prob))
+    dgw_theta_sq_type = promote_type(
+        eltype(redshift(problem)),
+        typeof(h.H0),
+        typeof(h.Ξ₀),
+        typeof(h.Ξₙ),
+        eltype(bundle.distance.y),
+        eltype(bundle.distance.cumulative)
+    )
+    weight_type = promote_type(
+        log_ratio_type,
+        eltype(problem.proposal.dgw_fid_sq),
+        dgw_theta_sq_type
+    )
+    return (;
+        weights = weight_type,
+        log_ratio = log_ratio_type,
+        target_log_prob = target_log_prob_type,
+        dgw_theta_sq = dgw_theta_sq_type
+    )
+end
+
 """
     compute_importance_weights(problem, h, bundle) -> NamedTuple
 
@@ -62,16 +93,19 @@ function compute_importance_weights(
 )
     z = redshift(problem)
     n = length(z)
-    n == 0 && return (;
-        weights = Float64[],
-        log_ratio = Float64[],
-        target_log_prob = Float64[],
-        dgw_theta_sq = Float64[]
-    )
-
     norm = redshift_integral(bundle)
     T = promote_type(eltype(bundle.pdf.y), typeof(norm))
     tiny = floatmin(T)
+    if n == 0
+        eltypes = _importance_output_eltypes(problem, h, bundle)
+        return (;
+            weights = Vector{eltypes.weights}(),
+            log_ratio = Vector{eltypes.log_ratio}(),
+            target_log_prob = Vector{eltypes.target_log_prob}(),
+            dgw_theta_sq = Vector{eltypes.dgw_theta_sq}()
+        )
+    end
+
     interp = problem.redshift_cache.sample_interpolant
     first_terms = _importance_terms_at_sample(problem, h, bundle, norm, tiny, z, interp, 1)
     first_target, first_ratio, first_dgw_sq, first_weight = first_terms

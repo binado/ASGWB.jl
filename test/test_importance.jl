@@ -1,5 +1,45 @@
 using HDF5
+using ForwardDiff
 using Test
+
+function _importance_type_test_problem(n::Integer)
+    samples = (
+        mass = stack_source_masses(fill(1.4, n), fill(1.2, n)),
+        redshift = fill(0.1, n),
+        χ₁ = fill(0.0, n),
+        χ₂ = fill(0.0, n),
+        Λ₁ = fill(100.0, n),
+        Λ₂ = fill(100.0, n)
+    )
+    proposal = ProposalData(
+        FULL_BNS_INTRINSIC_ORDER,
+        samples,
+        zeros(n),
+        zeros(n, length(FULL_BNS_INTRINSIC_ORDER)),
+        zeros(2, n),
+        ones(n)
+    )
+    observation = ObservationConfig(
+        [1.0, 2.0],
+        [1.0, 1.0],
+        [1.0, 1.0],
+        BitVector([true, true]),
+        [0.0, 0.0],
+        1.0,
+        1.0
+    )
+    spec = RedshiftPriorSpec(MadauDickinson, 0.001, 1.0, 32, nothing)
+    fid = ProposalFiducialParameters(;
+        H0 = 67.0,
+        Ωm = 0.315,
+        Ξ₀ = 1.0,
+        Ξₙ = 0.0,
+        γ = 2.7,
+        κ = 3.0,
+        zpeak = 2.5
+    )
+    return importance_sampling_problem(proposal, observation, spec, 1.0, fid)
+end
 
 @testset "importance parity" begin
     cache_path = joinpath(@__DIR__, "fixtures", "posterior_cache_julia.h5")
@@ -58,4 +98,31 @@ using Test
         )
         @test rate * cache.observation.observation_time_sec ≈ expected_number_of_sources rtol = parity_rtol
     end
+end
+
+@testset "empty importance weights preserve AD element types" begin
+    dual(x) = ForwardDiff.Dual{Nothing}(x, one(x))
+    theta = (
+        H0 = dual(67.0),
+        Ωm = dual(0.315),
+        Ξ₀ = dual(1.0),
+        Ξₙ = dual(0.0),
+        γ = dual(2.7),
+        κ = dual(3.0),
+        zpeak = dual(2.5)
+    )
+
+    empty_problem = _importance_type_test_problem(0)
+    populated_problem = _importance_type_test_problem(1)
+    empty_bundle = build_redshift_grid_bundle(theta, empty_problem.redshift_prior_spec)
+    populated_bundle = build_redshift_grid_bundle(theta, populated_problem.redshift_prior_spec)
+
+    empty_iw = compute_importance_weights(empty_problem, theta, empty_bundle)
+    populated_iw = compute_importance_weights(populated_problem, theta, populated_bundle)
+
+    @test isempty(empty_iw.weights)
+    @test eltype(empty_iw.weights) == eltype(populated_iw.weights)
+    @test eltype(empty_iw.log_ratio) == eltype(populated_iw.log_ratio)
+    @test eltype(empty_iw.target_log_prob) == eltype(populated_iw.target_log_prob)
+    @test eltype(empty_iw.dgw_theta_sq) == eltype(populated_iw.dgw_theta_sq)
 end
