@@ -35,3 +35,4 @@ JuliaLocalPreferences.toml
 *.png
 *.jls
 *.nc
+analysis_numpyro_julia_cache.h5
