@@ -2,7 +2,6 @@
 ASGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
 ArviZ = "131c737c-5715-5e2e-ad31-c244f01c1dc7"
-ArviZPythonPlots = "4a6e88f0-2c8e-11ee-0601-e94153f0eada"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Comonicon = "863f3e99-da2a-4334-8734-de3dacbe5542"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -19,7 +18,6 @@ ASGWB = {path = ".."}
 
 [compat]
 ArviZ = "0.14"
-ArviZPythonPlots = "0.1"
 CairoMakie = "0.15"
 Comonicon = "1.0.8"
 Distributions = "0.25.123"
