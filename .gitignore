@@ -31,6 +31,9 @@ Manifest*.toml
 LocalPreferences.toml
 JuliaLocalPreferences.toml
 
+# PythonCall/CondaPkg local Python environments
+**/.CondaPkg/
+
 # Local analysis / inference outputs
 *.png
 *.jls
