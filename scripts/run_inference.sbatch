@@ -52,8 +52,8 @@ export JULIA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 # but exporting here covers any pre-sample BLAS calls during init).
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
-export INPUT="Project.toml Manifest.toml src/ assets/ scripts/ *.h5 *.toml"
-export OUTPUT="scripts/"
+export INPUT="Project.toml Manifest.toml src assets scripts *.h5 *.toml"
+export OUTPUT="scripts *.nc *.jls *.partial.jls"
 
 echo "[$(date -Iseconds)] host=$(hostname) job=${SLURM_JOB_ID:-local} cpus=${SLURM_CPUS_PER_TASK:-?} threads=$JULIA_NUM_THREADS config=${MCMC_CONFIG_FILEPATH:-<default>}"
 
