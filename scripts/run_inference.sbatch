@@ -10,7 +10,8 @@
 #SBATCH --hint=nomultithread
 
 # Usage:
-#   sbatch scripts/run_inference.sbatch [path/to/config.toml]
+#   cd /path/to/ASGWB.jl
+#   sbatch scripts/run_inference.sbatch [scripts/run_inference.toml]
 #
 # Config resolution (first hit wins):
 #   1. MCMC_CONFIG_FILEPATH env var (set below from $1 if provided)
@@ -23,12 +24,27 @@ set -euo pipefail
 # module purge
 # module load julia/1.12
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Slurm executes a copied batch script from its spool directory on some
+# clusters, so BASH_SOURCE/dirname can point at /var/spool/slurmd. Anchor all
+# relative paths to the directory where sbatch was submitted.
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_ROOT"
 mkdir -p logs
 
+if [[ ! -f Project.toml || ! -d src || ! -f scripts/run_inference.jl ]]; then
+    echo "run_inference.sbatch must be submitted from the ASGWB.jl repository root" >&2
+    echo "current directory: $PWD" >&2
+    exit 2
+fi
+
 if [[ $# -ge 1 ]]; then
-    export MCMC_CONFIG_FILEPATH="$(realpath "$1")"
+    CONFIG_PATH="$(realpath "$1")"
+    case "$CONFIG_PATH" in
+        "$PWD"/*) export MCMC_CONFIG_FILEPATH="${CONFIG_PATH#"$PWD"/}" ;;
+        *) export MCMC_CONFIG_FILEPATH="$CONFIG_PATH" ;;
+    esac
+else
+    export MCMC_CONFIG_FILEPATH="scripts/run_inference.toml"
 fi
 
 export JULIA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
@@ -36,9 +52,9 @@ export JULIA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 # but exporting here covers any pre-sample BLAS calls during init).
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
-export INPUT="*.h5 scripts/*.jl"
-export OUTPUT="*.nc *.jls"
+export INPUT="Project.toml Manifest.toml src/ assets/ scripts/ *.h5 *.toml"
+export OUTPUT="scripts/"
 
 echo "[$(date -Iseconds)] host=$(hostname) job=${SLURM_JOB_ID:-local} cpus=${SLURM_CPUS_PER_TASK:-?} threads=$JULIA_NUM_THREADS config=${MCMC_CONFIG_FILEPATH:-<default>}"
 
-jobnanny julia --project=. run_inference.jl
+job-nanny julia --project=. scripts/run_inference.jl
