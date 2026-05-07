@@ -28,7 +28,9 @@ md"""
 
 Load a saved ArviZ `InferenceData` NetCDF file, convert to an `MCMCChains.Chains`
 object, and inspect MCMC diagnostics without running a sampler. Edit only
-`netcdf_path` when switching chain files.
+`netcdf_path` when switching chain files. If the file has a `constant_data`
+group (simulation truths), the posterior pair plot overlays them via
+`PairPlots.Truth`.
 """
 
 # ╔═╡ c66dee78-6a7e-4891-b90c-85959e2638b7
@@ -102,6 +104,14 @@ begin
         )
     end
 
+    function pairplot_truth_namedtuple(idata, chain_params)
+        hasproperty(idata, :constant_data) || return nothing
+        cd = idata.constant_data
+        cols = Symbol[p for p in chain_params if p in propertynames(cd)]
+        isempty(cols) && return nothing
+        return (; (p => Float64(only(Array(getproperty(cd, p)))) for p in cols)...)
+    end
+
     nothing
 end
 
@@ -150,8 +160,13 @@ md"""
 
 # ╔═╡ d08a483d-4823-4cff-9d68-89a29005e51a
 begin
+    truth_nt = pairplot_truth_namedtuple(idata, chain_params)
     if length(chain_params) >= 2
-        pairplot(chain)
+        if truth_nt !== nothing
+            pairplot(chain, PairPlots.Truth(truth_nt; label="Truth"))
+        else
+            pairplot(chain)
+        end
     else
         StatsPlots.density(chain)
     end
