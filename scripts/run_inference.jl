@@ -22,7 +22,6 @@ using Pkg
 using LinearAlgebra: BLAS
 using MCMCChains: chainscat
 using Dates: now, format
-using Comonicon: @main
 
 
 """Check each `init` scalar has positive prior density under the matching `priors` entry."""
@@ -196,8 +195,10 @@ function _run(settings::Dict, settings_dir::AbstractString)
     return nothing
 end
 
-@main function run_inference(; settings::String = "")
-    settings_path = isempty(settings) ? joinpath(@__DIR__, "run_inference.toml") : settings
+function main()
+    default_path = joinpath(@__DIR__, "run_inference.toml")
+    settings_path = get(ENV, "MCMC_CONFIG_FILEPATH",
+        isempty(ARGS) ? default_path : ARGS[1])
     settings_path = abspath(settings_path)
     @info "loading settings" path=settings_path
     s = TOML.parsefile(settings_path)
@@ -206,4 +207,4 @@ end
 
 end # module RunInferenceCLI
 
-Base.invokelatest(RunInferenceCLI.command_main)
+RunInferenceCLI.main()
