@@ -2,41 +2,28 @@
 
 import Pkg
 
-Pkg.activate(joinpath(@__DIR__, "..", "notebooks"))
+Pkg.activate(@__DIR__)
 Pkg.instantiate()
 
 module RunInferenceCLI
 
 using ASGWB
-using ASGWB:
-    load_cache,
-    build_turing_model,
-    HyperParameters,
-    Detector,
-    DEFAULT_PARAMETER_ORDER
+using ASGWB: load_cache, build_turing_model, Detector, DEFAULT_PARAMETER_ORDER
 
 using Turing
 using AdvancedHMC
 using Random
 using Serialization
-using Logging
-using MCMCChains
 using ArviZ
 using NCDatasets
 using Distributions
-using DelimitedFiles
 using TOML
+using Pkg
+using LinearAlgebra: BLAS
+using MCMCChains: chainscat
+using Dates: now, format
 using Comonicon: @main
 
-
-function load_observed_spectral_density(path::AbstractString, expected_len::Int)
-    isfile(path) || throw(ArgumentError("observed spectrum file not found: $(repr(path))"))
-    v = vec(readdlm(path, ',', Float64))
-    length(v) == expected_len || throw(
-        ArgumentError("observed_spectral_density_csv has length $(length(v)), expected $expected_len"),
-    )
-    return v
-end
 
 """Check each `init` scalar has positive prior density under the matching `priors` entry."""
 function validate_init_against_priors(priors, init)
@@ -49,124 +36,133 @@ function validate_init_against_priors(priors, init)
     return nothing
 end
 
-function validate_sample_only(sample_only::Union{Nothing,Tuple{Vararg{Symbol}}})
-    sample_only === nothing && return nothing
-    isempty(sample_only) && throw(
-        ArgumentError(
-            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
-        ),
+const PRIORS = (
+    H0 = Uniform(20, 140),
+    Ωm = Uniform(0.05, 0.95),
+    Ξ₀ = Uniform(0.5, 5),
+    Ξₙ = Uniform(0.05, 3),
+    γ = Uniform(0.5, 10),
+    κ = Uniform(0.05, 10),
+    zpeak = Uniform(0.05, 10),
+)
+
+"""Resolve `path` relative to `base` if it is not absolute."""
+resolve_path(path::AbstractString, base::AbstractString) =
+    isabspath(path) ? path : normpath(joinpath(base, path))
+
+"""
+    sample_with_checkpoints(conditioned, nuts, n_samples, num_chains;
+                            checkpoint_every, checkpoint_path, progress)
+
+Sample in chunks of `checkpoint_every` iterations, serializing the cumulative chain
+to `checkpoint_path` after each chunk. Uses `resume_from` so adaptation only happens
+in the first chunk. If `checkpoint_every >= n_samples` (or non-positive) the run is
+done in a single call.
+"""
+function sample_with_checkpoints(
+        conditioned, nuts, n_samples::Int, num_chains::Int;
+        checkpoint_every::Int, checkpoint_path::AbstractString, progress::Bool,
+)
+    if checkpoint_every <= 0 || checkpoint_every >= n_samples
+        chain = sample(
+            conditioned, nuts, MCMCThreads(), n_samples, num_chains;
+            progress = progress, save_state = true,
+        )
+        return chain
+    end
+
+    first_chunk = min(checkpoint_every, n_samples)
+    @info "sampling chunk" chunk_size=first_chunk so_far=0 target=n_samples
+    chain = sample(
+        conditioned, nuts, MCMCThreads(), first_chunk, num_chains;
+        progress = progress, save_state = true,
     )
+    Serialization.serialize(checkpoint_path, chain)
+    @info "checkpoint written" path=checkpoint_path samples=size(chain, 1)
+
+    while size(chain, 1) < n_samples
+        chunk = min(checkpoint_every, n_samples - size(chain, 1))
+        @info "sampling chunk" chunk_size=chunk so_far=size(chain, 1) target=n_samples
+        new_chain = sample(
+            conditioned, nuts, MCMCThreads(), chunk, num_chains;
+            progress = progress, save_state = true, resume_from = chain,
+        )
+        chain = chainscat(chain, new_chain)
+        Serialization.serialize(checkpoint_path, chain)
+        @info "checkpoint written" path=checkpoint_path samples=size(chain, 1)
+    end
+
+    return chain
+end
+
+
+function _run(settings::Dict, settings_dir::AbstractString)
+    cache = resolve_path(settings["cache_path"]::String, settings_dir)
+    detectors = [Detector(n) for n in settings["detectors"]]
+    sample_only = Tuple(Symbol(s) for s in settings["sample_only"])
+    seed = settings["seed"]::Int
+    init = (; (Symbol(k) => v for (k, v) in settings["init"])...)
+
+    sampler = settings["sampler"]
+    n_samples = sampler["n_samples"]::Int
+    n_adapts = sampler["n_adapts"]::Int
+    target_acceptance = sampler["target_acceptance"]::Float64
+    num_chains = get(sampler, "num_chains", 0)::Int
+    num_chains = num_chains > 0 ? num_chains : Base.Threads.nthreads()
+    checkpoint_every = get(sampler, "checkpoint_every", 0)::Int
+
+    output_dir = resolve_path(get(settings, "output_dir", ".")::String, settings_dir)
+    output_prefix = get(settings, "output_prefix", "chains")::String
+    mkpath(output_dir)
+
+    # Validate sample_only
+    isempty(sample_only) && throw(ArgumentError("sample_only must not be empty"))
+    length(unique(sample_only)) == length(sample_only) ||
+        throw(ArgumentError("sample_only must not repeat symbols"))
     for s in sample_only
         s in DEFAULT_PARAMETER_ORDER || throw(
             ArgumentError("sample_only contains $(repr(s)); expected symbols from $(DEFAULT_PARAMETER_ORDER)"),
         )
     end
-    length(unique(sample_only)) == length(sample_only) ||
-        throw(ArgumentError("sample_only must not repeat symbols"))
-    return nothing
-end
 
-function _require(settings::Dict, key::AbstractString)
-    haskey(settings, key) || throw(ArgumentError("missing required TOML key $(repr(key))"))
-    return settings[key]
-end
-
-function _require_table(settings::Dict, key::AbstractString)
-    v = _require(settings, key)
-    v isa Dict || throw(ArgumentError("TOML key $(repr(key)) must be a table"))
-    return v
-end
-
-function _require_string_array(settings::Dict, key::AbstractString)
-    v = _require(settings, key)
-    v isa Vector || throw(ArgumentError("TOML key $(repr(key)) must be an array"))
-    all(x -> x isa AbstractString, v) ||
-        throw(ArgumentError("TOML key $(repr(key)) must be an array of strings"))
-    return Vector{String}(v)
-end
-
-function load_settings_toml(path::AbstractString)::Dict
-    isfile(path) || throw(ArgumentError("settings TOML file not found: $(repr(path))"))
-    settings = TOML.parsefile(path)
-    settings isa Dict || throw(ArgumentError("expected TOML to parse to a Dict"))
-    return settings
-end
-
-
-function _run(settings::Dict)
-    # --- required settings ---
-    cache = _require(settings, "cache_path")::String
-    detectors = [Detector(n) for n in _require_string_array(settings, "detectors")]
-    sample_only = Symbol.(_require_string_array(settings, "sample_only"))
-
-    sampler_dict = _require_table(settings, "sampler")
-    n_samples = _require(sampler_dict, "n_samples")::Int
-    n_adapts = _require(sampler_dict, "n_adapts")::Int
-    target_acceptance = Float64(_require(sampler_dict, "target_acceptance"))
-
-    priors = (
-        H0 = Uniform(20, 140),
-        Ωm = Uniform(0.05, 0.95),
-        Ξ₀ = Uniform(0.5, 5),
-        Ξₙ = Uniform(0.05, 3),
-        γ = Uniform(0.5, 10),
-        κ = Uniform(0.05, 10),
-        zpeak = Uniform(0.05, 10),
-    )
-
-    init = (H0 = 67.66, Ωm = 0.3096, Ξ₀ = 1.0, Ξₙ = 1.91, γ = 2.7, κ = 5.7, zpeak = 2.0)
     fixed_sites = (; (k => init[k] for k in DEFAULT_PARAMETER_ORDER if k ∉ sample_only)...)
 
-    seed = 1
-    observed_spectral_density_csv = nothing
-    output_suffix = join(map(string, sample_only), "-")
-    output_jls = "chains-$output_suffix.jls"
-    output_netcdf = "chains-$output_suffix.nc"
+    timestamp = format(now(), "yyyymmdd-HHMMSS")
+    params_suffix = join(sample_only, "-")
+    base = "$(output_prefix)-$(params_suffix)-seed$(seed)-$(timestamp)"
+    output_jls = joinpath(output_dir, "$base.jls")
+    output_netcdf = joinpath(output_dir, "$base.nc")
+    checkpoint_path = joinpath(output_dir, "$base.partial.jls")
 
-    validate_init_against_priors(priors, init)
-    priors_turing = product_distribution((
-        H0 = priors.H0,
-        Ωm = priors.Ωm,
-        Ξ₀ = priors.Ξ₀,
-        Ξₙ = priors.Ξₙ,
-        γ = priors.γ,
-        κ = priors.κ,
-        zpeak = priors.zpeak,
-    ))
-    θ0 = HyperParameters(; init...)
+    validate_init_against_priors(PRIORS, init)
+    priors_turing = product_distribution(PRIORS)
 
-    cd(pkgdir(ASGWB))
+    # Cluster-friendly defaults: avoid BLAS oversubscription with MCMCThreads
+    # and disable the carriage-return progress bar in non-TTY contexts.
+    BLAS.set_num_threads(1)
+    progress = isinteractive()
 
     num_threads = Base.Threads.nthreads()
-    @info "starting run" threads=num_threads cache detectors=join((d.name for d in detectors), ",") sample_only
+    if num_chains != num_threads
+        @warn "num_chains differs from Base.Threads.nthreads()" num_chains num_threads
+    end
+
+    @info "starting run" julia=VERSION threads=num_threads chains=num_chains blas_threads=BLAS.get_num_threads() cache detectors=join((d.name for d in detectors), ",") sample_only output_dir
+    @info "package versions"
+    Pkg.status()
 
     @info "loading importance cache" path=cache
     t_cache = time()
     problem = load_cache(cache, detectors)
-    @info "cache loaded" seconds=round(time() - t_cache; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    @info "cache loaded" seconds=round(time()-t_cache; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 
-    observed = if observed_spectral_density_csv === nothing
-        @info "using fiducial in-band spectrum from cache as observed data"
-        problem.observation.fiducial_spectral_density
-    else
-        @info "loading observed spectrum from CSV" path=observed_spectral_density_csv
-        load_observed_spectral_density(
-            observed_spectral_density_csv,
-            length(problem.observation.fiducial_spectral_density),
-        )
-    end
+    @info "using fiducial in-band spectrum from cache as observed data"
+    observed = problem.observation.fiducial_spectral_density
 
-    if seed !== nothing
-        @info "seeding RNG" rng_seed=seed
-        Random.seed!(seed)
-    else
-        @info "RNG seed not set (nondeterministic run unless Julia was seeded elsewhere)"
-    end
+    @info "seeding RNG" rng_seed=seed
+    Random.seed!(seed)
 
-    sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
-    validate_sample_only(sample_only_tup)
-
-    @info "starting NUTS" n_adapts=n_adapts n_samples=n_samples target_acceptance=target_acceptance sample_only=sample_only_tup
+    @info "starting NUTS" n_adapts n_samples target_acceptance sample_only checkpoint_every
     model = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
     conditioned = model | fixed_sites
     nuts = Turing.NUTS(
@@ -174,14 +170,11 @@ function _run(settings::Dict)
         target_acceptance;
         metricT = AdvancedHMC.DenseEuclideanMetric,
     )
-    chain = sample(
-        conditioned,
-        nuts,
-        MCMCThreads(),
-        n_samples,
-        num_threads;
-        progress = true,
-        save_state = true,
+    chain = sample_with_checkpoints(
+        conditioned, nuts, n_samples, num_chains;
+        checkpoint_every = checkpoint_every,
+        checkpoint_path = checkpoint_path,
+        progress = progress,
     )
     @info "NUTS finished" chain_size=size(chain)
 
@@ -189,11 +182,14 @@ function _run(settings::Dict)
     Serialization.serialize(output_jls, chain)
     @info "wrote chain to JLS" path=output_jls
 
+    @info "writing InferenceData to NetCDF" path=output_netcdf
     idata = from_mcmcchains(chain; library = "Turing")
-    if output_netcdf !== nothing
-        @info "writing InferenceData to NetCDF" path=output_netcdf
-        to_netcdf(idata, output_netcdf)
-        @info "wrote InferenceData to NetCDF" path=output_netcdf
+    to_netcdf(idata, output_netcdf)
+    @info "wrote InferenceData to NetCDF" path=output_netcdf
+
+    if isfile(checkpoint_path)
+        @info "removing checkpoint" path=checkpoint_path
+        rm(checkpoint_path; force = true)
     end
 
     @info "done"
@@ -202,12 +198,12 @@ end
 
 @main function run_inference(; settings::String = "")
     settings_path = isempty(settings) ? joinpath(@__DIR__, "run_inference.toml") : settings
+    settings_path = abspath(settings_path)
     @info "loading settings" path=settings_path
-    s = load_settings_toml(settings_path)
-    return _run(s)
+    s = TOML.parsefile(settings_path)
+    return _run(s, dirname(settings_path))
 end
 
 end # module RunInferenceCLI
 
 Base.invokelatest(RunInferenceCLI.command_main)
-
