@@ -22,13 +22,12 @@ begin
     Pkg.activate(@__DIR__)
     Pkg.instantiate()
 
-    using ArviZ
     using CairoMakie
+    using JLD2
     using MCMCChains
     using MCMCDiagnosticTools
     using PairPlots
     using StatsPlots
-    using NCDatasets
     using Statistics
     using DataFrames
 end
@@ -40,140 +39,19 @@ StatsPlots.default(fmt = :svg, dpi = 300)
 # ## Loading chains
 
 # %%
-filepath = "chains-H0-γ-κ-zpeak.nc"
+filepath = "chains-H0-γ-κ-zpeak.jld2"
 
-function abspath_from_root_dir(filename::AbstractString)
-    return (realpath ∘ joinpath)(@__DIR__, "..", filename)
-end
-netcdf_path = abspath_from_root_dir(filepath)
+chain_path = (realpath ∘ joinpath)(@__DIR__, "..", filepath)
 
 # %%
 begin
-    isfile(netcdf_path) ||
-        throw(ArgumentError("NetCDF file not found: $(repr(netcdf_path))"))
-    idata = from_netcdf(netcdf_path)
-end
-
-# %%
-begin
-    function to_mcmcchains(
-            idata;
-            internals_name_map::AbstractDict{Symbol, Symbol} = Dict{Symbol, Symbol}()
-    )
-        # Build MCMCChains.Chains from posterior + compatible sample_stats arrays.
-        # MCMCChains expects (draws, parameters, chains), while each InferenceData
-        # variable is stored as (draw, chain).
-        hasproperty(idata, :posterior) ||
-            throw(ArgumentError("InferenceData is missing `posterior` group"))
-
-        post = idata.posterior
-        post_syms = collect(propertynames(post))
-        isempty(post_syms) &&
-            throw(ArgumentError("`posterior` group has no variables"))
-
-        first_arr = Array(getproperty(post, first(post_syms)))
-        ndims(first_arr) == 2 ||
-            throw(ArgumentError("Posterior variables must be 2D (draw, chain)"))
-        n_draw, n_chain = size(first_arr)
-
-        param_vals = zeros(Float64, n_draw, length(post_syms), n_chain)
-        for (i, s) in enumerate(post_syms)
-            arr = Array(getproperty(post, s))
-            size(arr) == (n_draw, n_chain) ||
-                throw(ArgumentError("Posterior variable $(s) has shape $(size(arr)); expected ($(n_draw), $(n_chain))"))
-            param_vals[:, i, :] = Float64.(arr)
-        end
-
-        internal_syms = Symbol[]
-        internal_blocks = Array{Float64, 3}[]
-        if hasproperty(idata, :sample_stats)
-            stats = idata.sample_stats
-            for s in propertynames(stats)
-                arr = Array(getproperty(stats, s))
-                if ndims(arr) == 2 && size(arr) == (n_draw, n_chain)
-                    mapped = get(internals_name_map, s, s)
-                    if mapped in post_syms || mapped in internal_syms
-                        throw(ArgumentError("Mapped internal name $(mapped) conflicts with an existing parameter/internal name"))
-                    end
-                    push!(internal_syms, mapped)
-                    push!(internal_blocks, reshape(Float64.(arr), n_draw, 1, n_chain))
-                end
-            end
-        end
-
-        if isempty(internal_syms)
-            return Chains(param_vals, post_syms, (parameters = post_syms,))
-        end
-
-        internal_vals = cat(internal_blocks...; dims = 2)
-        full_vals = cat(param_vals, internal_vals; dims = 2)
-        parameter_names = vcat(post_syms, internal_syms)
-        section_map = (parameters = post_syms, internals = internal_syms)
-        return Chains(full_vals, parameter_names, section_map)
-    end
-
-    internals_name_map = Dict(
-        :energy => :hamiltonian_energy,
-        :energy_error => :hamiltonian_energy_error
-    )
-    chain = to_mcmcchains(idata; internals_name_map = internals_name_map)
+    isfile(chain_path) ||
+        throw(ArgumentError("JLD2 file not found: $(repr(chain_path))"))
+    chain = load(chain_path)["chain"]
 end
 
 # %%
 chain_params = names(chain, :parameters)
-
-# %%
-begin
-    function has_var(dataset, name::Symbol)
-        return name in propertynames(dataset)
-    end
-
-    function variable_array(dataset, name::Symbol)
-        return Array(getproperty(dataset, name))
-    end
-
-    function numeric_summary(x)
-        values = collect(skipmissing(vec(Float64.(Array(x)))))
-        isempty(values) &&
-            return (mean = missing, min = missing, median = missing, max = missing)
-        return (
-            mean = mean(values),
-            min = minimum(values),
-            median = median(values),
-            max = maximum(values)
-        )
-    end
-
-    function sample_stats_diagnostics(idata)
-        hasproperty(idata, :sample_stats) || return "sample_stats group not present"
-        stats = idata.sample_stats
-        return (
-            variables = propertynames(stats),
-            divergence_count = has_var(stats, :diverging) ?
-                               count(!iszero, vec(variable_array(stats, :diverging))) :
-                               missing,
-            acceptance_rate = has_var(stats, :acceptance_rate) ?
-                              numeric_summary(variable_array(stats, :acceptance_rate)) :
-                              missing,
-            tree_depth = has_var(stats, :tree_depth) ?
-                         numeric_summary(variable_array(stats, :tree_depth)) : missing,
-            n_steps = has_var(stats, :n_steps) ?
-                      numeric_summary(variable_array(stats, :n_steps)) : missing,
-            bfmi = has_var(stats, :energy) ?
-                   ArviZ.bfmi(variable_array(stats, :energy); dims = 1) : missing
-        )
-    end
-
-    function pairplot_truth_namedtuple(idata, chain_params)
-        hasproperty(idata, :constant_data) || return nothing
-        cd = idata.constant_data
-        cols = Symbol[p for p in chain_params if p in propertynames(cd)]
-        isempty(cols) && return nothing
-        return (; (p => Float64(only(Array(getproperty(cd, p)))) for p in cols)...)
-    end
-
-    nothing
-end
 
 # %% [markdown]
 # ## Data
@@ -200,11 +78,10 @@ autocorplot(chain; maxlag = 100)
 meanplot(chain)
 
 # %%
-function _ensure_stats_array(stats, name::Symbol)
-    hasproperty(stats, name) || return nothing
-    A = Array(getproperty(stats, name))
-    ndims(A) == 1 && return reshape(A, length(A), 1)
-    return A
+function _ensure_internal_array(chain::Chains, name::Symbol)
+    name in names(chain, :internals) || return nothing
+    vals = chain[:, name, :].value
+    return reshape(Array(vals), size(vals, 1), size(vals, 3))
 end
 
 function _moving_average(y::AbstractVector, window::Int)
@@ -271,18 +148,16 @@ function _plot_traces!(ax, A, sym::Symbol; colors, smooth_window::Int, draw_stri
 end
 
 function plot_sampler_diagnostics(
-        idata; stats_syms = [:step_size, :acceptance_rate, :tree_depth, :diverging],
+        chain::Chains;
+        stats_syms = [:step_size, :acceptance_rate, :tree_depth, :diverging],
         figsize = (1000, 800), smooth_window::Int = 25, draw_stride::Int = 5)
-    hasproperty(idata, :sample_stats) ||
-        throw(ArgumentError("`idata` has no `sample_stats` group"))
-
     cols = 2
     fig = Figure(; size = figsize)
     colors = Makie.to_colormap(:Set1_9)
 
     for (i, sym) in enumerate(stats_syms)
         ax = Axis(fig[cld(i, cols), mod1(i, cols)]; title = string(sym), xlabel = "draw")
-        A = _ensure_stats_array(idata.sample_stats, sym)
+        A = _ensure_internal_array(chain, sym)
         if A === nothing
             Makie.text!(ax, 0.5, 0.5, "missing", align = (:center, :center))
         elseif sym == :diverging
@@ -295,7 +170,7 @@ function plot_sampler_diagnostics(
     return fig
 end
 
-plot_sampler_diagnostics(idata)
+plot_sampler_diagnostics(chain)
 
 
 # %%
@@ -306,13 +181,8 @@ energyplot(chain)
 
 # %%
 begin
-    truth_nt = pairplot_truth_namedtuple(idata, chain_params)
     if length(chain_params) >= 2
-        if truth_nt !== nothing
-            pairplot(chain, PairPlots.Truth(truth_nt; label = "Truth"))
-        else
-            pairplot(chain)
-        end
+        pairplot(chain)
     else
         StatsPlots.density(chain)
     end
