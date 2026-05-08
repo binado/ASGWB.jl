@@ -13,9 +13,7 @@ using ASGWB: load_cache, build_turing_model, Detector, DEFAULT_PARAMETER_ORDER
 using Turing
 using AdvancedHMC
 using Random
-using Serialization
-using ArviZ
-using NCDatasets
+using JLD2
 using Distributions
 using TOML
 using Pkg
@@ -56,8 +54,8 @@ end
     CheckpointCallback(every, base, output_dir, model, sampler, num_chains)
 
 AbstractMCMC callback that buffers transitions separately for each chain and
-serializes a single-chain `MCMCChains.Chains` snapshot to
-`base.partial.chainN.jls` every time that chain crosses a new multiple of
+saves a single-chain `MCMCChains.Chains` snapshot to
+`base.partial.chainN.jld2` every time that chain crosses a new multiple of
 `every`. With `save_state = true` on the bundled samples, the snapshot retains
 the matching sampler state for manual recovery/debugging.
 """
@@ -91,7 +89,7 @@ function CheckpointCallback(
 end
 
 function checkpoint_path(cb::CheckpointCallback, chain_number::Int)
-    return joinpath(cb.output_dir, "$(cb.base).partial.chain$(chain_number).jls")
+    return joinpath(cb.output_dir, "$(cb.base).partial.chain$(chain_number).jld2")
 end
 
 function checkpoint_paths(cb::CheckpointCallback, num_chains::Int)
@@ -120,7 +118,7 @@ function (cb::CheckpointCallback)(
 
         path = checkpoint_path(cb, chain_number)
         tmp = path * ".tmp"
-        Serialization.serialize(tmp, snapshot)
+        jldsave(tmp; snapshot)
         mv(tmp, path; force = true)
         cb.last_checkpoint_iters[chain_number] = n
         @info "checkpoint written" path=path chain=chain_number iteration=n
@@ -163,8 +161,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     timestamp = format(now(), "yyyymmdd-HHMMSS")
     params_suffix = join(sample_only, "-")
     base = "$(output_prefix)-$(params_suffix)-seed$(seed)-$(timestamp)"
-    output_jls = joinpath(output_dir, "$base.jls")
-    output_netcdf = joinpath(output_dir, "$base.nc")
+    output_jld2 = joinpath(output_dir, "$base.jld2")
 
     validate_init_against_priors(PRIORS, init)
     priors_turing = product_distribution(PRIORS)
@@ -220,14 +217,9 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     end
     @info "NUTS finished" chain_size=size(chain)
 
-    @info "writing chain to JLS" path=output_jls
-    Serialization.serialize(output_jls, chain)
-    @info "wrote chain to JLS" path=output_jls
-
-    @info "writing InferenceData to NetCDF" path=output_netcdf
-    idata = from_mcmcchains(chain; library = "Turing")
-    to_netcdf(idata, output_netcdf)
-    @info "wrote InferenceData to NetCDF" path=output_netcdf
+    @info "writing chain to JLD2" path=output_jld2
+    jldsave(output_jld2; chain)
+    @info "wrote chain to JLD2" path=output_jld2
 
     if callback !== nothing
         retained_checkpoint_paths = filter(isfile, checkpoint_paths(callback, num_chains))

@@ -6,7 +6,7 @@ using ASGWB
 using AbstractMCMC: chainsstack
 using Comonicon: @main
 using MCMCChains: Chains
-using Serialization
+using JLD2
 using Turing
 
 function _glob_regex(pattern::AbstractString)
@@ -45,24 +45,24 @@ function _expand_input(input::AbstractString)
 end
 
 function _read_chain(path::AbstractString)
-    chain = Serialization.deserialize(path)
+    chain = load(path)["chain"]
     chain isa Chains || throw(ArgumentError("not an MCMCChains.Chains file: $path"))
     size(chain, 3) == 1 || @warn "input has more than one chain" path size=size(chain)
     return chain
 end
 
 """
-Stack serialized MCMCChains files, such as per-chain checkpoint partials, into
+Stack JLD2-saved MCMCChains files, such as per-chain checkpoint partials, into
 one combined MCMCChains.Chains object.
 
 # Args
 
 - `inputs`: input chain files or quoted glob patterns, for example
-  `"chains.partial.chain*.jls"`.
+  `"chains.partial.chain*.jld2"`.
 
 # Options
 
-- `-o, --output=<path>`: path for the stacked `.jls` output.
+- `-o, --output=<path>`: path for the stacked `.jld2` output.
 
 - `-f, --force`: overwrite an existing output file.
 """
@@ -83,7 +83,7 @@ one combined MCMCChains.Chains object.
     stacked = chainsstack(chains)
     output_dir = dirname(output)
     isempty(output_dir) || mkpath(output_dir)
-    Serialization.serialize(output, stacked)
+    jldsave(output; chain=stacked)
 
     @info "wrote stacked chain" path=output size=size(stacked)
     return nothing
