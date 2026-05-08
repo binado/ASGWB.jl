@@ -30,6 +30,8 @@ begin
     using StatsPlots
     using Statistics
     using DataFrames
+    using Turing
+    using ASGWB
 end
 
 # %%
@@ -39,7 +41,7 @@ StatsPlots.default(fmt = :svg, dpi = 300)
 # ## Loading chains
 
 # %%
-filepath = "chains-H0-γ-κ-zpeak.jld2"
+filepath = "output/chains-H0-seed13-20260508-183716.jld2"
 
 chain_path = (realpath ∘ joinpath)(@__DIR__, "..", filepath)
 
@@ -80,8 +82,9 @@ meanplot(chain)
 # %%
 function _ensure_internal_array(chain::Chains, name::Symbol)
     name in names(chain, :internals) || return nothing
-    vals = chain[:, name, :].value
-    return reshape(Array(vals), size(vals, 1), size(vals, 3))
+    vals = Array(chain[:, name, :])
+    ndims(vals) == 2 && return vals
+    return reshape(vals, size(vals, 1), size(vals, 3))
 end
 
 function _moving_average(y::AbstractVector, window::Int)
@@ -149,7 +152,7 @@ end
 
 function plot_sampler_diagnostics(
         chain::Chains;
-        stats_syms = [:step_size, :acceptance_rate, :tree_depth, :diverging],
+        stats_syms = [:step_size, :acceptance_rate, :tree_depth, :numerical_error],
         figsize = (1000, 800), smooth_window::Int = 25, draw_stride::Int = 5)
     cols = 2
     fig = Figure(; size = figsize)
@@ -160,7 +163,7 @@ function plot_sampler_diagnostics(
         A = _ensure_internal_array(chain, sym)
         if A === nothing
             Makie.text!(ax, 0.5, 0.5, "missing", align = (:center, :center))
-        elseif sym == :diverging
+        elseif sym in (:diverging, :numerical_error)
             _plot_divergences!(ax, A)
         else
             _plot_traces!(ax, A, sym; colors, smooth_window, draw_stride)
