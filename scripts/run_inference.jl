@@ -181,9 +181,8 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     Pkg.status()
 
     @info "loading importance cache" path=cache
-    t_cache = time()
     problem = load_cache(cache, detectors)
-    @info "cache loaded" seconds=round(time()-t_cache; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    @info "cache loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 
     @info "using fiducial in-band spectrum from cache as observed data"
     observed = problem.observation.fiducial_spectral_density
@@ -192,7 +191,8 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     Random.seed!(seed)
 
     @info "starting NUTS" n_adapts n_samples target_acceptance sample_only checkpoint_every
-    model = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
+    model = build_turing_model(
+        problem, priors_turing; track = true, observed_spectral_density = observed)
     conditioned = model | fixed_sites
     nuts = Turing.NUTS(
         n_adapts,
@@ -219,7 +219,6 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
 
     @info "writing chain to JLD2" path=output_jld2
     jldsave(output_jld2; chain)
-    @info "wrote chain to JLD2" path=output_jld2
 
     if callback !== nothing
         retained_checkpoint_paths = filter(isfile, checkpoint_paths(callback, num_chains))
