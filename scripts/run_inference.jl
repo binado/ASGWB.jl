@@ -93,6 +93,10 @@ function checkpoint_path(cb::CheckpointCallback, chain_number::Int)
     return joinpath(cb.output_dir, "$(cb.base).partial.chain$(chain_number).jls")
 end
 
+function checkpoint_paths(cb::CheckpointCallback, num_chains::Int)
+    return checkpoint_path.(Ref(cb), 1:num_chains)
+end
+
 function (cb::CheckpointCallback)(
         rng, model, sampler, transition, state, iteration;
         chain_number::Int = 1, kwargs...
@@ -226,9 +230,9 @@ function _run(settings::Dict, settings_dir::AbstractString)
     @info "wrote InferenceData to NetCDF" path=output_netcdf
 
     if callback !== nothing
-        checkpoint_paths = filter(isfile, checkpoint_path.(Ref(callback), 1:num_chains))
-        if !isempty(checkpoint_paths)
-            @info "retaining partial checkpoint files" paths=checkpoint_paths
+        retained_checkpoint_paths = filter(isfile, checkpoint_paths(callback, num_chains))
+        if !isempty(retained_checkpoint_paths)
+            @info "retaining partial checkpoint files" count=length(retained_checkpoint_paths) output_dir base
         end
     end
 
