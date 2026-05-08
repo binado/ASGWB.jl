@@ -23,6 +23,7 @@ using LinearAlgebra: BLAS
 using MCMCChains: Chains
 using AbstractMCMC: bundle_samples
 using Dates: now, format
+using Comonicon: @main
 
 
 """Check each `init` scalar has positive prior density under the matching `priors` entry."""
@@ -128,7 +129,7 @@ function (cb::CheckpointCallback)(
 end
 
 
-function _run(settings::Dict, settings_dir::AbstractString)
+function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = false)
     cache = resolve_path(settings["cache_path"]::String, settings_dir)
     detectors = [Detector(n) for n in settings["detectors"]]
     sample_only = Tuple(Symbol(s) for s in settings["sample_only"])
@@ -168,10 +169,9 @@ function _run(settings::Dict, settings_dir::AbstractString)
     validate_init_against_priors(PRIORS, init)
     priors_turing = product_distribution(PRIORS)
 
-    # Cluster-friendly defaults: avoid BLAS oversubscription with MCMCThreads
-    # and disable the carriage-return progress bar in non-TTY contexts.
+    # Cluster-friendly defaults: avoid BLAS oversubscription with MCMCThreads.
     BLAS.set_num_threads(1)
-    progress = isinteractive()
+    progress = interactive
 
     num_threads = Base.Threads.nthreads()
     if num_chains != num_threads
@@ -240,16 +240,94 @@ function _run(settings::Dict, settings_dir::AbstractString)
     return nothing
 end
 
-function main()
+function resolve_config_path(config::AbstractString)
     default_path = joinpath(@__DIR__, "run_inference.toml")
-    settings_path = get(ENV, "MCMC_CONFIG_FILEPATH",
-        isempty(ARGS) ? default_path : ARGS[1])
-    settings_path = abspath(settings_path)
+    settings_path = isempty(config) ? get(ENV, "MCMC_CONFIG_FILEPATH", default_path) :
+                    config
+    return abspath(settings_path)
+end
+
+recursive_merge(x::AbstractDict...) = merge(recursive_merge, x...)
+recursive_merge(_, x) = x
+
+function cli_overrides(;
+        seed::Int,
+        output_dir::AbstractString,
+        output_prefix::AbstractString,
+        num_chains::Int,
+        n_samples::Int,
+        n_adapts::Int,
+        checkpoint_every::Int
+)
+    overrides = Dict{String, Any}("seed" => seed)
+    isempty(output_dir) || (overrides["output_dir"] = String(output_dir))
+    isempty(output_prefix) || (overrides["output_prefix"] = String(output_prefix))
+
+    sampler = Dict{String, Any}()
+    num_chains >= 0 && (sampler["num_chains"] = num_chains)
+    n_samples > 0 && (sampler["n_samples"] = n_samples)
+    n_adapts > 0 && (sampler["n_adapts"] = n_adapts)
+    checkpoint_every >= 0 && (sampler["checkpoint_every"] = checkpoint_every)
+    isempty(sampler) || (overrides["sampler"] = sampler)
+
+    return overrides
+end
+
+"""
+Run ASGWB inference from a TOML configuration file.
+
+# Options
+
+- `--config=<path>`: TOML settings file. Falls back to `MCMC_CONFIG_FILEPATH`,
+  then `scripts/run_inference.toml`.
+
+- `--seed=<int>`: RNG seed.
+
+- `--output-dir=<path>`: override `output_dir` from the TOML settings.
+
+- `--output-prefix=<name>`: override `output_prefix` from the TOML settings.
+
+- `--num-chains=<int>`: override `sampler.num_chains` from the TOML settings.
+
+- `--n-samples=<int>`: override `sampler.n_samples` from the TOML settings.
+
+- `--n-adapts=<int>`: override `sampler.n_adapts` from the TOML settings.
+
+- `--checkpoint-every=<int>`: override `sampler.checkpoint_every` from the TOML settings.
+
+- `--interactive`: enable Turing's sampling progress bar.
+"""
+@main function run_inference(;
+        config::String = "",
+        seed::Int = 42,
+        output_dir::String = "",
+        output_prefix::String = "",
+        num_chains::Int = -1,
+        n_samples::Int = 0,
+        n_adapts::Int = 0,
+        checkpoint_every::Int = -1,
+        interactive::Bool = false
+)
+    settings_path = resolve_config_path(config)
     @info "loading settings" path=settings_path
     s = TOML.parsefile(settings_path)
-    return _run(s, dirname(settings_path))
+
+    s = recursive_merge(
+        s,
+        cli_overrides(;
+            seed,
+            output_dir,
+            output_prefix,
+            num_chains,
+            n_samples,
+            n_adapts,
+            checkpoint_every
+        )
+    )
+
+    return _run(s, dirname(settings_path); interactive)
 end
 
 end # module RunInferenceCLI
 
-RunInferenceCLI.main()
+Base.invokelatest(RunInferenceCLI.command_main)

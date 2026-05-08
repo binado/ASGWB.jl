@@ -15,8 +15,7 @@
 #
 # Config resolution (first hit wins):
 #   1. MCMC_CONFIG_FILEPATH env var (set below from $1 if provided)
-#   2. positional ARGS[1] passed to julia
-#   3. scripts/run_inference.toml default
+#   2. scripts/run_inference.toml default
 
 set -euo pipefail
 
