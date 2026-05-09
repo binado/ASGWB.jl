@@ -1,10 +1,7 @@
-#!/usr/bin/env julia
-
 module StackPartialChainsCLI
 
 using ASGWB
 using AbstractMCMC: chainsstack
-using Comonicon: @main
 using MCMCChains: Chains
 using JLD2
 using Turing
@@ -73,8 +70,12 @@ and `snapshot` (checkpoint) keys.
 - `-o, --output=<path>`: path for the stacked `.jld2` output.
 
 - `-f, --force`: overwrite an existing output file.
+
+Invoke from the repo root, for example:
+
+    julia --project=ASGWBInference -m ASGWBInference stack partials*.jld2 --output=stacked.jld2
 """
-@main function stack_partial_chains(
+function stack(
         inputs::String...;
         output::String,
         force::Bool = false
@@ -98,5 +99,3 @@ and `snapshot` (checkpoint) keys.
 end
 
 end # module StackPartialChainsCLI
-
-exit(StackPartialChainsCLI.julia_main())

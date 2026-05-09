@@ -11,11 +11,12 @@
 
 # Usage:
 #   cd /path/to/ASGWB.jl
-#   sbatch scripts/run_inference.sbatch [ASGWBInference/run_inference.toml]
+#   sbatch run_inference.sbatch [ASGWBInference/run_inference.toml]
 #
 # Config resolution (first hit wins):
 #   1. MCMC_CONFIG_FILEPATH env var (set below from $1 if provided)
-#   2. ASGWBInference/run_inference.toml default
+#   2. positional ARGS[1] passed to julia
+#   3. ASGWBInference/run_inference.toml default
 
 set -euo pipefail
 
@@ -51,8 +52,12 @@ export JULIA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 # but exporting here covers any pre-sample BLAS calls during init).
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
+export PATH=/home/bernardoveronese/.juliaup/bin:$PATH
+
+# Files copied by job-nanny to the execution partition. Keep these paths
+# relative to REPO_ROOT so the copied tree still has the package layout.
 export INPUT="Project.toml Manifest.toml src assets ASGWBInference *.h5 *.toml"
-export OUTPUT="ASGWBInference scripts output *.jls *.partial.chain*.jls"
+export OUTPUT="ASGWBInference scripts output *.nc *.jls *.partial.jls"
 
 echo "[$(date -Iseconds)] host=$(hostname) job=${SLURM_JOB_ID:-local} cpus=${SLURM_CPUS_PER_TASK:-?} threads=$JULIA_NUM_THREADS config=${MCMC_CONFIG_FILEPATH:-<default>}"
 

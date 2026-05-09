@@ -1,10 +1,3 @@
-#!/usr/bin/env julia
-
-import Pkg
-
-Pkg.activate(@__DIR__)
-Pkg.instantiate()
-
 module RunInferenceCLI
 
 using ASGWB
@@ -22,8 +15,6 @@ using LinearAlgebra: BLAS
 using MCMCChains: Chains
 using AbstractMCMC: bundle_samples
 using Dates: now, format
-using Comonicon: @main
-
 
 """Check each `init` scalar has positive prior density under the matching `priors` entry."""
 function validate_init_against_priors(priors, init)
@@ -248,7 +239,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
 end
 
 function resolve_config_path(config::AbstractString)
-    default_path = joinpath(@__DIR__, "run_inference.toml")
+    default_path = joinpath(dirname(@__DIR__), "run_inference.toml")
     settings_path = isempty(config) ? get(ENV, "MCMC_CONFIG_FILEPATH", default_path) :
                     config
     return abspath(settings_path)
@@ -289,7 +280,7 @@ Run ASGWB inference from a TOML configuration file.
 # Options
 
 - `--config=<path>`: TOML settings file. Falls back to `MCMC_CONFIG_FILEPATH`,
-  then `scripts/run_inference.toml`.
+  then `ASGWBInference/run_inference.toml` next to the package directory.
 
 - `--seed=<int>`: RNG seed. Falls back to the `seed` field in the TOML
   settings when not provided.
@@ -310,8 +301,12 @@ Run ASGWB inference from a TOML configuration file.
   Accepted value: `"ForwardDiff"`.
 
 - `--interactive`: enable Turing's sampling progress bar.
+
+Invoke from the repo root, for example:
+
+    julia --project=ASGWBInference -m ASGWBInference run --config=ASGWBInference/run_inference.toml
 """
-@main function run_inference(;
+function run(;
         config::String = "",
         seed::Int = -1,
         output_dir::String = "",
@@ -345,5 +340,3 @@ Run ASGWB inference from a TOML configuration file.
 end
 
 end # module RunInferenceCLI
-
-Base.invokelatest(RunInferenceCLI.command_main)

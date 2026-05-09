@@ -3,10 +3,7 @@
 # the cosmology `quadgk` path.
 #
 # Run from the package root, for example:
-#   julia --project=ASGWBInference -e 'using ASGWBInference; exit(ASGWBInference.command_main())' profile --config-file=ASGWBInference/profile_turing.toml
-#
-# Or the standalone script (root env):
-#   julia --project=. scripts/profile_turing.jl --config-file=ASGWBInference/profile_turing.toml
+#   julia --project=ASGWBInference -m ASGWBInference profile --config-file=ASGWBInference/profile_turing.toml
 #
 # Sites under investigation:
 #   - src/cosmology.jl:9-13     quadgk inside comoving_distance
@@ -16,7 +13,7 @@
 #
 # This script is *measurement only*: it does not edit any src/ files.
 
-module ASGWBProfileCLI
+module ASGWBProfileMainCLI
 
 using ASGWB
 using ASGWB:
@@ -37,7 +34,6 @@ using ASGWB:
              HyperParameters,
              Detector
 using BenchmarkTools
-using Comonicon: @main
 using DelimitedFiles
 using LogDensityProblems
 using LogDensityProblemsAD
@@ -490,7 +486,7 @@ Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation pr
 
 - `--profile-out=<path>`: write raw `Profile.retrieve()` snapshot via `Serialization`.
 """
-@main function profile_turing(;
+function profile(;
         config_file::String,
         seconds::Float64 = 2.0,
         profile_samples::Int = 500,
@@ -530,6 +526,4 @@ Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation pr
     )
 end
 
-end # module ASGWBProfileCLI
-
-Base.invokelatest(ASGWBProfileCLI.command_main)
+end # module ASGWBProfileMainCLI

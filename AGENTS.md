@@ -2,14 +2,14 @@
 
 ## Project Structure & Module Organization
 
-ASGWB.jl is a Julia package for astrophysical stochastic gravitational-wave background modeling and inference. The package entry point is `src/ASGWB.jl`, which includes and exports the public API. Core modules live in `src/`, with detector-specific code under `src/detector/`. Tests live in `test/` and are listed from `test/runtests.jl`. Detector definitions and noise curves are stored in `assets/detector/`. Scripts live in `scripts/`, while Pluto files are in `notebooks/`.
+ASGWB.jl is a Julia package for astrophysical stochastic gravitational-wave background modeling and inference. The package entry point is `src/ASGWB.jl`, which includes and exports the public API. Core modules live in `src/`, with detector-specific code under `src/detector/`. Tests live in `test/` and are listed from `test/runtests.jl`. Detector definitions and noise curves are stored in `assets/detector/`. The Comonicon CLI for sampling and related workflows lives in `ASGWBInference/` (depends on the root package via `[sources]`). Developer scripts and utilities remain in `scripts/`, while Pluto files are in `notebooks/`.
 
 ## Build, Test, and Development Commands
 
 - `just fmt`: format the repository using JuliaFormatter.
 - `just test`: run the package test suite through `Pkg.test()`.
 - `just pluto`: instantiate the notebook environment and launch Pluto.
-- `julia --project=. scripts/run_inference.jl scripts/run_inference.toml`: run the TOML-configured inference workflow.
+- `julia --project=ASGWBInference -e 'using ASGWBInference; exit(ASGWBInference.command_main())' run --config=ASGWBInference/run_inference.toml`: run the TOML-configured inference workflow (`ARGS` after `-e` become CLI arguments; set `MCMC_CONFIG_FILEPATH` or pass `--config=` as needed).
 
 If `just` is unavailable, use the Julia commands in the `justfile`, for example `julia --project=. -e 'using Pkg; Pkg.test()'`.
 
