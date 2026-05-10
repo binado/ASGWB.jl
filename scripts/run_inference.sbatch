@@ -52,7 +52,7 @@ export JULIA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export INPUT="Project.toml Manifest.toml src assets scripts *.h5 *.toml"
-export OUTPUT="scripts *.nc *.jls *.partial.chain*.jls"
+export OUTPUT="scripts *.nc *.jls *.partial.chain*.jls *.jld2 *.partial.chain*.jld2"
 
 echo "[$(date -Iseconds)] host=$(hostname) job=${SLURM_JOB_ID:-local} cpus=${SLURM_CPUS_PER_TASK:-?} threads=$JULIA_NUM_THREADS config=${MCMC_CONFIG_FILEPATH:-<default>}"
 
