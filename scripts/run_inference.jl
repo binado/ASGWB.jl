@@ -68,7 +68,6 @@ mutable struct CheckpointCallback{M, S}
     transitions::Vector{Vector{Any}}
     states::Vector{Any}
     last_checkpoint_iters::Vector{Int}
-    lock::ReentrantLock
 end
 
 function CheckpointCallback(
@@ -84,7 +83,6 @@ function CheckpointCallback(
         [Vector{Any}() for _ in 1:num_chains],
         Vector{Any}(undef, num_chains),
         zeros(Int, num_chains),
-        ReentrantLock()
     )
 end
 
@@ -100,29 +98,27 @@ function (cb::CheckpointCallback)(
         rng, model, sampler, transition, state, iteration;
         chain_number::Int = 1, kwargs...
 )
-    lock(cb.lock) do
-        push!(cb.transitions[chain_number], transition)
-        cb.states[chain_number] = state
+    push!(cb.transitions[chain_number], transition)
+    cb.states[chain_number] = state
 
-        n = length(cb.transitions[chain_number])
-        target = (cb.last_checkpoint_iters[chain_number] ÷ cb.every + 1) * cb.every
-        n >= target || return nothing
+    n = length(cb.transitions[chain_number])
+    target = (cb.last_checkpoint_iters[chain_number] ÷ cb.every + 1) * cb.every
+    n >= target || return nothing
 
-        chain_transitions = cb.transitions[chain_number]
-        typed_transitions = Vector{typeof(chain_transitions[1])}(undef, n)
-        copyto!(typed_transitions, 1, chain_transitions, 1, n)
-        snapshot = bundle_samples(
-            typed_transitions, cb.model, cb.sampler, cb.states[chain_number],
-            Chains; save_state = true
-        )
+    chain_transitions = cb.transitions[chain_number]
+    typed_transitions = Vector{typeof(chain_transitions[1])}(undef, n)
+    copyto!(typed_transitions, 1, chain_transitions, 1, n)
+    snapshot = bundle_samples(
+        typed_transitions, cb.model, cb.sampler, cb.states[chain_number],
+        Chains; save_state = true
+    )
 
-        path = checkpoint_path(cb, chain_number)
-        tmp = path * ".tmp"
-        jldsave(tmp; snapshot)
-        mv(tmp, path; force = true)
-        cb.last_checkpoint_iters[chain_number] = n
-        @info "checkpoint written" path=path chain=chain_number iteration=n
-    end
+    path = checkpoint_path(cb, chain_number)
+    tmp = path * ".tmp"
+    jldsave(tmp; snapshot)
+    mv(tmp, path; force = true)
+    cb.last_checkpoint_iters[chain_number] = n
+    @info "checkpoint written" path=path chain=chain_number iteration=n
     return nothing
 end
 
