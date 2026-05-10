@@ -45,7 +45,14 @@ function _expand_input(input::AbstractString)
 end
 
 function _read_chain(path::AbstractString)
-    chain = load(path)["chain"]
+    data = load(path)
+    chain = if haskey(data, "chain")
+        data["chain"]
+    elseif haskey(data, "snapshot")
+        data["snapshot"]
+    else
+        throw(ArgumentError("JLD2 file contains neither 'chain' nor 'snapshot' key: $path"))
+    end
     chain isa Chains || throw(ArgumentError("not an MCMCChains.Chains file: $path"))
     size(chain, 3) == 1 || @warn "input has more than one chain" path size=size(chain)
     return chain
@@ -53,7 +60,8 @@ end
 
 """
 Stack JLD2-saved MCMCChains files, such as per-chain checkpoint partials, into
-one combined MCMCChains.Chains object.
+one combined MCMCChains.Chains object.  Accepts both `chain` (final output)
+and `snapshot` (checkpoint) keys.
 
 # Args
 
