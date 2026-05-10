@@ -12,3 +12,7 @@ repl project=".":
 
 sync-notebook:
     jupytext 'notebooks/*.ipynb' --to jl:percent
+
+compile:
+    julia --project=ASGWBInference ASGWBInference/deps/build.jl app
+
