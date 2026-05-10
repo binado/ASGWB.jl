@@ -13,6 +13,9 @@ using ASGWB: load_cache, build_turing_model, Detector, DEFAULT_PARAMETER_ORDER
 using Turing
 using AdvancedHMC
 using Random
+using ADTypes
+using Enzyme
+using Mooncake
 using JLD2
 using Distributions
 using TOML
@@ -123,6 +126,23 @@ function (cb::CheckpointCallback)(
 end
 
 
+"""Map a config-string to an `ADTypes.AbstractADType` for Turing's NUTS."""
+function resolve_adtype(name::AbstractString)
+    if name == "Enzyme"
+        return ADTypes.AutoEnzyme(;
+            mode = Enzyme.set_runtime_activity(Enzyme.Forward)
+        )
+    elseif name == "ForwardDiff"
+        return ADTypes.AutoForwardDiff()
+    elseif name == "Mooncake"
+        return ADTypes.AutoMooncakeForward()
+    else
+        throw(ArgumentError(
+            "unknown ad_backend $(repr(name)); expected \"Enzyme\", \"ForwardDiff\", or \"Mooncake\""
+        ))
+    end
+end
+
 function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = false)
     cache = resolve_path(settings["cache_path"]::String, settings_dir)
     detectors = [Detector(n) for n in settings["detectors"]]
@@ -134,6 +154,8 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     n_samples = sampler["n_samples"]::Int
     n_adapts = sampler["n_adapts"]::Int
     target_acceptance = sampler["target_acceptance"]::Float64
+    ad_backend_name = get(sampler, "ad_backend", "ForwardDiff")::String
+    adtype = resolve_adtype(ad_backend_name)
     num_chains = get(sampler, "num_chains", 0)::Int
     num_chains = num_chains > 0 ? num_chains : Base.Threads.nthreads()
     checkpoint_every = get(sampler, "checkpoint_every", 0)::Int
@@ -186,14 +208,15 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     @info "seeding RNG" rng_seed=seed
     Random.seed!(seed)
 
-    @info "starting NUTS" n_adapts n_samples target_acceptance sample_only checkpoint_every
+    @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
     model = build_turing_model(
         problem, priors_turing; track = true, observed_spectral_density = observed)
     conditioned = model | fixed_sites
     nuts = Turing.NUTS(
         n_adapts,
         target_acceptance;
-        metricT = AdvancedHMC.DenseEuclideanMetric
+        metricT = AdvancedHMC.DenseEuclideanMetric,
+        adtype = adtype
     )
     callback = checkpoint_every > 0 ?
                CheckpointCallback(
@@ -241,6 +264,7 @@ function cli_overrides(;
         seed::Union{Int, Nothing},
         output_dir::AbstractString,
         output_prefix::AbstractString,
+        ad_backend::AbstractString,
         num_chains::Int,
         n_samples::Int,
         n_adapts::Int,
@@ -256,6 +280,7 @@ function cli_overrides(;
     n_samples > 0 && (sampler["n_samples"] = n_samples)
     n_adapts > 0 && (sampler["n_adapts"] = n_adapts)
     checkpoint_every >= 0 && (sampler["checkpoint_every"] = checkpoint_every)
+    isempty(ad_backend) || (sampler["ad_backend"] = String(ad_backend))
     isempty(sampler) || (overrides["sampler"] = sampler)
 
     return overrides
@@ -284,6 +309,9 @@ Run ASGWB inference from a TOML configuration file.
 
 - `--checkpoint-every=<int>`: override `sampler.checkpoint_every` from the TOML settings.
 
+- `--ad-backend=<name>`: override `sampler.ad_backend` from the TOML settings.
+  Accepted values: `"Enzyme"`, `"ForwardDiff"`, `"Mooncake"`.
+
 - `--interactive`: enable Turing's sampling progress bar.
 """
 @main function run_inference(;
@@ -291,6 +319,7 @@ Run ASGWB inference from a TOML configuration file.
         seed::Int = -1,
         output_dir::String = "",
         output_prefix::String = "",
+        ad_backend::String = "",
         num_chains::Int = -1,
         n_samples::Int = 0,
         n_adapts::Int = 0,
@@ -307,6 +336,7 @@ Run ASGWB inference from a TOML configuration file.
             seed = seed < 0 ? nothing : seed,
             output_dir,
             output_prefix,
+            ad_backend,
             num_chains,
             n_samples,
             n_adapts,
