@@ -242,7 +242,7 @@ recursive_merge(x::AbstractDict...) = merge(recursive_merge, x...)
 recursive_merge(_, x) = x
 
 function cli_overrides(;
-        seed::Int,
+        seed::Union{Int, Nothing},
         output_dir::AbstractString,
         output_prefix::AbstractString,
         num_chains::Int,
@@ -250,7 +250,8 @@ function cli_overrides(;
         n_adapts::Int,
         checkpoint_every::Int
 )
-    overrides = Dict{String, Any}("seed" => seed)
+    overrides = Dict{String, Any}()
+    seed !== nothing && (overrides["seed"] = seed)
     isempty(output_dir) || (overrides["output_dir"] = String(output_dir))
     isempty(output_prefix) || (overrides["output_prefix"] = String(output_prefix))
 
@@ -272,7 +273,8 @@ Run ASGWB inference from a TOML configuration file.
 - `--config=<path>`: TOML settings file. Falls back to `MCMC_CONFIG_FILEPATH`,
   then `scripts/run_inference.toml`.
 
-- `--seed=<int>`: RNG seed.
+- `--seed=<int>`: RNG seed. Falls back to the `seed` field in the TOML
+  settings when not provided.
 
 - `--output-dir=<path>`: override `output_dir` from the TOML settings.
 
@@ -290,7 +292,7 @@ Run ASGWB inference from a TOML configuration file.
 """
 @main function run_inference(;
         config::String = "",
-        seed::Int = 42,
+        seed::Int = -1,
         output_dir::String = "",
         output_prefix::String = "",
         num_chains::Int = -1,
@@ -306,7 +308,7 @@ Run ASGWB inference from a TOML configuration file.
     s = recursive_merge(
         s,
         cli_overrides(;
-            seed,
+            seed = seed < 0 ? nothing : seed,
             output_dir,
             output_prefix,
             num_chains,
