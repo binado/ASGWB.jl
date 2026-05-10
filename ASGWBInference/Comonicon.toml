@@ -1,4 +1,4 @@
-name = "asgwbinference"
+name = "asgwb"
 
 [application]
 cpu_target = "native"
