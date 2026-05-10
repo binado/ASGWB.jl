@@ -18,6 +18,8 @@
 #
 # Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with `HyperParameters` and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 #
+# On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
+#
 # The first cell activates the **workspace subproject** `Project.toml` under `notebooks/` (Pkg **workspace** with the package root: one shared `Manifest.toml` at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`MCMCChains`**, **`ArviZ`**, **`NCDatasets`**) live there; **`ASGWB`** is a path dev of the parent package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics; **`ArviZ`** (with **`NCDatasets`**) can convert samples to `InferenceData` and write NetCDF. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
 
 # %%
@@ -45,7 +47,7 @@ begin
     using Turing
     using AdvancedHMC
     using Random
-    using Serialization
+    using JLD2
     using Logging
     using MCMCChains
     using ArviZ
@@ -111,8 +113,9 @@ begin
     seed = 1
     observed_spectral_density_csv = nothing
     output_suffix = join(map(string, sample_only), "-")
-    output_jls = "chains-$output_suffix.jls"
+    output_jld2 = "chains-$output_suffix.jld2"
     output_netcdf = "chains-$output_suffix.nc"
+    chain_input_jld2 = nothing
 
     validate_init_against_priors(priors, init)
     priors_turing = product_distribution((
@@ -222,24 +225,36 @@ end
 
 # %%
 begin
-    @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
-    model = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
-    conditioned = model | fixed_sites
-    nuts = Turing.NUTS(
-        sam.n_adapts,
-        sam.target_acceptance;
-        metricT = AdvancedHMC.DenseEuclideanMetric
-    )
-    chain = sample(
-        conditioned,
-        nuts,
-        MCMCThreads(),
-        sam.n_samples,
-        num_threads;
-        progress = true,
-        save_state = true
-    )
-    @info "NUTS finished" chain_size=size(chain)
+    if chain_input_jld2 !== nothing
+        chain_path = isabspath(chain_input_jld2) ? String(chain_input_jld2) :
+            normpath(joinpath(pkgdir(ASGWB), chain_input_jld2))
+        isfile(chain_path) ||
+            throw(ArgumentError("JLD2 chain file not found: $(repr(chain_path))"))
+        @info "loading chain from JLD2" path = chain_path
+        chain = load(chain_path)["chain"]
+        @info "chain loaded" chain_size = size(chain)
+    else
+        @info "starting NUTS" n_adapts = sam.n_adapts n_samples = sam.n_samples target_acceptance = sam.target_acceptance sample_only = sample_only_tup
+        model = build_turing_model(
+            problem, priors_turing; track = true, observed_spectral_density = observed
+        )
+        conditioned = model | fixed_sites
+        nuts = Turing.NUTS(
+            sam.n_adapts,
+            sam.target_acceptance;
+            metricT = AdvancedHMC.DenseEuclideanMetric
+        )
+        chain = sample(
+            conditioned,
+            nuts,
+            MCMCThreads(),
+            sam.n_samples,
+            num_threads;
+            progress = true,
+            save_state = true
+        )
+        @info "NUTS finished" chain_size = size(chain)
+    end
     chain
 end
 
@@ -254,9 +269,13 @@ begin
         to_netcdf(idata, output_netcdf)
         @info "Done"
     end
-    @info "Saving chain object to .jls" path = output_jls
-    serialize(output_jls, chain)
-    @info "Done"
+    if chain_input_jld2 === nothing
+        @info "Saving chain object to JLD2" path = output_jld2
+        jldsave(output_jld2; chain)
+        @info "Done"
+    else
+        @info "Skipping JLD2 save (chain was loaded from disk)"
+    end
 end
 
 # %% [markdown]
