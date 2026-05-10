@@ -4,6 +4,11 @@ fmt:
 test:
     julia --project=. -e 'using Pkg; Pkg.test()'
 
-notebook-dir := "notebooks"
-pluto:
-    julia --project={{notebook-dir}} -e 'using Pkg; using Pluto; Pkg.instantiate(); Pluto.run()'
+resolve project=".":
+    julia --project={{project}} -e 'using Pkg; Pkg.resolve()'
+
+repl project=".":
+    julia --project={{project}}
+
+sync-notebook:
+    jupytext 'notebooks/*.ipynb' --to jl:percent

@@ -1,10 +1,34 @@
-### A Pluto.jl notebook ###
-# v0.20.24
+# -*- coding: utf-8 -*-
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .jl
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.19.1
+#   kernelspec:
+#     display_name: Julia 1.12.6
+#     language: julia
+#     name: julia-1.12
+# ---
 
-using Markdown
-using InteractiveUtils
+# %% [markdown]
+# # MCMC
+#
+# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with `HyperParameters` and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
+#
+# On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
+#
+# The first cell activates the **workspace subproject** `Project.toml` under `notebooks/` (Pkg **workspace** with the package root: one shared `Manifest.toml` at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`MCMCChains`**) live there; **`ASGWB`** is a path dev of the parent package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
 
-# ╔═╡ bb8c74e6-36b3-11f1-84a9-df5091ee4210
+# %%
+begin
+    num_threads = Base.Threads.nthreads()
+    print(num_threads)
+end
+
+# %%
 begin
     import Pkg
     # Activates the environment in the directory where the notebook lives
@@ -13,21 +37,19 @@ begin
     Pkg.instantiate()
     using ASGWB
     using ASGWB:
-		load_cache,
-		build_turing_model,
-		evaluate_importance_terms,
-		omegagw,
-		HyperParameters,
-		Detector,
-		DEFAULT_PARAMETER_ORDER
+                 load_cache,
+                 build_turing_model,
+                 evaluate_importance_terms,
+                 omegagw,
+                 HyperParameters,
+                 Detector,
+                 DEFAULT_PARAMETER_ORDER
     using Turing
-	using AdvancedHMC
+    using AdvancedHMC
     using Random
-    using Serialization
+    using JLD2
     using Logging
     using MCMCChains
-    using ArviZ
-    using NCDatasets
     using StatsPlots
     using Plots
     using CairoMakie
@@ -36,8 +58,7 @@ begin
     default(size = (900, 450))
 end
 
-
-# ╔═╡ aa7c7524-36b3-11f1-bd4e-1121e886c676
+# %%
 begin
     using DelimitedFiles
 
@@ -70,7 +91,7 @@ begin
 
     cache = "analysis_numpyro_julia_cache.h5"
     detectors = [Detector("S1"), Detector("R1")]
-    sample_only = [:H0, :γ, :κ, :zpeak]
+    sample_only = [:H0,]
 
     priors = (
         H0 = Uniform(20, 140),
@@ -89,9 +110,9 @@ begin
 
     seed = 1
     observed_spectral_density_csv = nothing
-	output_suffix = join(map(string, sample_only), "-")
-    output_jls = "chains-$output_suffix.jls"
-    output_netcdf = "chains-$output_suffix.nc"
+    output_suffix = join(map(string, sample_only), "-")
+    output_jld2 = "chains-$output_suffix.jld2"
+    chain_input_jld2 = nothing
 
     validate_init_against_priors(priors, init)
     priors_turing = product_distribution((
@@ -106,27 +127,10 @@ begin
     θ0 = HyperParameters(; init...)
 end
 
-
-# ╔═╡ aa7c72a2-36b3-11f1-a5e9-17b92e804e41
-md"""
-# ASGWB Turing sampling
-
-Same overall flow as [`scripts/run_turing.jl`](../scripts/run_turing.jl), but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with [`HyperParameters`](@ref) and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
-
-The first cell activates the **workspace subproject** [`Project.toml`](./Project.toml) under `notebooks/` (Pkg **workspace** with the package root: one shared [`Manifest.toml`](../Manifest.toml) at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`Pluto`**, **`MCMCChains`**, **`ArviZ`**, **`NCDatasets`**) live there; **`ASGWB`** is a path dev of the parent package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics; **`ArviZ`** (with **`NCDatasets`**) can convert samples to [**`InferenceData`**](https://arviz-devs.github.io/ArviZ.jl/stable/api/inference_data/) and write NetCDF. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
-"""
-
-
-# ╔═╡ a9aeb877-2396-49b6-856e-c719be5db6d7
-begin
-    num_threads = Base.Threads.nthreads()
-    print(num_threads)
-end
-
-# ╔═╡ 38ea9c8a-235e-4a6e-a937-639c8c251e37
+# %%
 fixed_sites
 
-# ╔═╡ aa7c7572-36b3-11f1-a66c-f1c2e7b4f465
+# %%
 begin
     function validate_sample_only(sample_only::Union{Nothing, Tuple{Vararg{Symbol}}})
         sample_only === nothing && return nothing
@@ -189,8 +193,7 @@ begin
     nothing
 end
 
-
-# ╔═╡ 954323e3-b79e-4b1e-9200-dcf074777345
+# %%
 begin
     ev = evaluate_importance_terms(θ0, problem)
     f = problem.observation.frequencies
@@ -214,69 +217,71 @@ begin
     fig
 end
 
-
-# ╔═╡ 949e4bd9-1ce8-44f0-a8d6-04c8e966641a
+# %%
 Ωgw
 
-# ╔═╡ 23f963ee-0675-4f7f-875d-a8afd443e166
+# %%
 begin
-    @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
-    model = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
-    conditioned = model | fixed_sites
-    nuts = Turing.NUTS(
-		sam.n_adapts, 
-		sam.target_acceptance;
-		metricT = AdvancedHMC.DenseEuclideanMetric
-	)
-    chain = sample(
-        conditioned,
-        nuts,
-        MCMCThreads(),
-        sam.n_samples,
-        num_threads;
-        progress = true,
-		save_state = true
-    )
-    @info "NUTS finished" chain_size=size(chain)
+    if chain_input_jld2 !== nothing
+        chain_path = isabspath(chain_input_jld2) ? String(chain_input_jld2) :
+                     normpath(joinpath(pkgdir(ASGWB), chain_input_jld2))
+        isfile(chain_path) ||
+            throw(ArgumentError("JLD2 chain file not found: $(repr(chain_path))"))
+        @info "loading chain from JLD2" path = chain_path
+        chain = load(chain_path)["chain"]
+        @info "chain loaded" chain_size = size(chain)
+    else
+        @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
+        model = build_turing_model(
+            problem, priors_turing; track = true, observed_spectral_density = observed
+        )
+        conditioned = model | fixed_sites
+        nuts = Turing.NUTS(
+            sam.n_adapts,
+            sam.target_acceptance;
+            metricT = AdvancedHMC.DenseEuclideanMetric
+        )
+        chain = sample(
+            conditioned,
+            nuts,
+            MCMCThreads(),
+            sam.n_samples,
+            num_threads;
+            progress = true,
+            save_state = true
+        )
+        @info "NUTS finished" chain_size = size(chain)
+    end
     chain
 end
 
+# %% [markdown]
+# ## Storing the chains
 
-# ╔═╡ 1d839d95-75c8-4cce-9294-282dd28e997a
-# ╠═╡ disabled = true
-#=╠═╡
+# %%
 begin
-	    model_track = build_turing_model(problem, priors_turing; track = true, observed_spectral_density = observed)
-	    conditioned_track = model_track | fixed_sites
-	    extras = Turing.returned(conditioned_track, chain)
-end
-  ╠═╡ =#
-
-# ╔═╡ afdcabf6-2ddc-44dd-9c22-3e2a382270a7
-begin
-	idata = from_mcmcchains(chain; library = "Turing")
-    if output_netcdf !== nothing
-        @info "writing InferenceData to NetCDF" path = output_netcdf
-        to_netcdf(idata, output_netcdf)
-        @info "wrote InferenceData to NetCDF" path = output_netcdf
+    if chain_input_jld2 === nothing
+        @info "Saving chain object to JLD2" path = output_jld2
+        jldsave(output_jld2; chain)
+        @info "Done"
+    else
+        @info "Skipping JLD2 save (chain was loaded from disk)"
     end
-	nothing
 end
 
-# ╔═╡ ffbc68c4-9548-4cf9-9121-96fc5565216f
+# %% [markdown]
+# ## Diagnostic plots
 
-
-# ╔═╡ e4fcf73c-7193-445b-8d55-1ad9a9645caa
+# %%
 describe(chain)
 
-# ╔═╡ aa7c7584-36b3-11f1-9894-cd9b12e6b4fe
+# %%
 traceplot(chain)
 
-
-# ╔═╡ 622dc36b-a0f2-482e-b562-70ee63d5904a
+# %%
 autocorplot(chain)
 
-# ╔═╡ aa7c759a-36b3-11f1-af66-b5a6a831a0c8
+# %%
 let pnames = names(chain, :parameters)
     if length(pnames) >= 2
         MCMCChains.corner(chain)
@@ -284,22 +289,3 @@ let pnames = names(chain, :parameters)
         StatsPlots.density(chain)
     end
 end
-
-
-# ╔═╡ Cell order:
-# ╠═aa7c72a2-36b3-11f1-a5e9-17b92e804e41
-# ╠═a9aeb877-2396-49b6-856e-c719be5db6d7
-# ╠═bb8c74e6-36b3-11f1-84a9-df5091ee4210
-# ╠═aa7c7524-36b3-11f1-bd4e-1121e886c676
-# ╠═38ea9c8a-235e-4a6e-a937-639c8c251e37
-# ╠═aa7c7572-36b3-11f1-a66c-f1c2e7b4f465
-# ╠═954323e3-b79e-4b1e-9200-dcf074777345
-# ╠═949e4bd9-1ce8-44f0-a8d6-04c8e966641a
-# ╠═23f963ee-0675-4f7f-875d-a8afd443e166
-# ╠═1d839d95-75c8-4cce-9294-282dd28e997a
-# ╠═afdcabf6-2ddc-44dd-9c22-3e2a382270a7
-# ╠═ffbc68c4-9548-4cf9-9121-96fc5565216f
-# ╠═e4fcf73c-7193-445b-8d55-1ad9a9645caa
-# ╠═aa7c7584-36b3-11f1-9894-cd9b12e6b4fe
-# ╠═622dc36b-a0f2-482e-b562-70ee63d5904a
-# ╠═aa7c759a-36b3-11f1-af66-b5a6a831a0c8

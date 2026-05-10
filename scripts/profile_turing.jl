@@ -74,8 +74,8 @@ function _load_observed_spectral_density(path::AbstractString, expected_len::Int
     v = vec(readdlm(path, ',', Float64))
     length(v) == expected_len || throw(
         ArgumentError(
-            "observed_spectral_density_csv has length $(length(v)), expected $expected_len",
-        ),
+        "observed_spectral_density_csv has length $(length(v)), expected $expected_len",
+    ),
     )
     return v
 end
@@ -83,7 +83,8 @@ end
 function _prior_bounds_from_toml(priors_tbl::Dict)
     bounds = Dict{String, Tuple{Float64, Float64}}()
     for (key, sub) in priors_tbl
-        sub isa Dict || throw(ArgumentError("priors.$key must be a table with 'low' and 'high'"))
+        sub isa Dict ||
+            throw(ArgumentError("priors.$key must be a table with 'low' and 'high'"))
         lo = Float64(sub["low"])
         hi = Float64(sub["high"])
         isfinite(lo) && isfinite(hi) ||
@@ -102,7 +103,7 @@ function _theta0_from_toml(init_tbl::Dict)
         Ξₙ = Float64(init_tbl["chin"]),
         γ = Float64(init_tbl["gamma"]),
         κ = Float64(init_tbl["kappa"]),
-        zpeak = Float64(init_tbl["z_peak"]),
+        zpeak = Float64(init_tbl["z_peak"])
     )
 end
 
