@@ -25,6 +25,8 @@ Inference state is a flat [`HyperParameters`](@ref) `NamedTuple`; caches carry
 """
 module ASGWB
 
+using CBCDistributions
+
 include("types.jl")
 include("inference_types.jl")
 include("detector/psd.jl")
@@ -32,9 +34,6 @@ include("detector/detector.jl")
 include("detector/overlap.jl")
 include("detector/effective_psd.jl")
 include("detector/observation.jl")
-include("cumulative_integral.jl")
-include("cosmology.jl")
-include("redshift.jl")
 include("priors.jl")
 include("cache.jl")
 include("importance.jl")

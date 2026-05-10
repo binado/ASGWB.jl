@@ -3,6 +3,7 @@ using Distributions: ProductNamedTupleDistribution
 using ForwardDiff
 using Random
 using Test
+using CBCDistributions
 
 @testset "intrinsic prior distributions" begin
     mass_dist = OrderedUniformSourceMassPair()

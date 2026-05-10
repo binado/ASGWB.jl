@@ -1,5 +1,6 @@
 using HDF5
 using Test
+using CBCDistributions
 
 @testset "redshift parity" begin
     fixture_path = joinpath(@__DIR__, "fixtures", "deterministic_parity.h5")
@@ -30,7 +31,7 @@ using Test
         # norm; Julia now uses composite Simpson, so the tolerances reflect the trapezoid
         # vs Simpson discretization gap rather than numerical precision.
         @test log_prob_from_bundle.(sample_z, Ref(bundle)) ≈ expected_log_prob rtol = 5e-3
-        @test ASGWB.redshift_integral(bundle) ≈ expected_integral rtol = 5e-3
+        @test redshift_integral(bundle) ≈ expected_integral rtol = 5e-3
     end
 end
 
@@ -43,25 +44,25 @@ end
         zpeak = 2.5
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.0, 2.0, 101, nothing)
-    z_grid = ASGWB.redshift_grid(spec)
+    z_grid = redshift_grid(spec)
     bundle = build_redshift_grid_bundle(theta, spec, z_grid)
     samples = [0.0, 0.137, 0.9, 2.0]
-    interp = ASGWB.SampleInterpolant(samples, z_grid)
+    interp = SampleInterpolant(samples, z_grid)
 
-    @test [ASGWB._interpolate_at_sample(bundle.pdf.y, interp, i)
+    @test [_interpolate_at_sample(bundle.pdf.y, interp, i)
            for
-           i in eachindex(samples)] ≈ [ASGWB.interpolate(bundle.pdf, z) for z in samples]
-    @test [ASGWB._cdf_at_sample(
+           i in eachindex(samples)] ≈ [interpolate(bundle.pdf, z) for z in samples]
+    @test [_cdf_at_sample(
                bundle.distance.cumulative,
                bundle.distance.y,
                interp,
                z_grid,
                i
-           ) for i in eachindex(samples)] ≈ [ASGWB.cdf(bundle.distance, z) for z in samples]
-    @test [ASGWB.luminosity_distance_at_sample(
+           ) for i in eachindex(samples)] ≈ [cdf(bundle.distance, z) for z in samples]
+    @test [luminosity_distance_at_sample(
                bundle, theta.H0, interp, z_grid, samples, i)
            for i in eachindex(samples)] ≈
           [luminosity_distance(z, theta.H0, theta.Ωm, bundle.distance) for z in samples]
-    @test_throws ArgumentError ASGWB.SampleInterpolant([-0.1], z_grid)
-    @test_throws ArgumentError ASGWB.SampleInterpolant([2.1], z_grid)
+    @test_throws ArgumentError SampleInterpolant([-0.1], z_grid)
+    @test_throws ArgumentError SampleInterpolant([2.1], z_grid)
 end

@@ -142,18 +142,6 @@ struct ProposalData
 end
 
 """
-    SampleInterpolant
-
-Per-sample interpolation metadata for proposal redshifts on the fixed redshift
-grid of an [`ImportanceSamplingProblem`](@ref). `bin_idx[i]` is the lower grid
-cell index for sample `i`; `t[i]` is the within-cell fraction.
-"""
-struct SampleInterpolant
-    bin_idx::Vector{Int}
-    t::Vector{Float64}
-end
-
-"""
     RedshiftGridCache
 
 Precomputed redshift-grid state attached to an [`ImportanceSamplingProblem`](@ref):

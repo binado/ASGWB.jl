@@ -1,3 +1,13 @@
+using Distributions
+using Random
+
+export RedshiftBundle, redshift_integral, merger_rate_per_sec, 
+       detector_frame_merger_rate_density, expected_number_of_events,
+       madau_dickinson_source_frame_distribution, power_law_source_frame_distribution,
+       redshift_grid, SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
+       _build_redshift_grid, log_prob_from_bundle, luminosity_distance_at_sample,
+       build_redshift_grid_bundle, RedshiftInterpolatedDistribution, _normalized_log_density
+
 """
     RedshiftBundle(distance, pdf)
 
@@ -87,6 +97,18 @@ This is safe to precompute once and reuse across likelihood evaluations.
 """
 function redshift_grid(spec::RedshiftPriorSpec)
     return collect(LinRange(spec.z_min, spec.z_max, spec.num_interp))
+end
+
+"""
+    SampleInterpolant
+
+Per-sample interpolation metadata for proposal redshifts on the fixed redshift
+grid. `bin_idx[i]` is the lower grid cell index for sample `i`; `t[i]` is the
+within-cell fraction.
+"""
+struct SampleInterpolant
+    bin_idx::Vector{Int}
+    t::Vector{Float64}
 end
 
 """
@@ -212,7 +234,7 @@ function luminosity_distance_at_sample(
 end
 
 function build_redshift_grid_bundle(
-        h::HyperParametersNT,
+        h::NamedTuple,
         spec::RedshiftPriorSpec,
         z_grid::AbstractVector{<:Real}
 )
@@ -238,6 +260,37 @@ function build_redshift_grid_bundle(
     )
 end
 
-function build_redshift_grid_bundle(h::HyperParametersNT, spec::RedshiftPriorSpec)
+function build_redshift_grid_bundle(h::NamedTuple, spec::RedshiftPriorSpec)
     return build_redshift_grid_bundle(h, spec, redshift_grid(spec))
+end
+
+
+struct RedshiftInterpolatedDistribution{B <: RedshiftBundle} <: ContinuousUnivariateDistribution
+    bundle::B
+end
+
+Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.bundle.pdf.x)
+Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.bundle.pdf.x)
+
+function Distributions.insupport(d::RedshiftInterpolatedDistribution, value::Real)
+    return minimum(d) <= value <= maximum(d)
+end
+
+function Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real)
+    insupport(d, value) || return -Inf
+    return log_prob_from_bundle(value, d.bundle)
+end
+
+function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
+    target = rand(rng) * redshift_integral(d.bundle)
+    cumulative = d.bundle.pdf.cumulative
+    x = d.bundle.pdf.x
+    n = length(cumulative)
+    idx = searchsortedlast(cumulative, target)
+    idx <= 0 && return x[1]
+    idx >= n && return x[end]
+    c0, c1 = cumulative[idx], cumulative[idx + 1]
+    x0, x1 = x[idx], x[idx + 1]
+    c1 > c0 || return x0
+    return x0 + (target - c0) * (x1 - x0) / (c1 - c0)
 end

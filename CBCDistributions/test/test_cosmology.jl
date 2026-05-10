@@ -2,7 +2,7 @@ using HDF5
 using QuadGK
 using Test
 using ForwardDiff
-using ASGWB: CumulativeIntegral1D, cdf, interpolate, normalizer
+using CBCDistributions: CumulativeIntegral1D, cdf, interpolate, normalizer
 
 @testset "basic cosmology helpers" begin
     @test E(0.0, 0.315) ≈ 1.0

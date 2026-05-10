@@ -5,6 +5,7 @@ authors = ["binado <bernardopveronese@gmail.com>"]
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
 Comonicon = "863f3e99-da2a-4334-8734-de3dacbe5542"
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
