@@ -6,6 +6,14 @@ using ForwardDiff
 using LogDensityProblems
 using LogDensityProblemsAD
 
+"""
+    ASGWBLogDensity(problem, prior)
+
+A struct representing the log-density of the ASGWB importance sampling model,
+conforming to the `LogDensityProblems.jl` interface. It handles the
+transformation between unconstrained parameters (where the sampler operates)
+and constrained physical parameters.
+"""
 struct ASGWBLogDensity{
     C <: ImportanceSamplingProblem, P <: ProductNamedTupleDistribution, B}
     problem::C
@@ -20,11 +28,24 @@ function ASGWBLogDensity(
     return ASGWBLogDensity(problem, prior, bijector(prior))
 end
 
+"""
+    constrained_parameters(ld::ASGWBLogDensity, z) -> (theta_nt, logabsdet)
+
+Transform unconstrained parameters `z` back to the physical parameter space
+defined by the prior. Returns a named tuple of parameters and the log-absolute-determinant
+of the Jacobian of the inverse transformation.
+"""
 function constrained_parameters(ld::ASGWBLogDensity, z::AbstractVector{<:Real})
     theta_nt, logabsdet = with_logabsdet_jacobian(inverse(ld.transform), z)
     return theta_nt, logabsdet
 end
 
+"""
+    unconstrained_initial_point(ld::ASGWBLogDensity, theta0::HyperParameters) -> Vector{Float64}
+
+Transform a set of physical hyperparameters `theta0` into the unconstrained
+parameter space.
+"""
 function unconstrained_initial_point(ld::ASGWBLogDensity, theta0::HyperParameters)
     return collect(Bijectors.link(ld.prior, theta0))
 end
@@ -39,10 +60,22 @@ function LogDensityProblems.logdensity(ld::ASGWBLogDensity, z::AbstractVector{<:
     return logposterior(theta_nt, ld.problem, ld.prior) + logabsdet
 end
 
+"""
+    ad_logdensity(ld::ASGWBLogDensity)
+
+Wrap an `ASGWBLogDensity` with ForwardDiff-based automatic differentiation
+using `LogDensityProblemsAD.jl`.
+"""
 function ad_logdensity(ld::ASGWBLogDensity)
     return LogDensityProblemsAD.ADgradient(:ForwardDiff, ld)
 end
 
+"""
+    finite_difference_logdensity_and_gradient(ld::ASGWBLogDensity, z) -> (logd, grad)
+
+Compute the log-density and its gradient at `z` using finite differences.
+Useful for verifying AD gradients.
+"""
 function finite_difference_logdensity_and_gradient(
         ld::ASGWBLogDensity,
         z::AbstractVector{<:Real}
@@ -57,6 +90,11 @@ function finite_difference_logdensity_and_gradient(
     return LogDensityProblems.logdensity(ld, zf), gradient
 end
 
+"""
+    sample_with_advancedhmc(problem, prior, theta0; kwargs...) -> (samples, stats, ld)
+
+Sample from the ASGWB posterior using `AdvancedHMC.jl` directly (without Turing).
+"""
 function sample_with_advancedhmc(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution,

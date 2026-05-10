@@ -101,6 +101,19 @@ end
     return nothing
 end
 
+"""
+    build_turing_model(problem, prior; track=false, observed_spectral_density=...) -> model
+
+Construct a Turing `DynamicPPL.Model` for the ASGWB importance sampling likelihood.
+
+# Arguments
+- `problem::ImportanceSamplingProblem`: The pre-computed importance sampling cache.
+- `prior::ProductNamedTupleDistribution`: Priors for the hyperparameters.
+- `track::Bool`: If `true`, the model returns a named tuple of diagnostic quantities
+  (ESS, SNR, etc.) alongside the log-joint.
+- `observed_spectral_density`: The "data" to condition on. Defaults to the fiducial
+  spectral density from the cache.
+"""
 function build_turing_model(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
