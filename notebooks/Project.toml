@@ -1,5 +1,6 @@
 [deps]
 ASGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
+ASGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
 AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Comonicon = "863f3e99-da2a-4334-8734-de3dacbe5542"
@@ -17,6 +18,7 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [sources]
 ASGWB = {path = ".."}
+ASGWBInference = {path = "../ASGWBInference"}
 
 [compat]
 CairoMakie = "0.15"

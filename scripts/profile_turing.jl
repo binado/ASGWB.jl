@@ -5,27 +5,28 @@
 # Run from the package root, for example:
 #   julia --project=ASGWBInference -e 'using ASGWBInference; exit(ASGWBInference.command_main())' profile --config-file=ASGWBInference/profile_turing.toml
 #
-# Or the standalone script (root env):
-#   julia --project=. scripts/profile_turing.jl --config-file=ASGWBInference/profile_turing.toml
+# Or the standalone script (ASGWBInference env):
+#   julia --project=ASGWBInference scripts/profile_turing.jl --config-file=ASGWBInference/profile_turing.toml
 #
 # Sites under investigation:
 #   - src/cosmology.jl:9-13     quadgk inside comoving_distance
 #   - src/redshift.jl           differential_comoving_volume.(z_grid, H0, Ωm) broadcast
 #   - src/importance.jl         luminosity_distance.(z, H0, Ωm) per-sample broadcast
-#   - src/turing_model.jl:55-97 the model being profiled
+#   - ASGWBInference/src/turing_model.jl  the model being profiled
 #
 # This script is *measurement only*: it does not edit any src/ files.
 
 module ASGWBProfileCLI
 
 using ASGWB
+using ASGWBInference.InferenceImpl:
+                                    build_turing_model,
+                                    ASGWBLogDensity,
+                                    ad_logdensity,
+                                    unconstrained_initial_point
 using ASGWB:
              build_uniform_priors,
              load_cache,
-             build_turing_model,
-             ASGWBLogDensity,
-             ad_logdensity,
-             unconstrained_initial_point,
              build_redshift_grid_bundle,
              compute_importance_weights,
              merger_rate_per_sec,

@@ -1,6 +1,8 @@
 using HDF5
 using Test
 using Turing
+using ASGWB
+using ASGWBInference: build_turing_model, sample_with_turing
 
 @testset "Turing model parity and smoke test" begin
     fixture_path = joinpath(@__DIR__, "fixtures", "deterministic_parity.h5")

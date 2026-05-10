@@ -2,7 +2,8 @@
     ASGWB
 
 Astrophysical stochastic gravitational-wave background modeling: importance
-caches, redshift grids, likelihoods, and sampling (AdvancedHMC and Turing).
+caches, redshift grids, and likelihoods. MCMC via Turing/AdvancedHMC lives in the
+`ASGWBInference` package (see the `ASGWBInference/` directory in the repository).
 
 Use [`importance_sampling_problem`](@ref) to build problems in memory, or
 [`load_cache`](@ref) to read the HDF5 importance cache. Caches record provenance via root
@@ -41,8 +42,6 @@ include("spectral_density.jl")
 include("diagnostics.jl")
 include("posterior.jl")
 include("io.jl")
-include("sampling.jl")
-include("turing_model.jl")
 
 # Types
 export ImportanceSamplingProblem,
@@ -67,7 +66,6 @@ export ImportanceSamplingProblem,
        RedshiftBundle,
        IntrinsicPriorStrategy,
        FullBNS,
-       ASGWBLogDensity,
        redshift
 
 # IO
@@ -135,15 +133,7 @@ export loglikelihood,
        fiducial_spectral_density,
        fiducial_redshift_integral
 
-# Sampling (AdvancedHMC)
-export DEFAULT_PARAMETER_ORDER,
-       unconstrained_initial_point,
-       constrained_parameters,
-       ad_logdensity,
-       finite_difference_logdensity_and_gradient,
-       sample_with_advancedhmc
-
-# Turing
-export build_turing_model, sample_with_turing, condition_turing_model
+# Hyperparameter ordering (used with product priors / Bijectors in ASGWBInference)
+export DEFAULT_PARAMETER_ORDER
 
 end

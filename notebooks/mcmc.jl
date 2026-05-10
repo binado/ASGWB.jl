@@ -36,9 +36,9 @@ begin
     # Ensure dependencies are installed for fresh clones or clean depots
     Pkg.instantiate()
     using ASGWB
+    using ASGWBInference: build_turing_model
     using ASGWB:
                  load_cache,
-                 build_turing_model,
                  evaluate_importance_terms,
                  omegagw,
                  HyperParameters,

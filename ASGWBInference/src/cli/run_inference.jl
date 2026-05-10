@@ -1,7 +1,8 @@
 module RunInferenceCLI
 
 using ASGWB
-using ASGWB: load_cache, build_turing_model, Detector, DEFAULT_PARAMETER_ORDER
+using ASGWB: load_cache, Detector, DEFAULT_PARAMETER_ORDER
+using ..InferenceImpl: build_turing_model
 
 using Turing
 using AdvancedHMC
@@ -239,7 +240,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
 end
 
 function resolve_config_path(config::AbstractString)
-    default_path = joinpath(dirname(@__DIR__), "run_inference.toml")
+    default_path = joinpath(@__DIR__, "..", "..", "run_inference.toml")
     settings_path = isempty(config) ? get(ENV, "MCMC_CONFIG_FILEPATH", default_path) :
                     config
     return abspath(settings_path)
@@ -304,7 +305,7 @@ Run ASGWB inference from a TOML configuration file.
 
 Invoke from the repo root, for example:
 
-    julia --project=ASGWBInference -m ASGWBInference run --config=ASGWBInference/run_inference.toml
+    julia --project=ASGWBInference -e 'using ASGWBInference; exit(ASGWBInference.command_main())' mcmc --config=ASGWBInference/run_inference.toml
 """
 function run(;
         config::String = "",

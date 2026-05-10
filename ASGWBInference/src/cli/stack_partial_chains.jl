@@ -73,7 +73,7 @@ and `snapshot` (checkpoint) keys.
 
 Invoke from the repo root, for example:
 
-    julia --project=ASGWBInference -m ASGWBInference stack partials*.jld2 --output=stacked.jld2
+    julia --project=ASGWBInference -e 'using ASGWBInference; exit(ASGWBInference.command_main())' stack-chains partials*.jld2 --output=stacked.jld2
 """
 function stack(
         inputs::String...;

@@ -2,11 +2,33 @@ module ASGWBInference
 
 using Comonicon: @cast, @main
 
-include("run_inference.jl")
-include("stack_partial_chains.jl")
-include("profile_turing_main.jl")
+include("InferenceImpl.jl")
+using .InferenceImpl:
+                      ASGWBLogDensity,
+                      unconstrained_initial_point,
+                      constrained_parameters,
+                      ad_logdensity,
+                      finite_difference_logdensity_and_gradient,
+                      sample_with_advancedhmc,
+                      build_turing_model,
+                      sample_with_turing,
+                      condition_turing_model
 
-@cast function run(;
+export ASGWBLogDensity,
+       unconstrained_initial_point,
+       constrained_parameters,
+       ad_logdensity,
+       finite_difference_logdensity_and_gradient,
+       sample_with_advancedhmc,
+       build_turing_model,
+       sample_with_turing,
+       condition_turing_model
+
+include("cli/run_inference.jl")
+include("cli/stack_partial_chains.jl")
+include("cli/profile_turing_main.jl")
+
+@cast function mcmc(;
         config::String = "",
         seed::Int = 42,
         output_dir::String = "",
@@ -30,7 +52,7 @@ include("profile_turing_main.jl")
     )
 end
 
-@cast function stack(
+@cast function stack_chains(
         inputs::String...;
         output::String,
         force::Bool = false

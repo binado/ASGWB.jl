@@ -63,4 +63,4 @@ echo "[$(date -Iseconds)] host=$(hostname) job=${SLURM_JOB_ID:-local} cpus=${SLU
 
 INF_PROJECT_ABS="$(realpath "$REPO_ROOT/ASGWBInference")"
 
-job-nanny julia --project="$INF_PROJECT_ABS" -e 'using ASGWBInference; exit(ASGWBInference.command_main())' run
+job-nanny julia --project="$INF_PROJECT_ABS" -e 'using ASGWBInference; exit(ASGWBInference.command_main())' mcmc

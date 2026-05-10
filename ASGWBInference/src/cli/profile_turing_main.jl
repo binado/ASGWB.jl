@@ -19,10 +19,6 @@ using ASGWB
 using ASGWB:
              build_uniform_priors,
              load_cache,
-             build_turing_model,
-             ASGWBLogDensity,
-             ad_logdensity,
-             unconstrained_initial_point,
              build_redshift_grid_bundle,
              compute_importance_weights,
              merger_rate_per_sec,
@@ -33,6 +29,11 @@ using ASGWB:
              redshift,
              HyperParameters,
              Detector
+using ..InferenceImpl:
+                       ASGWBLogDensity,
+                       ad_logdensity,
+                       unconstrained_initial_point,
+                       build_turing_model
 using BenchmarkTools
 using DelimitedFiles
 using LogDensityProblems

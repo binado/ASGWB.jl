@@ -1,6 +1,13 @@
 using HDF5
 using LogDensityProblems
 using Test
+using ASGWB
+using ASGWBInference:
+                      ASGWBLogDensity,
+                      unconstrained_initial_point,
+                      ad_logdensity,
+                      finite_difference_logdensity_and_gradient,
+                      sample_with_advancedhmc
 
 @testset "AdvancedHMC smoke test" begin
     fixture_path = joinpath(@__DIR__, "fixtures", "deterministic_parity.h5")
