@@ -13,6 +13,7 @@ using ASGWB: load_cache, build_turing_model, Detector, DEFAULT_PARAMETER_ORDER
 using Turing
 using AdvancedHMC
 using Random
+using ADTypes
 using JLD2
 using Distributions
 using TOML
@@ -68,11 +69,12 @@ mutable struct CheckpointCallback{M, S}
     transitions::Vector{Vector{Any}}
     states::Vector{Any}
     last_checkpoint_iters::Vector{Int}
+    save_state::Bool
 end
 
 function CheckpointCallback(
         every::Int, base::AbstractString, output_dir::AbstractString, model, sampler,
-        num_chains::Int
+        num_chains::Int; save_state::Bool = true
 )
     return CheckpointCallback(
         every,
@@ -82,7 +84,8 @@ function CheckpointCallback(
         sampler,
         [Vector{Any}() for _ in 1:num_chains],
         Vector{Any}(undef, num_chains),
-        zeros(Int, num_chains)
+        zeros(Int, num_chains),
+        save_state
     )
 end
 
@@ -110,7 +113,7 @@ function (cb::CheckpointCallback)(
     copyto!(typed_transitions, 1, chain_transitions, 1, n)
     snapshot = bundle_samples(
         typed_transitions, cb.model, cb.sampler, cb.states[chain_number],
-        Chains; save_state = true
+        Chains; save_state = cb.save_state
     )
 
     path = checkpoint_path(cb, chain_number)
@@ -123,6 +126,17 @@ function (cb::CheckpointCallback)(
 end
 
 
+"""Map a config-string to an `ADTypes.AbstractADType` for Turing's NUTS."""
+function resolve_adtype(name::AbstractString)
+    if name == "ForwardDiff"
+        return ADTypes.AutoForwardDiff()
+    else
+        throw(ArgumentError(
+            "this inference CLI supports only ad_backend = \"ForwardDiff\"; got $(repr(name))"
+        ))
+    end
+end
+
 function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = false)
     cache = resolve_path(settings["cache_path"]::String, settings_dir)
     detectors = [Detector(n) for n in settings["detectors"]]
@@ -134,6 +148,8 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     n_samples = sampler["n_samples"]::Int
     n_adapts = sampler["n_adapts"]::Int
     target_acceptance = sampler["target_acceptance"]::Float64
+    ad_backend_name = get(sampler, "ad_backend", "ForwardDiff")::String
+    adtype = resolve_adtype(ad_backend_name)
     num_chains = get(sampler, "num_chains", 0)::Int
     num_chains = num_chains > 0 ? num_chains : Base.Threads.nthreads()
     checkpoint_every = get(sampler, "checkpoint_every", 0)::Int
@@ -186,29 +202,33 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     @info "seeding RNG" rng_seed=seed
     Random.seed!(seed)
 
-    @info "starting NUTS" n_adapts n_samples target_acceptance sample_only checkpoint_every
+    do_save_state = true
+
+    @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
     model = build_turing_model(
         problem, priors_turing; track = true, observed_spectral_density = observed)
     conditioned = model | fixed_sites
     nuts = Turing.NUTS(
         n_adapts,
         target_acceptance;
-        metricT = AdvancedHMC.DenseEuclideanMetric
+        metricT = AdvancedHMC.DenseEuclideanMetric,
+        adtype = adtype
     )
     callback = checkpoint_every > 0 ?
                CheckpointCallback(
-        checkpoint_every, base, output_dir, conditioned, nuts, num_chains
+        checkpoint_every, base, output_dir, conditioned, nuts, num_chains;
+        save_state = do_save_state
     ) : nothing
 
     chain = if callback === nothing
         sample(
             conditioned, nuts, MCMCThreads(), n_samples, num_chains;
-            progress = progress, save_state = true
+            progress = progress, save_state = do_save_state
         )
     else
         sample(
             conditioned, nuts, MCMCThreads(), n_samples, num_chains;
-            progress = progress, save_state = true, callback = callback
+            progress = progress, save_state = do_save_state, callback = callback
         )
     end
     @info "NUTS finished" chain_size=size(chain)
@@ -241,6 +261,7 @@ function cli_overrides(;
         seed::Union{Int, Nothing},
         output_dir::AbstractString,
         output_prefix::AbstractString,
+        ad_backend::AbstractString,
         num_chains::Int,
         n_samples::Int,
         n_adapts::Int,
@@ -256,6 +277,7 @@ function cli_overrides(;
     n_samples > 0 && (sampler["n_samples"] = n_samples)
     n_adapts > 0 && (sampler["n_adapts"] = n_adapts)
     checkpoint_every >= 0 && (sampler["checkpoint_every"] = checkpoint_every)
+    isempty(ad_backend) || (sampler["ad_backend"] = String(ad_backend))
     isempty(sampler) || (overrides["sampler"] = sampler)
 
     return overrides
@@ -284,6 +306,9 @@ Run ASGWB inference from a TOML configuration file.
 
 - `--checkpoint-every=<int>`: override `sampler.checkpoint_every` from the TOML settings.
 
+- `--ad-backend=<name>`: override `sampler.ad_backend` from the TOML settings.
+  Accepted value: `"ForwardDiff"`.
+
 - `--interactive`: enable Turing's sampling progress bar.
 """
 @main function run_inference(;
@@ -291,6 +316,7 @@ Run ASGWB inference from a TOML configuration file.
         seed::Int = -1,
         output_dir::String = "",
         output_prefix::String = "",
+        ad_backend::String = "",
         num_chains::Int = -1,
         n_samples::Int = 0,
         n_adapts::Int = 0,
@@ -307,6 +333,7 @@ Run ASGWB inference from a TOML configuration file.
             seed = seed < 0 ? nothing : seed,
             output_dir,
             output_prefix,
+            ad_backend,
             num_chains,
             n_samples,
             n_adapts,

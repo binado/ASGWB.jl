@@ -25,3 +25,6 @@ target_acceptance = 0.9
 # checkpoint_every = 0 disables intra-run checkpointing.
 num_chains = 0
 checkpoint_every = 0
+
+# AD backend for NUTS gradients. This production CLI supports only "ForwardDiff".
+ad_backend = "ForwardDiff"
