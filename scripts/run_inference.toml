@@ -26,5 +26,5 @@ target_acceptance = 0.9
 num_chains = 0
 checkpoint_every = 0
 
-# AD backend for NUTS gradients: "ForwardDiff" (default) or "Enzyme".
+# AD backend for NUTS gradients. This production CLI supports only "ForwardDiff".
 ad_backend = "ForwardDiff"

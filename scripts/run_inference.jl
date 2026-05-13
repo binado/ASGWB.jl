@@ -14,8 +14,6 @@ using Turing
 using AdvancedHMC
 using Random
 using ADTypes
-using Enzyme
-using Mooncake
 using JLD2
 using Distributions
 using TOML
@@ -130,17 +128,11 @@ end
 
 """Map a config-string to an `ADTypes.AbstractADType` for Turing's NUTS."""
 function resolve_adtype(name::AbstractString)
-    if name == "Enzyme"
-        return ADTypes.AutoEnzyme(;
-            mode = Enzyme.set_runtime_activity(Enzyme.Forward)
-        )
-    elseif name == "ForwardDiff"
+    if name == "ForwardDiff"
         return ADTypes.AutoForwardDiff()
-    elseif name == "Mooncake"
-        return ADTypes.AutoMooncakeForward()
     else
         throw(ArgumentError(
-            "unknown ad_backend $(repr(name)); expected \"Enzyme\", \"ForwardDiff\", or \"Mooncake\""
+            "this inference CLI supports only ad_backend = \"ForwardDiff\"; got $(repr(name))"
         ))
     end
 end
@@ -210,7 +202,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     @info "seeding RNG" rng_seed=seed
     Random.seed!(seed)
 
-    do_save_state = ad_backend_name != "Mooncake"
+    do_save_state = true
 
     @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
     model = build_turing_model(
@@ -315,7 +307,7 @@ Run ASGWB inference from a TOML configuration file.
 - `--checkpoint-every=<int>`: override `sampler.checkpoint_every` from the TOML settings.
 
 - `--ad-backend=<name>`: override `sampler.ad_backend` from the TOML settings.
-  Accepted values: `"Enzyme"`, `"ForwardDiff"`, `"Mooncake"`.
+  Accepted value: `"ForwardDiff"`.
 
 - `--interactive`: enable Turing's sampling progress bar.
 """
