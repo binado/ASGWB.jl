@@ -3,6 +3,7 @@ uuid = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
 version = "0.1.0"
 
 [deps]
+ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 ASGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 AbstractMCMC = "80f14c24-f653-4e6a-9b94-39d6b0f70001"
 AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
@@ -39,6 +40,7 @@ test = ["Test", "HDF5"]
 ASGWB = {path = "../ASGWB"}
 
 [compat]
+ADTypes = "1"
 BenchmarkTools = "1.5"
 Bijectors = "0.15.20"
 Comonicon = "1.0.8"
