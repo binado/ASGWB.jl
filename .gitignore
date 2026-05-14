@@ -37,8 +37,21 @@ JuliaLocalPreferences.toml
 # PythonCall/CondaPkg local Python environments
 **/.CondaPkg/
 
+# System/editor noise
+.DS_Store
+.cursor/
+
 # Local analysis / inference outputs
 *.png
 *.jls
 *.nc
 analysis_numpyro_julia_cache.h5
+data.h5
+log.log
+logs/
+output/
+ASGWBInference/out-test/
+
+# PackageCompiler and ASGWBInference build artifacts
+ASGWBInference/build/
+ASGWBInference/deps/build.log

@@ -1,0 +1,23 @@
+cache_path = "../ASGWB/test/fixtures/posterior_cache_julia.h5"
+detectors = ["H1", "L1"]
+sample_only = ["H0"]
+seed = 1
+
+output_dir = "../ASGWBInference/build/precompile-run"
+output_prefix = "precompile"
+
+[init]
+H0 = 67.66
+"Ωm" = 0.3096
+"Ξ₀" = 1.0
+"Ξₙ" = 1.91
+"γ" = 2.7
+"κ" = 5.7
+zpeak = 2.0
+
+[sampler]
+n_samples = 1
+n_adapts = 1
+target_acceptance = 0.8
+num_chains = 1
+checkpoint_every = 0
