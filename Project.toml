@@ -1,14 +1,17 @@
 [workspace]
-projects = ["ASGWB", "ASGWBInference", "notebooks"]
+projects = ["ASGWB", "ASGWBInference", "CBCDistributions", "notebooks"]
 
 [deps]
 ASGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 ASGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
 
 [extras]
 ASGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 ASGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
 
 [sources]
 ASGWB = {path = "ASGWB"}
 ASGWBInference = {path = "ASGWBInference"}
+CBCDistributions = {path = "CBCDistributions"}
