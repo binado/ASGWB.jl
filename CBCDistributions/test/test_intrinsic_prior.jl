@@ -47,6 +47,20 @@ const _theta_default = (
     spin_sample = rand(MersenneTwister(2), spin_dist)
     @test minimum(spin_dist) <= spin_sample <= maximum(spin_dist)
 
+    mass_f32 = OrderedUniformSourceMassPair(; low = 1.1f0, high = 2.5f0)
+    @test eltype(mass_f32) === Float32
+    @test typeof(mass_f32.low) === Float32
+    @test isfinite(logpdf(mass_f32, (1.4f0, 1.2f0)))
+    mass_f32_sample = rand(MersenneTwister(4), mass_f32)
+    @test mass_f32.low <= mass_f32_sample[2] <= mass_f32_sample[1] <= mass_f32.high
+
+    spin_f32 = AlignedSpinChiSimple(; a_max = 0.99f0)
+    @test eltype(spin_f32) === Float32
+    @test typeof(spin_f32.a_max) === Float32
+    @test isfinite(logpdf(spin_f32, 0.0f0))
+    spin_f32_sample = rand(MersenneTwister(5), spin_f32)
+    @test minimum(spin_f32) <= spin_f32_sample <= maximum(spin_f32)
+
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
     bundle = build_redshift_grid_bundle(theta, spec)
