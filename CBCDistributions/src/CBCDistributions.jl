@@ -1,6 +1,7 @@
 module CBCDistributions
 
-export E, comoving_distance, luminosity_distance, differential_comoving_volume, gravitational_wave_distance
+export E, comoving_distance, luminosity_distance, differential_comoving_volume,
+       gravitational_wave_distance
 export CumulativeIntegral1D, interpolate, cdf, normalizer
 
 include("types.jl")

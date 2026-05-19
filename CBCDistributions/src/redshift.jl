@@ -1,7 +1,7 @@
 using Distributions
 using Random
 
-export RedshiftBundle, redshift_integral, merger_rate_per_sec, 
+export RedshiftBundle, redshift_integral, merger_rate_per_sec,
        detector_frame_merger_rate_density, expected_number_of_events,
        madau_dickinson_source_frame_distribution, power_law_source_frame_distribution,
        redshift_grid, SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
@@ -265,7 +265,8 @@ function build_redshift_grid_bundle(h::NamedTuple, spec::RedshiftPriorSpec)
 end
 
 
-struct RedshiftInterpolatedDistribution{B <: RedshiftBundle} <: ContinuousUnivariateDistribution
+struct RedshiftInterpolatedDistribution{B <: RedshiftBundle} <:
+       ContinuousUnivariateDistribution
     bundle::B
 end
 

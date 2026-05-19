@@ -1,4 +1,5 @@
-export RedshiftPriorFamily, parse_redshift_prior_family, RedshiftPriorSpec, MadauDickinson, PowerLaw
+export RedshiftPriorFamily, parse_redshift_prior_family, RedshiftPriorSpec, MadauDickinson,
+       PowerLaw
 
 """
     RedshiftPriorFamily

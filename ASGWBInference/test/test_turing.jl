@@ -5,7 +5,8 @@ using ASGWB
 using ASGWBInference: build_turing_model, sample_with_turing
 
 @testset "Turing model parity and smoke test" begin
-    fixture_path = joinpath(@__DIR__, "..", "..", "ASGWB", "test", "fixtures", "deterministic_parity.h5")
+    fixture_path = joinpath(
+        @__DIR__, "..", "..", "ASGWB", "test", "fixtures", "deterministic_parity.h5")
 
     h5open(fixture_path, "r") do file
         for (cache_filename, group_name) in (

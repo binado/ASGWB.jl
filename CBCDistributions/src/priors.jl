@@ -1,7 +1,8 @@
 using Distributions
 using Random
 
-export OrderedUniformSourceMassPair, AlignedSpinChiSimple, BNS_MASS_LOW, BNS_MASS_HIGH, BNS_LAMBDA_HIGH, BNS_SPIN_A_MAX
+export OrderedUniformSourceMassPair, AlignedSpinChiSimple, BNS_MASS_LOW, BNS_MASS_HIGH,
+       BNS_LAMBDA_HIGH, BNS_SPIN_A_MAX
 
 const BNS_MASS_LOW = 1.1
 const BNS_MASS_HIGH = 2.5
