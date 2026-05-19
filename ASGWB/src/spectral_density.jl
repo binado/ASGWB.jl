@@ -39,35 +39,34 @@ function _spectral_density(
     return 0.4 .* merger_rate_per_sec .* mean_flux
 end
 
+# Avoid `Matrix{Float64} * Vector{Dual}` here: on realistic caches the generic
+# Dual matvec dominated ForwardDiff/Turing gradient profiles. Splitting primal
+# values and partials lets BLAS handle the two dense contractions (see
+# `_spectral_density_forwarddiff`). The rate may itself be a same-tag Dual.
 function _spectral_density(
         fluxes::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real,
         weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
 ) where {Tag, V, N}
-    return _spectral_density_forwarddiff(
-        fluxes,
-        V(merger_rate_per_sec),
-        ntuple(_ -> zero(V), Val(N)),
-        weights
-    )
+    rate_value, rate_partials = _rate_value_partials(
+        merger_rate_per_sec, Tag, V, Val(N))
+    return _spectral_density_forwarddiff(fluxes, rate_value, rate_partials, weights)
 end
 
-function _spectral_density(
-        fluxes::AbstractMatrix{<:Real},
-        merger_rate_per_sec::ForwardDiff.Dual{Tag, V, N},
-        weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
+# Extract `(value, partials)` from a rate that is either a plain `Real` (zero
+# partials) or a `Dual` whose tag/lane count match the weights'. Mismatched-tag
+# Duals are not supported in this dispatch family.
+function _rate_value_partials(x::Real, ::Type, ::Type{V}, ::Val{N}) where {V, N}
+    (V(x), ntuple(_ -> zero(V), Val(N)))
+end
+
+function _rate_value_partials(
+        x::ForwardDiff.Dual{Tag, V, N}, ::Type{Tag}, ::Type{V}, ::Val{N}
 ) where {Tag, V, N}
-    return _spectral_density_forwarddiff(
-        fluxes,
-        ForwardDiff.value(merger_rate_per_sec),
-        ntuple(j -> ForwardDiff.partials(merger_rate_per_sec)[j], Val(N)),
-        weights
-    )
+    (ForwardDiff.value(x), Tuple(ForwardDiff.partials(x)))
 end
 
-# Avoid `Matrix{Float64} * Vector{Dual}` here: on realistic caches the generic
-# Dual matvec dominated ForwardDiff/Turing gradient profiles. Splitting primal
-# values and partials lets BLAS handle the two dense contractions.
+# See comment above `_spectral_density` for the Dual-weighted dispatch rationale.
 function _spectral_density_forwarddiff(
         fluxes::AbstractMatrix{<:Real},
         rate_value::V,
