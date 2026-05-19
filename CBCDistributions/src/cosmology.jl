@@ -9,14 +9,16 @@ end
 
 Cosmology(h::NamedTuple) = Cosmology(h.H0, h.Ωm)
 
-struct CosmologyCache{C <: Cosmology, I <: CumulativeIntegral1D}
+struct CosmologyCache{C <: Cosmology, I <: CumulativeIntegral1D, TD <: Real}
     cosmology::C
     inv_E_integral::I
+    d_h::TD
 end
 
 function CosmologyCache(cosmology::Cosmology, z_grid::AbstractVector{<:Real})
     inv_E_integral = CumulativeIntegral1D(z_grid, z -> inv(E(z, cosmology.Ωm)))
-    return CosmologyCache(cosmology, inv_E_integral)
+    d_h = SPEED_OF_LIGHT_KM_S / cosmology.H0
+    return CosmologyCache(cosmology, inv_E_integral, d_h)
 end
 
 function CosmologyCache(h::NamedTuple, z_grid::AbstractVector{<:Real})
@@ -44,20 +46,16 @@ function differential_comoving_volume(z::Real, H0::Real, Ωm::Real)
 end
 
 function comoving_distance(z::Real, cache::CosmologyCache)
-    comoving_distance(z, cache.cosmology.H0, cache.cosmology.Ωm, cache.inv_E_integral)
+    cache.d_h * cdf(cache.inv_E_integral, z)
 end
 
 function luminosity_distance(z::Real, cache::CosmologyCache)
-    luminosity_distance(z, cache.cosmology.H0, cache.cosmology.Ωm, cache.inv_E_integral)
+    (1 + z) * comoving_distance(z, cache)
 end
 
 function differential_comoving_volume(z::Real, cache::CosmologyCache)
-    differential_comoving_volume(
-        z,
-        cache.cosmology.H0,
-        cache.cosmology.Ωm,
-        cache.inv_E_integral
-    )
+    d_c = comoving_distance(z, cache)
+    return cache.d_h * d_c^2 / E(z, cache.cosmology.Ωm)
 end
 
 """

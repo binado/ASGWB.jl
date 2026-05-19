@@ -173,11 +173,10 @@ end
 
 function build_redshift_prior(source_frame_fn, cache::CosmologyCache)
     z_grid_f = cache.inv_E_integral.x
-    d_h = SPEED_OF_LIGHT_KM_S / cache.cosmology.H0
     pdf_vals = map(eachindex(z_grid_f)) do i
         @inbounds z = z_grid_f[i]
-        @inbounds d_c = d_h * cache.inv_E_integral.cumulative[i]
-        dvc_dz = d_h * d_c^2 / E(z, cache.cosmology.Ωm)
+        @inbounds d_c = cache.d_h * cache.inv_E_integral.cumulative[i]
+        dvc_dz = cache.d_h * d_c^2 / E(z, cache.cosmology.Ωm)
         detector_frame_merger_rate_density(z, dvc_dz, source_frame_fn(z))
     end
     return RedshiftPrior(_cumulative_integral_from_values(z_grid_f, pdf_vals))
@@ -210,7 +209,7 @@ function luminosity_distance_at_sample(
         z_grid,
         sample_index
     )
-    return (1 + z) * (SPEED_OF_LIGHT_KM_S / cache.cosmology.H0) * integral
+    return (1 + z) * cache.d_h * integral
 end
 
 function build_redshift_prior(
@@ -226,38 +225,27 @@ function build_redshift_prior(
         "build_redshift_prior only supports the MadauDickinson redshift prior family",
     ),
     )
-    sfn = z -> madau_dickinson_source_frame_distribution(
-        z;
-        γ = h.γ,
-        κ = h.κ,
-        zpeak = h.zpeak
-    )
+    # Streamlined closure: capture only the necessary scalars
+    γ, κ, zpeak = h.γ, h.κ, h.zpeak
+    sfn = z -> madau_dickinson_source_frame_distribution(z; γ, κ, zpeak)
     return build_redshift_prior(sfn, cache)
 end
 
 function cosmology_and_redshift_prior(
         h::NamedTuple,
         spec::RedshiftPriorSpec,
-        z_grid::AbstractVector{<:Real}
+        z_grid::AbstractVector{<:Real} = redshift_grid(spec)
 )
     cache = CosmologyCache(h, z_grid)
     return cache, build_redshift_prior(h, spec, cache)
 end
 
-function cosmology_and_redshift_prior(h::NamedTuple, spec::RedshiftPriorSpec)
-    return cosmology_and_redshift_prior(h, spec, redshift_grid(spec))
-end
-
 function build_redshift_prior(
         h::NamedTuple,
         spec::RedshiftPriorSpec,
-        z_grid::AbstractVector{<:Real}
+        z_grid::AbstractVector{<:Real} = redshift_grid(spec)
 )
     return build_redshift_prior(h, spec, CosmologyCache(h, z_grid))
-end
-
-function build_redshift_prior(h::NamedTuple, spec::RedshiftPriorSpec)
-    return build_redshift_prior(h, spec, redshift_grid(spec))
 end
 
 

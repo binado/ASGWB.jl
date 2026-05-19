@@ -36,16 +36,12 @@ function evaluate_importance_terms(h::HyperParametersNT, problem::ImportanceSamp
         problem.observation.observation_time_sec
     )
     sd = spectral_density(problem.proposal.cached_flux_over_dgw2, rate; weights = iw.weights)
-    return (
-        dgw_theta_sq = iw.dgw_theta_sq,
-        target_log_prob = iw.target_log_prob,
-        log_ratio = iw.log_ratio,
-        weights = iw.weights,
+    return merge(iw, (
         redshift_integral = redshift_integral(redshift_prior),
         expected_number_of_sources = rate * problem.observation.observation_time_sec,
         spectral_density = sd,
         spectral_density_in_band = sd[problem.observation.in_band_mask]
-    )
+    ))
 end
 
 function loglikelihood(
