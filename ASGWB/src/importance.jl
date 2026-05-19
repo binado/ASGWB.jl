@@ -19,21 +19,21 @@ end
 @inline function _importance_terms_at_sample(
         problem::ImportanceSamplingProblem,
         h::HyperParametersNT,
-        bundle::RedshiftBundle,
+        cosmology_cache::CosmologyCache,
+        prior::RedshiftPrior,
         norm::Real,
         tiny::Real,
         z::AbstractVector{<:Real},
         interp::SampleInterpolant,
         sample_index::Integer
 )
-    pdf_at_z = _interpolate_at_sample(bundle.pdf.y, interp, sample_index)
+    pdf_at_z = _interpolate_at_sample(prior.dN_dz.y, interp, sample_index)
     redshift_log_prob = _normalized_log_density(pdf_at_z, norm, tiny)
     target_log_prob = problem.redshift_cache.fixed_intrinsic_log_prob[sample_index] +
                       redshift_log_prob
     log_ratio = target_log_prob - problem.proposal.log_prob[sample_index]
     d_l = luminosity_distance_at_sample(
-        bundle,
-        h.H0,
+        cosmology_cache,
         interp,
         problem.redshift_cache.redshift_grid,
         z,
@@ -48,11 +48,12 @@ end
 function _importance_output_eltypes(
         problem::ImportanceSamplingProblem,
         h::HyperParametersNT,
-        bundle::RedshiftBundle
+        cosmology_cache::CosmologyCache,
+        prior::RedshiftPrior
 )
     target_log_prob_type = promote_type(
         eltype(problem.redshift_cache.fixed_intrinsic_log_prob),
-        CBCDistributions._redshift_logpdf_type(bundle)
+        CBCDistributions._redshift_logpdf_type(prior)
     )
     log_ratio_type = promote_type(target_log_prob_type, eltype(problem.proposal.log_prob))
     dgw_theta_sq_type = promote_type(
@@ -60,8 +61,8 @@ function _importance_output_eltypes(
         typeof(h.H0),
         typeof(h.Ξ₀),
         typeof(h.Ξₙ),
-        eltype(bundle.distance.y),
-        eltype(bundle.distance.cumulative)
+        eltype(cosmology_cache.inv_E_integral.y),
+        eltype(cosmology_cache.inv_E_integral.cumulative)
     )
     weight_type = promote_type(
         log_ratio_type,
@@ -77,10 +78,10 @@ function _importance_output_eltypes(
 end
 
 """
-    compute_importance_weights(problem, h, bundle) -> NamedTuple
+    compute_importance_weights(problem, h, cosmology_cache, prior) -> NamedTuple
 
 High-level builder: given the [`ImportanceSamplingProblem`](@ref), live
-[`HyperParameters`](@ref), and a precomputed [`RedshiftBundle`](@ref), compute
+[`HyperParameters`](@ref), a [`CosmologyCache`](@ref), and a [`RedshiftPrior`](@ref), compute
 per-sample importance weights and the intermediate quantities used by diagnostics
 and the parity shim.
 
@@ -89,15 +90,16 @@ Returns a NamedTuple with fields `weights`, `log_ratio`, `target_log_prob`, `dgw
 function compute_importance_weights(
         problem::ImportanceSamplingProblem,
         h::HyperParametersNT,
-        bundle::RedshiftBundle
+        cosmology_cache::CosmologyCache,
+        prior::RedshiftPrior
 )
     z = redshift(problem)
     n = length(z)
-    norm = redshift_integral(bundle)
-    T = promote_type(eltype(bundle.pdf.y), typeof(norm))
+    norm = redshift_integral(prior)
+    T = promote_type(eltype(prior.dN_dz.y), typeof(norm))
     tiny = floatmin(T)
     if n == 0
-        eltypes = _importance_output_eltypes(problem, h, bundle)
+        eltypes = _importance_output_eltypes(problem, h, cosmology_cache, prior)
         return (;
             weights = Vector{eltypes.weights}(),
             log_ratio = Vector{eltypes.log_ratio}(),
@@ -107,7 +109,8 @@ function compute_importance_weights(
     end
 
     interp = problem.redshift_cache.sample_interpolant
-    first_terms = _importance_terms_at_sample(problem, h, bundle, norm, tiny, z, interp, 1)
+    first_terms = _importance_terms_at_sample(
+        problem, h, cosmology_cache, prior, norm, tiny, z, interp, 1)
     first_target, first_ratio, first_dgw_sq, first_weight = first_terms
     target_log_prob = Vector{typeof(first_target)}(undef, n)
     log_ratio = Vector{typeof(first_ratio)}(undef, n)
@@ -121,7 +124,7 @@ function compute_importance_weights(
         weights[1] = first_weight
         for i in 2:n
             terms = _importance_terms_at_sample(
-                problem, h, bundle, norm, tiny, z, interp, i)
+                problem, h, cosmology_cache, prior, norm, tiny, z, interp, i)
             target, ratio, dgw_sq, weight = terms
             target_log_prob[i] = target
             log_ratio[i] = ratio

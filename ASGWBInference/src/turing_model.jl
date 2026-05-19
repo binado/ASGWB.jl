@@ -68,10 +68,12 @@ end
 
     h = (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak)
 
-    bundle = build_redshift_grid_bundle(h, problem.redshift_prior_spec, z_grid)
-    iw = compute_importance_weights(problem, h, bundle)
+    cosmology_cache,
+    redshift_prior = cosmology_and_redshift_prior(
+        h, problem.redshift_prior_spec, z_grid)
+    iw = compute_importance_weights(problem, h, cosmology_cache, redshift_prior)
     rate = merger_rate_per_sec(
-        bundle,
+        redshift_prior,
         problem.local_merger_rate,
         problem.observation.observation_time_yr,
         problem.observation.observation_time_sec

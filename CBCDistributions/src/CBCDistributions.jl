@@ -1,6 +1,7 @@
 module CBCDistributions
 
-export E, comoving_distance, luminosity_distance, differential_comoving_volume,
+export Cosmology, CosmologyCache,
+       E, comoving_distance, luminosity_distance, differential_comoving_volume,
        gravitational_wave_distance
 export CumulativeIntegral1D, interpolate, cdf, normalizer
 export IntrinsicPriorStrategy, FullBNS,

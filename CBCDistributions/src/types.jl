@@ -23,7 +23,7 @@ end
 """
     RedshiftPriorSpec
 
-Redshift grid settings for [`build_redshift_grid_bundle`](@ref). `time_delay_model`
+Redshift grid settings for [`cosmology_and_redshift_prior`](@ref). `time_delay_model`
 is reserved for future parity with the Python stack; unsupported values must be
 empty or `nothing` at load time.
 """

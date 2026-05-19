@@ -31,7 +31,7 @@ const HyperParameters = @NamedTuple{
 
 UnionAll NamedTuple type keyed by [`DEFAULT_PARAMETER_ORDER`](@ref) that matches any
 element types. Used in inner-loop function signatures (`logprior`, `logposterior`,
-`loglikelihood`, `evaluate_importance_terms`, `build_redshift_grid_bundle`,
+`loglikelihood`, `evaluate_importance_terms`, `cosmology_and_redshift_prior`,
 `compute_importance_weights`) so `ForwardDiff.Dual`-valued hyperparameters from HMC
 gradients flow through unchanged.
 """
@@ -110,7 +110,7 @@ Precomputed redshift-grid state attached to an [`ImportanceSamplingProblem`](@re
 the fixed redshift grid, interpolation metadata for proposal redshifts on that grid,
 and cached hyperparameter-independent full-BNS intrinsic log-probability terms
 (mass, spins, tidal deformability). Redshift log-probability is evaluated from the
-live [`RedshiftBundle`](@ref) each likelihood call.
+live [`RedshiftPrior`](@ref) each likelihood call.
 """
 struct RedshiftGridCache
     redshift_grid::Vector{Float64}
@@ -131,7 +131,7 @@ the integral implied by the live [`HyperParameters`](@ref), not this field.
 
 `redshift_cache` groups the fixed grid, per-sample interpolation metadata, and cached
 hyperparameter-independent full-BNS intrinsic terms (mass, spins, tidal deformability);
-redshift terms are evaluated from the bundle each step.
+redshift terms are evaluated from the live prior each step.
 """
 struct ImportanceSamplingProblem
     proposal::ProposalData

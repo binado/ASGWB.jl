@@ -63,9 +63,9 @@ const _theta_default = (
 
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    bundle = build_redshift_grid_bundle(theta, spec)
-    redshift_dist = RedshiftInterpolatedDistribution(bundle)
-    @test logpdf(redshift_dist, 0.5) ≈ log_prob_from_bundle(0.5, bundle)
+    _, redshift_prior = cosmology_and_redshift_prior(theta, spec)
+    redshift_dist = RedshiftInterpolatedDistribution(redshift_prior)
+    @test logpdf(redshift_dist, 0.5) ≈ redshift_log_prob(redshift_prior, 0.5)
     @test !insupport(redshift_dist, spec.z_min - 0.01)
     @test logpdf(redshift_dist, spec.z_min - 0.01) == -Inf
     @test !insupport(redshift_dist, spec.z_max + 0.5)
@@ -76,15 +76,12 @@ const _theta_default = (
 end
 
 @testset "intrinsic_prior factory returns ProductNamedTupleDistribution" begin
-    theta = _theta_default
-    spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    bundle = build_redshift_grid_bundle(theta, spec)
-    prior = intrinsic_prior(FullBNS(), bundle)
+    prior = intrinsic_prior(FullBNS())
     @test prior isa ProductNamedTupleDistribution
-    @test keys(prior.dists) == (:mass, :redshift, :χ₁, :χ₂, :Λ₁, :Λ₂)
+    @test keys(prior.dists) == (:mass, :χ₁, :χ₂, :Λ₁, :Λ₂)
 
     single = rand(MersenneTwister(7), prior)
-    @test keys(single) == (:mass, :redshift, :χ₁, :χ₂, :Λ₁, :Λ₂)
+    @test keys(single) == (:mass, :χ₁, :χ₂, :Λ₁, :Λ₂)
     @test single.mass isa AbstractVector && length(single.mass) == 2
     @test single.mass[1] >= single.mass[2]
     @test logpdf(prior, single) isa Real
@@ -102,8 +99,8 @@ end
 @testset "intrinsic_log_prob_samples SoA fast path matches native logpdf" begin
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    bundle = build_redshift_grid_bundle(theta, spec)
-    prior = intrinsic_prior(FullBNS(), bundle)
+    _, redshift_prior = cosmology_and_redshift_prior(theta, spec)
+    prior = intrinsic_prior(FullBNS())
     samples = (
         mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
         redshift = [0.1, 0.2],
@@ -117,7 +114,6 @@ end
                     prior,
                     (
                         mass = [samples.mass[1, i], samples.mass[2, i]],
-                        redshift = samples.redshift[i],
                         χ₁ = samples.χ₁[i],
                         χ₂ = samples.χ₂[i],
                         Λ₁ = samples.Λ₁[i],
@@ -130,17 +126,16 @@ end
     out = zeros(Float64, length(samples.redshift))
     intrinsic_log_prob_samples!(out, prior, samples)
     @test out ≈ expected
+    fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
+    @test intrinsic_log_prob_samples(fixed_log_prob, redshift_prior, samples) ≈
+          expected .+ redshift_log_prob.(Ref(redshift_prior), samples.redshift)
 end
 
 @testset "intrinsic_log_prob_samples AoS fallback" begin
-    theta = _theta_default
-    spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    bundle = build_redshift_grid_bundle(theta, spec)
-    prior = intrinsic_prior(FullBNS(), bundle)
+    prior = intrinsic_prior(FullBNS())
     aos = [
         (
             mass = [1.4, 1.2],
-            redshift = 0.1,
             χ₁ = 0.0,
             χ₂ = 0.0,
             Λ₁ = 100.0,
@@ -148,7 +143,6 @@ end
         ),
         (
             mass = [1.5, 1.3],
-            redshift = 0.2,
             χ₁ = 0.1,
             χ₂ = -0.2,
             Λ₁ = 200.0,
@@ -161,8 +155,8 @@ end
 @testset "fixed_intrinsic_log_prob matches intrinsic_prior SoA path" begin
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    bundle = build_redshift_grid_bundle(theta, spec)
-    prior = intrinsic_prior(FullBNS(), bundle)
+    _, redshift_prior = cosmology_and_redshift_prior(theta, spec)
+    prior = intrinsic_prior(FullBNS())
     samples = (
         mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
         redshift = [0.1, 0.2],
@@ -175,10 +169,13 @@ end
     @test fixed_log_prob isa Vector{Float64}
     @test length(fixed_log_prob) == length(samples.redshift)
     expected = intrinsic_log_prob_samples(prior, samples)
-    @test intrinsic_log_prob_samples(fixed_log_prob, bundle, samples) ≈ expected
+    expected_with_redshift = expected .+
+                             redshift_log_prob.(Ref(redshift_prior), samples.redshift)
+    @test intrinsic_log_prob_samples(fixed_log_prob, redshift_prior, samples) ≈
+          expected_with_redshift
     out = similar(expected)
-    intrinsic_log_prob_samples!(out, fixed_log_prob, bundle, samples)
-    @test out ≈ expected
+    intrinsic_log_prob_samples!(out, fixed_log_prob, redshift_prior, samples)
+    @test out ≈ expected_with_redshift
 end
 
 @testset "fixed_intrinsic_log_prob with ForwardDiff.Dual population parameter" begin
@@ -194,10 +191,11 @@ end
     )
     fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
     h_dual = (; theta..., γ = ForwardDiff.Dual(2.7, 1.0))
-    bundle_dual = build_redshift_grid_bundle(h_dual, spec)
-    prior_dual = intrinsic_prior(FullBNS(), bundle_dual)
-    expected = intrinsic_log_prob_samples(prior_dual, samples)
-    got = intrinsic_log_prob_samples(fixed_log_prob, bundle_dual, samples)
+    _, redshift_prior_dual = cosmology_and_redshift_prior(h_dual, spec)
+    prior_dual = intrinsic_prior(FullBNS())
+    expected = intrinsic_log_prob_samples(prior_dual, samples) .+
+               redshift_log_prob.(Ref(redshift_prior_dual), samples.redshift)
+    got = intrinsic_log_prob_samples(fixed_log_prob, redshift_prior_dual, samples)
     @test expected ≈ got
     @test eltype(got) <: ForwardDiff.Dual
 
@@ -212,7 +210,7 @@ end
     empty_fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), empty_samples)
     empty_got = intrinsic_log_prob_samples(
         empty_fixed_log_prob,
-        bundle_dual,
+        redshift_prior_dual,
         empty_samples
     )
     @test isempty(empty_got)

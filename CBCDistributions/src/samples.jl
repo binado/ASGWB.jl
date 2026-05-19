@@ -14,7 +14,7 @@ struct FullBNS <: IntrinsicPriorStrategy end
     FullBNSSamplesSoA
 
 Struct-of-arrays proposal-sample container matching the NamedTuple returned by
-`rand(prior, n)` when `prior = intrinsic_prior(FullBNS(), bundle)`:
+`rand(prior, n)` when `prior = intrinsic_prior(FullBNS())`:
 
 - `mass::Matrix{Float64}` of size `(2, n)`; row 1 is `mass_1_source`, row 2 is `mass_2_source`.
 - `redshift`, `χ₁`, `χ₂`, `Λ₁`, `Λ₂` are `Vector{Float64}` of length `n`.

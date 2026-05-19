@@ -27,7 +27,7 @@ using ASGWBInference.InferenceImpl:
 using ASGWB:
              build_uniform_priors,
              load_cache,
-             build_redshift_grid_bundle,
+             cosmology_and_redshift_prior,
              compute_importance_weights,
              merger_rate_per_sec,
              spectral_density,
@@ -247,10 +247,12 @@ function _run(;
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
     spec = problem.redshift_prior_spec
-    bundle0 = build_redshift_grid_bundle(h, spec)
-    iw0 = compute_importance_weights(problem, h, bundle0)
+    cosmology_cache0,
+    redshift_prior0 = cosmology_and_redshift_prior(
+        h, spec, problem.redshift_cache.redshift_grid)
+    iw0 = compute_importance_weights(problem, h, cosmology_cache0, redshift_prior0)
     rate0 = merger_rate_per_sec(
-        bundle0,
+        redshift_prior0,
         problem.local_merger_rate,
         problem.observation.observation_time_yr,
         problem.observation.observation_time_sec
@@ -299,10 +301,12 @@ function _run(;
         gcsample = true)
 
     suite["stage"] = BenchmarkGroup()
-    suite["stage"]["bundle"] = @benchmarkable build_redshift_grid_bundle($h, $spec)
-    suite["stage"]["weights"] = @benchmarkable compute_importance_weights($problem, $h, $bundle0)
+    suite["stage"]["redshift"] = @benchmarkable cosmology_and_redshift_prior(
+        $h, $spec, $(problem.redshift_cache.redshift_grid))
+    suite["stage"]["weights"] = @benchmarkable compute_importance_weights(
+        $problem, $h, $cosmology_cache0, $redshift_prior0)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
-        $bundle0,
+        $redshift_prior0,
         $(problem.local_merger_rate),
         $(problem.observation.observation_time_yr),
         $(problem.observation.observation_time_sec)
@@ -349,7 +353,7 @@ function _run(;
 
     @info "=== per-stage breakdown (denominator: median of logposterior primal) ==="
     primal_ns = _median_ns(t_primal_logpost)
-    for key in ("bundle", "weights", "rate", "spectral", "prior", "lumdist")
+    for key in ("redshift", "weights", "rate", "spectral", "prior", "lumdist")
         _print_trial_row(key, results["stage"][key]; pct_of = primal_ns)
     end
 
@@ -452,7 +456,7 @@ function _run(;
     _mdrow("primal", "logposterior", t_primal_logpost; pct_of = primal_ns)
     _mdrow("gradient", "native", t_grad_native; pct_of = primal_ns)
     _mdrow("gradient", "turing", t_grad_turing; pct_of = primal_ns)
-    for key in ("bundle", "weights", "rate", "spectral", "prior", "lumdist")
+    for key in ("redshift", "weights", "rate", "spectral", "prior", "lumdist")
         _mdrow("stage", key, results["stage"][key]; pct_of = primal_ns)
     end
     println()
