@@ -16,20 +16,20 @@ function spectral_density(
         merger_rate_per_sec::Real;
         weights::Union{Nothing, AbstractVector{<:Real}} = nothing
 )
-    weights === nothing && return _spectral_density_unweighted(fluxes, merger_rate_per_sec)
-    return _spectral_density_weighted(fluxes, merger_rate_per_sec, weights)
+    return _spectral_density(fluxes, merger_rate_per_sec, weights)
 end
 
-function _spectral_density_unweighted(
+function _spectral_density(
         fluxes::AbstractMatrix{<:Real},
-        merger_rate_per_sec::Real
+        merger_rate_per_sec::Real,
+        ::Nothing
 )
     n_samples = size(fluxes, 2)
     mean_flux = vec(sum(fluxes; dims = 2)) ./ n_samples
     return 0.4 .* merger_rate_per_sec .* mean_flux
 end
 
-function _spectral_density_weighted_generic(
+function _spectral_density(
         fluxes::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real,
         weights::AbstractVector{<:Real}
@@ -39,50 +39,36 @@ function _spectral_density_weighted_generic(
     return 0.4 .* merger_rate_per_sec .* mean_flux
 end
 
-function _spectral_density_weighted(
+function _spectral_density(
         fluxes::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real,
-        weights::AbstractVector{<:Real}
-)
-    return _spectral_density_weighted_generic(fluxes, merger_rate_per_sec, weights)
+        weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
+) where {Tag, V, N}
+    return _spectral_density_forwarddiff(
+        fluxes,
+        V(merger_rate_per_sec),
+        ntuple(_ -> zero(V), Val(N)),
+        weights
+    )
+end
+
+function _spectral_density(
+        fluxes::AbstractMatrix{<:Real},
+        merger_rate_per_sec::ForwardDiff.Dual{Tag, V, N},
+        weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
+) where {Tag, V, N}
+    return _spectral_density_forwarddiff(
+        fluxes,
+        ForwardDiff.value(merger_rate_per_sec),
+        ntuple(j -> ForwardDiff.partials(merger_rate_per_sec)[j], Val(N)),
+        weights
+    )
 end
 
 # Avoid `Matrix{Float64} * Vector{Dual}` here: on realistic caches the generic
 # Dual matvec dominated ForwardDiff/Turing gradient profiles. Splitting primal
 # values and partials lets BLAS handle the two dense contractions.
-function _spectral_density_weighted(
-        fluxes::AbstractMatrix{<:Real},
-        merger_rate_per_sec::Real,
-        weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
-) where {Tag, V, N}
-    merger_rate_per_sec isa ForwardDiff.Dual &&
-        return _spectral_density_weighted_generic(fluxes, merger_rate_per_sec, weights)
-    rate_value = V(merger_rate_per_sec)
-    rate_partials = ntuple(_ -> zero(V), Val(N))
-    return _spectral_density_weighted_forwarddiff(
-        fluxes,
-        rate_value,
-        rate_partials,
-        weights
-    )
-end
-
-function _spectral_density_weighted(
-        fluxes::AbstractMatrix{<:Real},
-        merger_rate_per_sec::ForwardDiff.Dual{Tag, V, N},
-        weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}}
-) where {Tag, V, N}
-    rate_value = ForwardDiff.value(merger_rate_per_sec)
-    rate_partials = ntuple(j -> ForwardDiff.partials(merger_rate_per_sec)[j], Val(N))
-    return _spectral_density_weighted_forwarddiff(
-        fluxes,
-        rate_value,
-        rate_partials,
-        weights
-    )
-end
-
-function _spectral_density_weighted_forwarddiff(
+function _spectral_density_forwarddiff(
         fluxes::AbstractMatrix{<:Real},
         rate_value::V,
         rate_partials::NTuple{N, V},
