@@ -47,19 +47,11 @@ function Distributions.logpdf(d::OrderedUniformSourceMassPair, value::NTuple{2, 
     return log(T(2)) - T(2) * log(d.high - d.low)
 end
 
-function Distributions.logpdf(
-        d::OrderedUniformSourceMassPair,
-        value::AbstractVector{<:Real}
-)
-    length(value) == 2 || throw(ArgumentError("ordered mass pair expects two coordinates"))
-    return logpdf(d, (value[1], value[2]))
-end
-
 function Distributions._logpdf(
         d::OrderedUniformSourceMassPair,
-        value::AbstractVector{<:Real}
+        x::AbstractVector{<:Real}
 )
-    return logpdf(d, value)
+    return logpdf(d, (x[1], x[2]))
 end
 
 function Random.rand(rng::AbstractRNG, d::OrderedUniformSourceMassPair)
