@@ -25,7 +25,7 @@ using CBCDistributions
         expected_log_prob = vec(Float64.(read(group["log_prob"])))
         expected_integral = Float64(read(group["redshift_integral"]))
 
-        _, redshift_prior = cosmology_and_redshift_prior(theta, spec)
+        redshift_prior = build_redshift_prior(theta, spec)
 
         # Fixture expected values were computed against the Python trapezoid-based bundle
         # norm; Julia now uses composite Simpson, so the tolerances reflect the trapezoid

@@ -5,7 +5,7 @@ export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
        detector_frame_merger_rate_density, expected_number_of_events,
        madau_dickinson_source_frame_distribution, power_law_source_frame_distribution,
        redshift_grid, SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
-       _build_redshift_grid, luminosity_distance_at_sample,
+       luminosity_distance_at_sample,
        build_redshift_prior, cosmology_and_redshift_prior,
        RedshiftInterpolatedDistribution, _normalized_log_density
 
@@ -171,28 +171,6 @@ end
     end
 end
 
-function _build_redshift_grid(
-        source_frame_fn,
-        H0::Real,
-        Ωm::Real,
-        z_min::Real,
-        z_max::Real,
-        num_interp::Integer
-)
-    z_grid = collect(LinRange(Float64(z_min), Float64(z_max), Int(num_interp)))
-    return _build_redshift_grid(source_frame_fn, H0, Ωm, z_grid)
-end
-
-function _build_redshift_grid(
-        source_frame_fn,
-        H0::Real,
-        Ωm::Real,
-        z_grid::AbstractVector{<:Real}
-)
-    cosmology_cache = CosmologyCache(Cosmology(H0, Ωm), z_grid)
-    return build_redshift_prior(source_frame_fn, cosmology_cache)
-end
-
 function build_redshift_prior(source_frame_fn, cache::CosmologyCache)
     z_grid_f = cache.inv_E_integral.x
     d_h = SPEED_OF_LIGHT_KM_S / cache.cosmology.H0
@@ -268,6 +246,18 @@ end
 
 function cosmology_and_redshift_prior(h::NamedTuple, spec::RedshiftPriorSpec)
     return cosmology_and_redshift_prior(h, spec, redshift_grid(spec))
+end
+
+function build_redshift_prior(
+        h::NamedTuple,
+        spec::RedshiftPriorSpec,
+        z_grid::AbstractVector{<:Real}
+)
+    return build_redshift_prior(h, spec, CosmologyCache(h, z_grid))
+end
+
+function build_redshift_prior(h::NamedTuple, spec::RedshiftPriorSpec)
+    return build_redshift_prior(h, spec, redshift_grid(spec))
 end
 
 

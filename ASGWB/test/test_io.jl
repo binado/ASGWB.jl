@@ -33,7 +33,7 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
         κ = κ,
         zpeak = zp
     )
-    _, redshift_prior = cosmology_and_redshift_prior(h, spec)
+    redshift_prior = build_redshift_prior(h, spec)
     expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)
     expected_ri = Float64(ASGWB.redshift_integral(redshift_prior))
 

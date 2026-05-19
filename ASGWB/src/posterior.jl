@@ -1,6 +1,5 @@
 function target_log_prob_samples(h::HyperParametersNT, problem::ImportanceSamplingProblem)
-    cosmology_cache,
-    redshift_prior = cosmology_and_redshift_prior(
+    redshift_prior = build_redshift_prior(
         h,
         problem.redshift_prior_spec,
         problem.redshift_cache.redshift_grid
@@ -10,7 +9,7 @@ function target_log_prob_samples(h::HyperParametersNT, problem::ImportanceSampli
         redshift_prior,
         problem.proposal.samples
     )
-    return target_log_prob, cosmology_cache, redshift_prior
+    return target_log_prob, redshift_prior
 end
 
 """

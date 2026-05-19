@@ -63,7 +63,7 @@ const _theta_default = (
 
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    _, redshift_prior = cosmology_and_redshift_prior(theta, spec)
+    redshift_prior = build_redshift_prior(theta, spec)
     redshift_dist = RedshiftInterpolatedDistribution(redshift_prior)
     @test logpdf(redshift_dist, 0.5) ≈ redshift_log_prob(redshift_prior, 0.5)
     @test !insupport(redshift_dist, spec.z_min - 0.01)
@@ -99,7 +99,7 @@ end
 @testset "intrinsic_log_prob_samples SoA fast path matches native logpdf" begin
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    _, redshift_prior = cosmology_and_redshift_prior(theta, spec)
+    redshift_prior = build_redshift_prior(theta, spec)
     prior = intrinsic_prior(FullBNS())
     samples = (
         mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
@@ -155,7 +155,7 @@ end
 @testset "fixed_intrinsic_log_prob matches intrinsic_prior SoA path" begin
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    _, redshift_prior = cosmology_and_redshift_prior(theta, spec)
+    redshift_prior = build_redshift_prior(theta, spec)
     prior = intrinsic_prior(FullBNS())
     samples = (
         mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
@@ -191,7 +191,7 @@ end
     )
     fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
     h_dual = (; theta..., γ = ForwardDiff.Dual(2.7, 1.0))
-    _, redshift_prior_dual = cosmology_and_redshift_prior(h_dual, spec)
+    redshift_prior_dual = build_redshift_prior(h_dual, spec)
     prior_dual = intrinsic_prior(FullBNS())
     expected = intrinsic_log_prob_samples(prior_dual, samples) .+
                redshift_log_prob.(Ref(redshift_prior_dual), samples.redshift)
