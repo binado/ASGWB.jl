@@ -37,6 +37,7 @@ include("detector/observation.jl")
 include("cache.jl")
 include("importance.jl")
 include("spectral_density.jl")
+include("snr.jl")
 include("diagnostics.jl")
 include("posterior.jl")
 include("parity_test_cache.jl")
@@ -128,7 +129,7 @@ export importance_weights,
        spectral_density,
        spectral_snr_squared,
        spectral_snr,
-       omegagw,
+       Ωgw,
        evaluate_importance_terms
 
 # Diagnostics

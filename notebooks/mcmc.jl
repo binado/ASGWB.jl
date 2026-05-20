@@ -16,7 +16,7 @@
 # %% [markdown]
 # # MCMC
 #
-# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with `HyperParameters` and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `omegagw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
+# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with `HyperParameters` and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 #
 # On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
 #
@@ -40,7 +40,7 @@ begin
     using ASGWB:
                  load_cache,
                  evaluate_importance_terms,
-                 omegagw,
+                 Ωgw,
                  HyperParameters,
                  Detector,
                  DEFAULT_PARAMETER_ORDER
@@ -199,10 +199,10 @@ end
 begin
     ev = evaluate_importance_terms(θ0, problem)
     f = problem.observation.frequencies
-    Ωgw = omegagw(ev.spectral_density, f, θ0)
-    mask = Ωgw .> 0.0
+    Ωgw_plot = Ωgw(ev.spectral_density, f, θ0.H0)
+    mask = Ωgw_plot .> 0.0
     fm = f[mask]
-    Ωm = Ωgw[mask]
+    Ωm = Ωgw_plot[mask]
     fig = Figure(size = (900, 450))
     ax = Axis(
         fig[1, 1];
