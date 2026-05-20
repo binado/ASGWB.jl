@@ -8,6 +8,10 @@ on:
     tags: ['*']
   pull_request:
 
+permissions:
+  actions: write
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
@@ -27,15 +31,23 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v2
-      - name: Build and Test ASGWB
-        run: |
-          julia --project=ASGWB -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
-      - name: Build and Test ASGWBInference
-        run: |
-          julia --project=ASGWBInference -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+      - uses: julia-actions/cache@v3
+      - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: ASGWB
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          project: ASGWB
+          coverage: false
+      - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: ASGWBInference
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          project: ASGWBInference
+          coverage: false
