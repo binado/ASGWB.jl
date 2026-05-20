@@ -37,16 +37,12 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v3
-      - uses: julia-actions/julia-buildpkg@v1
-        with:
-          project: ASGWB
+      # Skip julia-buildpkg: ASGWBInference/deps/build.jl runs PackageCompiler
+      # create_app (intended for `just build`, not CI). Pkg.test() is enough here.
       - uses: julia-actions/julia-runtest@v1
         with:
           project: ASGWB
           coverage: false
-      - uses: julia-actions/julia-buildpkg@v1
-        with:
-          project: ASGWBInference
       - uses: julia-actions/julia-runtest@v1
         with:
           project: ASGWBInference
