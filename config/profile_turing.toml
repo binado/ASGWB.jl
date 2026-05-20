@@ -1,4 +1,4 @@
-cache_path = "ASGWB/test/fixtures/posterior_cache_julia.h5"
+cache_path = "parity:posterior"
 detectors = ["H1", "L1"]
 seed = 1
 

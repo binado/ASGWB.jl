@@ -30,7 +30,7 @@ const HyperParameters = @NamedTuple{
     HyperParametersNT
 
 UnionAll NamedTuple type keyed by [`DEFAULT_PARAMETER_ORDER`](@ref) that matches any
-element types. Used in inner-loop function signatures (`logprior`, `logposterior`,
+element types. Used in inner-loop function signatures (`logposterior`,
 `loglikelihood`, `evaluate_importance_terms`, `cosmology_and_redshift_prior`,
 `compute_importance_weights`) so `ForwardDiff.Dual`-valued hyperparameters from HMC
 gradients flow through unchanged.

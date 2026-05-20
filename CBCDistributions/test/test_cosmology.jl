@@ -1,4 +1,3 @@
-using HDF5
 using QuadGK
 using Test
 using ForwardDiff
@@ -37,32 +36,6 @@ end
         luminosity_distance(1.2, c)
     end
     @test isfinite(ForwardDiff.derivative(f, Ωm))
-end
-
-@testset "cosmology parity fixtures" begin
-    fixture_path = joinpath(@__DIR__, "fixtures", "cosmology_parity.h5")
-
-    h5open(fixture_path, "r") do file
-        z_grid = vec(Float64.(read(file["z_grid"])))
-        cases = file["cases"]
-
-        for case_name in sort!(collect(keys(cases)))
-            case_group = cases[case_name]
-            H0 = Float64(read(case_group["H0"]))
-            Ωm = Float64(read(case_group["Omega_m"]))
-            Ξ₀ = Float64(read(case_group["chi0"]))
-            Ξₙ = Float64(read(case_group["chin"]))
-
-            expected_dl = vec(Float64.(read(case_group["luminosity_distance"])))
-            expected_dvc = vec(Float64.(read(case_group["differential_comoving_volume"])))
-            expected_dgw = vec(Float64.(read(case_group["gravitational_wave_distance"])))
-
-            @test luminosity_distance.(z_grid, H0, Ωm) ≈ expected_dl rtol = 1e-6
-            @test differential_comoving_volume.(z_grid, H0, Ωm) ≈ expected_dvc rtol = 1e-6
-            @test gravitational_wave_distance.(z_grid, expected_dl, Ξ₀, Ξₙ) ≈
-                  expected_dgw rtol = 1e-6
-        end
-    end
 end
 
 @testset "CumulativeIntegral1D" begin

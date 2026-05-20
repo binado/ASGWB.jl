@@ -1,3 +1,5 @@
+using Distributions: logpdf, ProductNamedTupleDistribution
+
 function target_log_prob_samples(h::HyperParametersNT, problem::ImportanceSamplingProblem)
     redshift_prior = build_redshift_prior(
         h,
@@ -16,8 +18,8 @@ end
     evaluate_importance_terms(h, problem) -> NamedTuple
 
 Thin composition of [`compute_importance_weights`](@ref), [`merger_rate_per_sec`](@ref),
-and [`spectral_density`](@ref) that exposes every intermediate used by parity tests and
-the AdvancedHMC likelihood (`dgw_theta_sq`, `target_log_prob`, `log_ratio`, `weights`,
+and [`spectral_density`](@ref) that exposes every intermediate used by inference
+diagnostics and the AdvancedHMC likelihood (`dgw_theta_sq`, `target_log_prob`, `log_ratio`, `weights`,
 `redshift_integral`, `expected_number_of_sources`, `spectral_density`,
 `spectral_density_in_band`).
 """
@@ -65,7 +67,7 @@ function logposterior(
         prior::ProductNamedTupleDistribution;
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
-    return logprior(h, prior) +
+    return logpdf(prior, h) +
            loglikelihood(h, problem; observed_spectral_density = observed_spectral_density)
 end
 

@@ -7,7 +7,7 @@ using Base.Filesystem: cp
 const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
 
 @testset "load_cache omits proposal_log_prob, dgw_fid_sq, fiducial spectrum; full BNS reconstruction" begin
-    fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
+    fixture_path = parity_cache_path(:importance_context)
     ref = load_cache(fixture_path, _TEST_LOAD_DETS)
     z = ref.proposal.samples.redshift
     spec = ref.redshift_prior_spec
@@ -98,7 +98,7 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
 end
 
 @testset "importance_sampling_problem matches load_cache fixture" begin
-    fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
+    fixture_path = parity_cache_path(:importance_context)
     from_file = load_cache(fixture_path, _TEST_LOAD_DETS)
 
     samples = (
@@ -170,7 +170,7 @@ end
 end
 
 @testset "load_cache" begin
-    fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
+    fixture_path = parity_cache_path(:importance_context)
     problem = load_cache(fixture_path, _TEST_LOAD_DETS)
 
     @test problem.proposal.intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER
@@ -182,8 +182,12 @@ end
     @test s.χ₂ ≈ [0.0, 0.0]
     @test s.Λ₁ ≈ [100.0, 100.0]
     @test s.Λ₂ ≈ [100.0, 100.0]
-    # tolerance reflects Simpson- vs trapezoid-based bundle norm (see radial_interpolant.jl)
-    @test problem.proposal.log_prob ≈ [-17.12928958264864, -15.702803964648165] rtol = 2e-3
+    expected_lp = reconstruct_proposal_log_prob(
+        problem.proposal.samples,
+        problem.redshift_prior_spec,
+        problem.fiducial_parameters,
+    )
+    @test problem.proposal.log_prob ≈ expected_lp rtol = 1e-6
     @test problem.proposal.intrinsic_vector ≈ Float64[1.4 1.2 0.1 0.0 0.0 100.0 100.0
                   1.4 1.2 0.2 0.0 0.0 100.0 100.0]
     @test problem.proposal.cached_flux_over_dgw2 ≈ [1.0 1.5; 2.0 2.5]
@@ -219,7 +223,7 @@ end
 end
 
 @testset "load_cache rejects unsupported proposal_samples source_type" begin
-    fixture_path = joinpath(@__DIR__, "fixtures", "importance_context_julia.h5")
+    fixture_path = parity_cache_path(:importance_context)
     path = joinpath(mktempdir(), "bad_source_type.h5")
     cp(fixture_path, path; force = true)
     h5open(path, "r+") do f

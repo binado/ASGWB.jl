@@ -21,7 +21,7 @@ Use existing Unicode scientific identifiers, including `Ωm`, `Ξ₀`, `Ξₙ`, 
 
 ## Testing Guidelines
 
-Tests use Julia's standard `Test` framework and are orchestrated by `ASGWB/test/runtests.jl`. Add new test files to `runtests.jl`; otherwise they will not run in CI or `Pkg.test()`. Prefer focused numerical tests with explicit tolerances for cosmology, redshift integrals, likelihoods, and interpolation behavior. Keep fixture changes intentional and document when HDF5 cache fixtures must be regenerated.
+Tests use Julia's standard `Test` framework and are orchestrated by `ASGWB/test/runtests.jl`. Add new test files to `runtests.jl`; otherwise they will not run in CI or `Pkg.test()`. Prefer focused numerical tests with explicit tolerances for cosmology, redshift integrals, likelihoods, and interpolation behavior. Minimal importance caches for tests are written on demand via `parity_cache_path` / `parity:…` config aliases (see `ASGWB/src/parity_test_cache.jl`); shared smoke-test hyperparameters live in `ASGWB/test/parity_fixtures.jl`.
 
 Run `just test` before opening a pull request. For narrow changes, also run the closest individual test file during development with `julia --project=ASGWB ASGWB/test/test_<area>.jl`.
 

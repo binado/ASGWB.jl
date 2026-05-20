@@ -80,7 +80,7 @@ end
 end
 
 @testset "load_cache reconstructs effective_psd from detectors" begin
-    path = joinpath(@__DIR__, "fixtures", "posterior_cache_julia_v2_minimal.h5")
+    path = parity_cache_path(:posterior_v2_minimal)
     isfile(path) || error("missing fixture $path")
     d1 = Detector("H1")
     d2 = Detector("L1")
@@ -91,7 +91,7 @@ end
 end
 
 @testset "load_cache is deterministic for the same path and detectors" begin
-    path = joinpath(@__DIR__, "fixtures", "posterior_cache_julia.h5")
+    path = parity_cache_path(:posterior)
     dets = [Detector("H1"), Detector("L1")]
     p1 = load_cache(path, dets)
     p2 = load_cache(path, dets)

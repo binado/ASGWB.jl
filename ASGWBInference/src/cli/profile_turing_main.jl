@@ -15,15 +15,15 @@
 
 module ASGWBProfileMainCLI
 
+using Distributions: logpdf, product_distribution, Uniform
 using ASGWB
 using ASGWB:
-             build_uniform_priors,
              load_cache,
+             resolve_parity_cache_path,
              cosmology_and_redshift_prior,
              compute_importance_weights,
              merger_rate_per_sec,
              spectral_density,
-             logprior,
              logposterior,
              luminosity_distance,
              redshift,
@@ -80,19 +80,28 @@ function _load_observed_spectral_density(path::AbstractString, expected_len::Int
     return v
 end
 
-function _prior_bounds_from_toml(priors_tbl::Dict)
-    bounds = Dict{String, Tuple{Float64, Float64}}()
-    for (key, sub) in priors_tbl
-        sub isa Dict ||
-            throw(ArgumentError("priors.$key must be a table with 'low' and 'high'"))
-        lo = Float64(sub["low"])
-        hi = Float64(sub["high"])
-        isfinite(lo) && isfinite(hi) ||
-            throw(ArgumentError("priors.$key: low and high must be finite"))
-        lo < hi || throw(ArgumentError("priors.$key: require low < high, got ($lo, $hi)"))
-        bounds[key] = (lo, hi)
-    end
-    return bounds
+function _uniform_bounds(priors_tbl::Dict, key::AbstractString)
+    sub = priors_tbl[key]
+    sub isa Dict ||
+        throw(ArgumentError("priors.$key must be a table with 'low' and 'high'"))
+    lo = Float64(sub["low"])
+    hi = Float64(sub["high"])
+    isfinite(lo) && isfinite(hi) ||
+        throw(ArgumentError("priors.$key: low and high must be finite"))
+    lo < hi || throw(ArgumentError("priors.$key: require low < high, got ($lo, $hi)"))
+    return lo, hi
+end
+
+function _priors_from_toml(priors_tbl::Dict)
+    return product_distribution((
+        H0 = Uniform(_uniform_bounds(priors_tbl, "H0")...),
+        Ωm = Uniform(_uniform_bounds(priors_tbl, "Omega_m")...),
+        Ξ₀ = Uniform(_uniform_bounds(priors_tbl, "chi0")...),
+        Ξₙ = Uniform(_uniform_bounds(priors_tbl, "chin")...),
+        γ = Uniform(_uniform_bounds(priors_tbl, "gamma")...),
+        κ = Uniform(_uniform_bounds(priors_tbl, "kappa")...),
+        zpeak = Uniform(_uniform_bounds(priors_tbl, "z_peak")...),
+    ))
 end
 
 function _theta0_from_toml(init_tbl::Dict)
@@ -107,14 +116,20 @@ function _theta0_from_toml(init_tbl::Dict)
     )
 end
 
-function _validate_init_in_priors(prior_bounds::Dict, init_tbl::Dict)
-    for (key, sub) in prior_bounds
-        lo, hi = sub
-        v = get(init_tbl, key, nothing)
-        v === nothing && continue
-        v = Float64(v)
-        lo <= v <= hi || throw(
-            ArgumentError("init.$key = $v is outside prior bounds [$lo, $hi]"),
+function _validate_init_in_priors(prior, init_tbl::Dict)
+    for (key, sym) in (
+        "H0" => :H0,
+        "Omega_m" => :Ωm,
+        "chi0" => :Ξ₀,
+        "chin" => :Ξₙ,
+        "gamma" => :γ,
+        "kappa" => :κ,
+        "z_peak" => :zpeak,
+    )
+        haskey(init_tbl, key) || continue
+        v = Float64(init_tbl[key])
+        isfinite(logpdf(prior.dists[sym], v)) || throw(
+            ArgumentError("init.$key = $v is outside the support of the corresponding prior"),
         )
     end
     return nothing
@@ -192,7 +207,7 @@ end
 function _run(;
         cache_path::String,
         detectors::Vector{Detector},
-        prior_bounds::Dict,
+        priors,
         θ0::HyperParameters,
         seed::Union{Nothing, Int},
         observed_spectral_density_csv::Union{Nothing, String},
@@ -208,8 +223,6 @@ function _run(;
         for d in detectors), ",")
     problem = load_cache(cache_path, detectors)
     @info "cache loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
-
-    priors = build_uniform_priors(prior_bounds)
 
     observed = if observed_spectral_density_csv === nothing
         @info "using fiducial in-band spectrum from cache as observed data"
@@ -313,7 +326,7 @@ function _run(;
         $rate0;
         weights = $weights0
     )
-    suite["stage"]["prior"] = @benchmarkable logprior($h, $priors)
+    suite["stage"]["prior"] = @benchmarkable logpdf($priors, $h)
     # Bare luminosity_distance broadcast — isolates the per-sample quadgk
     # cost currently in ASGWB/src/importance.jl:36 and ASGWB/src/cache.jl:70.
     suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $H0_val, $Ωm_val)
@@ -501,7 +514,7 @@ function profile(;
     @info "loading config" path = config_file
     cfg = TOML.parsefile(config_file)
 
-    cache_path = _require(cfg, "cache_path")::String
+    cache_path = resolve_parity_cache_path(_require(cfg, "cache_path")::String)
     detectors = [Detector(n) for n in _require_string_array(cfg, "detectors")]
     seed = get(cfg, "seed", nothing)
     observed_csv = get(cfg, "observed_spectral_density_csv", nothing)
@@ -511,8 +524,8 @@ function profile(;
 
     priors_tbl = _require_table(cfg, "priors")
     init_tbl = _require_table(cfg, "init")
-    prior_bounds = _prior_bounds_from_toml(priors_tbl)
-    _validate_init_in_priors(prior_bounds, init_tbl)
+    priors = _priors_from_toml(priors_tbl)
+    _validate_init_in_priors(priors, init_tbl)
     θ0 = _theta0_from_toml(init_tbl)
 
     @info "effective settings" cache=cache_path detectors=join((d.name for d in detectors), ",") seed=seed
@@ -520,7 +533,7 @@ function profile(;
     return _run(;
         cache_path,
         detectors,
-        prior_bounds,
+        priors,
         θ0,
         seed,
         observed_spectral_density_csv = observed_csv,

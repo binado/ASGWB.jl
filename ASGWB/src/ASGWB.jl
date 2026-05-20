@@ -34,12 +34,12 @@ include("detector/detector.jl")
 include("detector/overlap.jl")
 include("detector/effective_psd.jl")
 include("detector/observation.jl")
-include("hyperparameter_prior.jl")
 include("cache.jl")
 include("importance.jl")
 include("spectral_density.jl")
 include("diagnostics.jl")
 include("posterior.jl")
+include("parity_test_cache.jl")
 include("io.jl")
 
 # Types
@@ -71,7 +71,10 @@ export ImportanceSamplingProblem,
        redshift
 
 # IO
-export load_cache,
+export parity_cache_path,
+       resolve_parity_cache_path,
+       write_parity_cache_h5,
+       load_cache,
        reconstruct_proposal_log_prob,
        reconstruct_dgw_fid_sq,
        IMPORTANCE_CACHE_COMMAND_ATTR,
@@ -113,9 +116,7 @@ export madau_dickinson_source_frame_distribution,
        merger_rate_per_sec
 
 # Priors
-export logprior,
-       build_uniform_priors,
-       OrderedUniformSourceMassPair,
+export OrderedUniformSourceMassPair,
        AlignedSpinChiSimple,
        RedshiftInterpolatedDistribution,
        intrinsic_prior,
