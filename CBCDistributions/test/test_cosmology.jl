@@ -2,7 +2,12 @@ using HDF5
 using QuadGK
 using Test
 using ForwardDiff
-using CBCDistributions: CumulativeIntegral1D, cdf, interpolate, normalizer
+using CBCDistributions: CumulativeIntegral1D, cdf, hubble_constant_si, interpolate, normalizer
+
+@testset "hubble_constant_si" begin
+    H0 = 70.0
+    @test hubble_constant_si(H0) ≈ Float64(H0) * 1000.0 / 3.085677581e22
+end
 
 @testset "basic cosmology helpers" begin
     h = (H0 = 67.0, Ωm = 0.315)

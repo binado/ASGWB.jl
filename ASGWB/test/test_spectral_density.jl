@@ -1,28 +1,18 @@
-using ASGWB: HyperParameters, spectral_snr, spectral_snr_squared
+using ASGWB: Ωgw
+using CBCDistributions: hubble_constant_si
 using ForwardDiff
 using Statistics
 using Test
 
-@testset "omegagw" begin
+@testset "Ωgw" begin
     H0_kms = 70.0
-    # Same km/s/Mpc → s⁻¹ conversion as `ASGWB.hubble_constant_si` (not exported).
-    h0_si = Float64(H0_kms) * 1000.0 / 3.085677581e22
+    h0_si = hubble_constant_si(H0_kms)
     f = [10.0, 20.0]
     sh = [1.0e-45, 2.0e-45]
     pre = 4 * pi^2 / (3 * h0_si^2)
     expected = @. pre * f^3 * sh
-    @test omegagw(sh, f, H0_kms) ≈ expected
-    θ = HyperParameters(;
-        H0 = H0_kms,
-        Ωm = 0.3,
-        Ξ₀ = 1.0,
-        Ξₙ = 0.0,
-        γ = 2.0,
-        κ = 1.0,
-        zpeak = 1.0
-    )
-    @test omegagw(sh, f, θ) ≈ omegagw(sh, f, H0_kms)
-    @test omegagw(1.0e-45, 10.0, H0_kms) ≈ pre * 10.0^3 * 1.0e-45
+    @test Ωgw(sh, f, H0_kms) ≈ expected
+    @test Ωgw(1.0e-45, 10.0, H0_kms) ≈ pre * 10.0^3 * 1.0e-45
 end
 
 @testset "spectral_density primitive" begin
@@ -82,38 +72,4 @@ end
                   [ForwardDiff.partials(x)[lane] for x in expected]
         end
     end
-end
-
-@testset "spectral_snr / spectral_snr_squared" begin
-    s = [1.0, 2.0, 3.0]
-    σ = [0.5, 1.0, 0.25]
-    f = [10.0, 20.0, 30.0]
-    T = 1.0
-    # Same σ as the old `sgwb_scale` path: σ = effective_psd / sqrt(2 T df), df = 10 Hz
-    df_bins = f[2] - f[1]
-    eff = @. σ * sqrt(2.0 * T * df_bins)
-    expected_sq = sum(s .^ 2 ./ σ .^ 2)
-    @test spectral_snr_squared(s, eff, f, T, df_bins) ≈ expected_sq
-    @test spectral_snr(s, eff, f, T, df_bins) ≈ sqrt(expected_sq)
-    @test spectral_snr(s, eff, f, T, df_bins) ≈
-          sqrt(spectral_snr_squared(s, eff, f, T, df_bins))
-
-    T1 = 1.0
-    df0 = 0.5
-    @test spectral_snr_squared([2.0], [4.0], [100.0], T1, df0) == 0.25
-    @test spectral_snr([2.0], [4.0], [100.0], T1, df0) == 0.5
-
-    @test_throws DimensionMismatch spectral_snr_squared(
-        [1.0, 2.0],
-        [1.0, 2.0, 3.0],
-        [1.0, 2.0, 3.0],
-        T1,
-        1.0
-    )
-    @test isfinite(
-        spectral_snr_squared([1.0, 2.0], [1.0, 2.0], [2.0, 1.0], T1, df_bins),
-    )
-    @test isinf(spectral_snr_squared([1.0, 2.0], [0.0, 1.0], [1.0, 2.0], T1, df_bins))
-    r = spectral_snr_squared([1.0, 2.0], [-1.0, 1.0], [1.0, 2.0], T1, df_bins)
-    @test r isa Real && isfinite(r)
 end

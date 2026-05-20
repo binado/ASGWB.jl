@@ -2,7 +2,7 @@ module CBCDistributions
 
 export Cosmology, CosmologyCache,
        E, comoving_distance, luminosity_distance, differential_comoving_volume,
-       gravitational_wave_distance
+       gravitational_wave_distance, hubble_constant_si
 export CumulativeIntegral1D, interpolate, cdf, normalizer
 export IntrinsicPriorStrategy, FullBNS,
        FullBNSSamplesSoA, stack_source_masses,

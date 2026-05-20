@@ -90,7 +90,7 @@ Strain spectral density ``S_h(f)`` at [`fiducial_hyperparameters`](@ref), from
 [`evaluate_importance_terms`](@ref) (cached flux, importance weights, and merger rate). Same
 units as the vector returned by [`spectral_density`](@ref) on the importance-weighted fluxes.
 
-For the dimensionless energy density ``\\Omega_{\\mathrm{GW}}(f)``, use [`omegagw`](@ref) with
+For the dimensionless energy density ``\\Omega_{\\mathrm{GW}}(f)``, use [`Ωgw`](@ref) with
 this vector and the corresponding frequency bins from `problem.observation.frequencies`.
 """
 function fiducial_spectral_density(problem::ImportanceSamplingProblem)
