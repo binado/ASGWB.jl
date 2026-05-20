@@ -102,7 +102,7 @@ function reconstruct_proposal_log_prob(
     h = hyperparameters_from_fiducial(fid, spec)
     redshift_prior = build_redshift_prior(h, spec)
     fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
-    return intrinsic_log_prob_samples(fixed_log_prob, redshift_prior, samples)
+    return fixed_log_prob .+ redshift_log_prob_samples(redshift_prior, samples.redshift)
 end
 
 function importance_sampling_problem(

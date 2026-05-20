@@ -127,7 +127,7 @@ end
     intrinsic_log_prob_samples!(out, prior, samples)
     @test out ≈ expected
     fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
-    @test intrinsic_log_prob_samples(fixed_log_prob, redshift_prior, samples) ≈
+    @test fixed_log_prob .+ redshift_log_prob_samples(redshift_prior, samples.redshift) ≈
           expected .+ redshift_log_prob.(Ref(redshift_prior), samples.redshift)
 end
 
@@ -171,11 +171,11 @@ end
     expected = intrinsic_log_prob_samples(prior, samples)
     expected_with_redshift = expected .+
                              redshift_log_prob.(Ref(redshift_prior), samples.redshift)
-    @test intrinsic_log_prob_samples(fixed_log_prob, redshift_prior, samples) ≈
-          expected_with_redshift
-    out = similar(expected)
-    intrinsic_log_prob_samples!(out, fixed_log_prob, redshift_prior, samples)
-    @test out ≈ expected_with_redshift
+    redshift_log_prob_vec = redshift_log_prob_samples(redshift_prior, samples.redshift)
+    @test fixed_log_prob .+ redshift_log_prob_vec ≈ expected_with_redshift
+    out = similar(redshift_log_prob_vec)
+    redshift_log_prob_samples!(out, redshift_prior, samples.redshift)
+    @test fixed_log_prob .+ out ≈ expected_with_redshift
 end
 
 @testset "fixed_intrinsic_log_prob with ForwardDiff.Dual population parameter" begin
@@ -195,7 +195,8 @@ end
     prior_dual = intrinsic_prior(FullBNS())
     expected = intrinsic_log_prob_samples(prior_dual, samples) .+
                redshift_log_prob.(Ref(redshift_prior_dual), samples.redshift)
-    got = intrinsic_log_prob_samples(fixed_log_prob, redshift_prior_dual, samples)
+    got = fixed_log_prob .+
+          redshift_log_prob_samples(redshift_prior_dual, samples.redshift)
     @test expected ≈ got
     @test eltype(got) <: ForwardDiff.Dual
 
@@ -208,11 +209,9 @@ end
         Λ₂ = Float64[]
     )
     empty_fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), empty_samples)
-    empty_got = intrinsic_log_prob_samples(
-        empty_fixed_log_prob,
-        redshift_prior_dual,
-        empty_samples
-    )
+    empty_redshift = redshift_log_prob_samples(redshift_prior_dual, empty_samples.redshift)
+    empty_got = empty_fixed_log_prob .+ empty_redshift
     @test isempty(empty_got)
+    @test eltype(empty_redshift) <: ForwardDiff.Dual
     @test eltype(empty_got) <: ForwardDiff.Dual
 end

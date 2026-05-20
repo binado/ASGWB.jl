@@ -1,8 +1,6 @@
 using Distributions
 using Distributions: ProductNamedTupleDistribution
 
-export redshift_logpdf_eltype
-
 """
     intrinsic_prior(::FullBNS; kwargs...) -> ProductNamedTupleDistribution
 
@@ -142,71 +140,5 @@ function fixed_intrinsic_log_prob(
                  logpdf(lambda_dist, samples.Λ₁[i]) +
                  logpdf(lambda_dist, samples.Λ₂[i])
     end
-    return out
-end
-
-@inline function _redshift_logpdf(prior::RedshiftPrior, z::Real)
-    x_lo = first(prior.dN_dz.x)
-    x_hi = last(prior.dN_dz.x)
-    (z < x_lo || z > x_hi) && return -Inf
-    return redshift_log_prob(prior, z)
-end
-
-"""
-    redshift_logpdf_eltype(prior::RedshiftPrior) -> Type
-
-Element type of values returned by the redshift log-density associated with
-`prior`. Useful for preallocating output vectors that promote with the
-redshift contribution (for example `ForwardDiff.Dual` when `prior` was built
-under AD).
-"""
-function redshift_logpdf_eltype(prior::RedshiftPrior)
-    return promote_type(eltype(prior.dN_dz.y), typeof(redshift_integral(prior)))
-end
-
-"""
-    intrinsic_log_prob_samples!(out, fixed_log_prob, prior, samples) -> out
-
-Fill `out` with per-sample intrinsic log-prior using precomputed fixed full-BNS
-terms and the live redshift density from [`RedshiftPrior`](@ref).
-"""
-function intrinsic_log_prob_samples!(
-        out::AbstractVector,
-        fixed_log_prob::AbstractVector{<:Real},
-        prior::RedshiftPrior,
-        samples::NamedTuple
-)
-    n = _require_full_bns_soa_matching_lengths(samples)
-    length(out) == n ||
-        throw(ArgumentError("output length must match the number of samples"))
-    length(fixed_log_prob) == n ||
-        throw(ArgumentError("fixed log-probability length must match the number of samples"))
-    @inbounds for i in 1:n
-        out[i] = fixed_log_prob[i] + _redshift_logpdf(prior, samples.redshift[i])
-    end
-    return out
-end
-
-"""
-    intrinsic_log_prob_samples(fixed_log_prob, prior, samples) -> Vector
-
-Allocating variant of [`intrinsic_log_prob_samples!`](@ref) for an
-already-computed fixed intrinsic log-probability vector. Element type promotes with the redshift contribution
-(e.g. `ForwardDiff.Dual` when `prior` was built under AD).
-"""
-function intrinsic_log_prob_samples(
-        fixed_log_prob::AbstractVector{<:Real},
-        prior::RedshiftPrior,
-        samples::NamedTuple
-)
-    n = _require_full_bns_soa_matching_lengths(samples)
-    length(fixed_log_prob) == n ||
-        throw(ArgumentError("fixed log-probability length must match the number of samples"))
-    if n == 0
-        return Vector{promote_type(eltype(fixed_log_prob), redshift_logpdf_eltype(prior))}()
-    end
-    first_val = fixed_log_prob[1] + _redshift_logpdf(prior, samples.redshift[1])
-    out = Vector{typeof(first_val)}(undef, n)
-    intrinsic_log_prob_samples!(out, fixed_log_prob, prior, samples)
     return out
 end
