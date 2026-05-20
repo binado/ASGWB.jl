@@ -162,7 +162,6 @@ begin
         return InitFromParams((; (s => theta0[s] for s in sample_only)...))
     end
 
-    cd(pkgdir(ASGWB))
     @info "loading importance cache" path=cache detectors=join((d.name for d in detectors), ",")
     t_cache = time()
     problem = load_cache(cache, detectors)
