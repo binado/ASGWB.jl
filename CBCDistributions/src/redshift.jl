@@ -7,7 +7,8 @@ export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
        redshift_grid, SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
        luminosity_distance_at_sample,
        build_redshift_prior, cosmology_and_redshift_prior,
-       RedshiftInterpolatedDistribution, _normalized_log_density
+       RedshiftInterpolatedDistribution, _normalized_log_density,
+       redshift_log_prob_samples, redshift_log_prob_samples!, redshift_logpdf_eltype
 
 """
     RedshiftPrior(dN_dz)
@@ -192,6 +193,62 @@ function redshift_log_prob(prior::RedshiftPrior, value::Real)
     tiny = floatmin(T)
     pdf_at_value = interpolate(prior.dN_dz, value)
     return _normalized_log_density(pdf_at_value, norm, tiny)
+end
+
+@inline function _redshift_logpdf(prior::RedshiftPrior, z::Real)
+    x_lo = first(prior.dN_dz.x)
+    x_hi = last(prior.dN_dz.x)
+    (z < x_lo || z > x_hi) && return -Inf
+    return redshift_log_prob(prior, z)
+end
+
+"""
+    redshift_logpdf_eltype(prior::RedshiftPrior) -> Type
+
+Element type of values returned by the redshift log-density associated with
+`prior`. Useful for preallocating output vectors that promote with the
+redshift contribution (for example `ForwardDiff.Dual` when `prior` was built
+under AD).
+"""
+function redshift_logpdf_eltype(prior::RedshiftPrior)
+    return promote_type(eltype(prior.dN_dz.y), typeof(redshift_integral(prior)))
+end
+
+"""
+    redshift_log_prob_samples!(out, prior, redshifts) -> out
+
+Fill `out` with per-sample redshift log-density `_redshift_logpdf(prior, z)`.
+`out` must have the same length as `redshifts`; values outside the prior's
+support evaluate to `-Inf`.
+"""
+function redshift_log_prob_samples!(
+        out::AbstractVector,
+        prior::RedshiftPrior,
+        redshifts::AbstractVector{<:Real}
+)
+    length(out) == length(redshifts) ||
+        throw(ArgumentError("output length must match the number of redshift samples"))
+    @inbounds for i in eachindex(redshifts)
+        out[i] = _redshift_logpdf(prior, redshifts[i])
+    end
+    return out
+end
+
+"""
+    redshift_log_prob_samples(prior, redshifts) -> Vector
+
+Allocating variant of [`redshift_log_prob_samples!`](@ref). The element type
+promotes with the redshift contribution (e.g. `ForwardDiff.Dual` when `prior`
+was built under AD).
+"""
+function redshift_log_prob_samples(
+        prior::RedshiftPrior,
+        redshifts::AbstractVector{<:Real}
+)
+    T = promote_type(eltype(redshifts), redshift_logpdf_eltype(prior))
+    out = Vector{T}(undef, length(redshifts))
+    isempty(redshifts) && return out
+    return redshift_log_prob_samples!(out, prior, redshifts)
 end
 
 function luminosity_distance_at_sample(
