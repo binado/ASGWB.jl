@@ -55,6 +55,9 @@ begin
     using CairoMakie
     using LaTeXStrings
     using Distributions
+    using LinearAlgebra: BLAS
+    # Avoid BLAS oversubscription with MCMCThreads
+    BLAS.set_num_threads(1)
     default(size = (900, 450))
 end
 
