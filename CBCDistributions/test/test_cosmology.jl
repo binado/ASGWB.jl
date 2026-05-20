@@ -5,6 +5,11 @@ using ForwardDiff
 using CBCDistributions: CumulativeIntegral1D, cdf, interpolate, normalizer
 
 @testset "basic cosmology helpers" begin
+    h = (H0 = 67.0, Ωm = 0.315)
+    cosmology = Cosmology(h)
+    @test cosmology.H0 == h.H0
+    @test cosmology.Ωm == h.Ωm
+
     @test E(0.0, 0.315) ≈ 1.0
     @test comoving_distance(0.0, 67.0, 0.315) ≈ 0.0
 
@@ -15,6 +20,23 @@ using CBCDistributions: CumulativeIntegral1D, cdf, interpolate, normalizer
 
     d_gw = gravitational_wave_distance.([0.1, 0.2], [10.0, 20.0], 1.0, 0.0)
     @test d_gw ≈ [10.0, 20.0]
+end
+
+@testset "CosmologyCache distance helpers" begin
+    H0, Ωm = 67.0, 0.315
+    cache = CosmologyCache(Cosmology(H0, Ωm), collect(LinRange(0.0, 10.0, 1024)))
+    for z in (0.05, 0.3, 1.2, 4.5, 8.0)
+        @test comoving_distance(z, cache) ≈ comoving_distance(z, H0, Ωm) rtol = 1e-4
+        @test luminosity_distance(z, cache) ≈ luminosity_distance(z, H0, Ωm) rtol = 1e-4
+        @test differential_comoving_volume(z, cache) ≈
+              differential_comoving_volume(z, H0, Ωm) rtol = 1e-4
+    end
+
+    f = Ωm_dual -> begin
+        c = CosmologyCache(Cosmology(H0, Ωm_dual), collect(LinRange(0.0, 10.0, 257)))
+        luminosity_distance(1.2, c)
+    end
+    @test isfinite(ForwardDiff.derivative(f, Ωm))
 end
 
 @testset "cosmology parity fixtures" begin

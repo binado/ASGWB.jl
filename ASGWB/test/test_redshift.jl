@@ -25,13 +25,13 @@ using CBCDistributions
         expected_log_prob = vec(Float64.(read(group["log_prob"])))
         expected_integral = Float64(read(group["redshift_integral"]))
 
-        bundle = build_redshift_grid_bundle(theta, spec)
+        redshift_prior = build_redshift_prior(theta, spec)
 
         # Fixture expected values were computed against the Python trapezoid-based bundle
         # norm; Julia now uses composite Simpson, so the tolerances reflect the trapezoid
         # vs Simpson discretization gap rather than numerical precision.
-        @test log_prob_from_bundle.(sample_z, Ref(bundle)) ≈ expected_log_prob rtol = 5e-3
-        @test redshift_integral(bundle) ≈ expected_integral rtol = 5e-3
+        @test redshift_log_prob.(Ref(redshift_prior), sample_z) ≈ expected_log_prob rtol = 5e-3
+        @test redshift_integral(redshift_prior) ≈ expected_integral rtol = 5e-3
     end
 end
 
@@ -45,24 +45,26 @@ end
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.0, 2.0, 101, nothing)
     z_grid = redshift_grid(spec)
-    bundle = build_redshift_grid_bundle(theta, spec, z_grid)
+    cosmology_cache, redshift_prior = cosmology_and_redshift_prior(theta, spec, z_grid)
     samples = [0.0, 0.137, 0.9, 2.0]
     interp = SampleInterpolant(samples, z_grid)
 
-    @test [_interpolate_at_sample(bundle.pdf.y, interp, i)
+    @test [_interpolate_at_sample(redshift_prior.dN_dz.y, interp, i)
            for
-           i in eachindex(samples)] ≈ [interpolate(bundle.pdf, z) for z in samples]
+           i in eachindex(samples)] ≈
+          [interpolate(redshift_prior.dN_dz, z) for z in samples]
     @test [_cdf_at_sample(
-               bundle.distance.cumulative,
-               bundle.distance.y,
+               cosmology_cache.inv_E_integral.cumulative,
+               cosmology_cache.inv_E_integral.y,
                interp,
                z_grid,
                i
-           ) for i in eachindex(samples)] ≈ [cdf(bundle.distance, z) for z in samples]
+           ) for i in eachindex(samples)] ≈
+          [cdf(cosmology_cache.inv_E_integral, z) for z in samples]
     @test [luminosity_distance_at_sample(
-               bundle, theta.H0, interp, z_grid, samples, i)
+               cosmology_cache, interp, z_grid, samples, i)
            for i in eachindex(samples)] ≈
-          [luminosity_distance(z, theta.H0, theta.Ωm, bundle.distance) for z in samples]
+          [luminosity_distance(z, cosmology_cache) for z in samples]
     @test_throws ArgumentError SampleInterpolant([-0.1], z_grid)
     @test_throws ArgumentError SampleInterpolant([2.1], z_grid)
 end

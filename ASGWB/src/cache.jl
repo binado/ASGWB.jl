@@ -48,8 +48,8 @@ function fiducial_redshift_integral(
         spec::RedshiftPriorSpec
 )::Float64
     h = hyperparameters_from_fiducial(fid, spec)
-    bundle = build_redshift_grid_bundle(h, spec)
-    return Float64(redshift_integral(bundle))
+    redshift_prior = build_redshift_prior(h, spec)
+    return Float64(redshift_integral(redshift_prior))
 end
 
 """
@@ -91,7 +91,7 @@ end
     reconstruct_proposal_log_prob(samples, spec, fid::ProposalFiducialParameters) -> Vector{Float64}
 
 Proposal log-density per sample: redshift grid log-density from
-[`hyperparameters_from_fiducial`](@ref) / [`build_redshift_grid_bundle`](@ref), plus
+[`hyperparameters_from_fiducial`](@ref) / [`cosmology_and_redshift_prior`](@ref), plus
 full-BNS intrinsic uniform factors on [`FullBNSSamplesSoA`](@ref).
 """
 function reconstruct_proposal_log_prob(
@@ -100,9 +100,9 @@ function reconstruct_proposal_log_prob(
         fid::ProposalFiducialParameters
 )::Vector{Float64}
     h = hyperparameters_from_fiducial(fid, spec)
-    bundle = build_redshift_grid_bundle(h, spec)
-    prior = intrinsic_prior(FullBNS(), bundle)
-    return intrinsic_log_prob_samples(prior, samples)
+    redshift_prior = build_redshift_prior(h, spec)
+    fixed_log_prob = fixed_intrinsic_log_prob(FullBNS(), samples)
+    return intrinsic_log_prob_samples(fixed_log_prob, redshift_prior, samples)
 end
 
 function importance_sampling_problem(

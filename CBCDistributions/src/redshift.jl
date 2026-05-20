@@ -1,39 +1,34 @@
 using Distributions
 using Random
 
-export RedshiftBundle, redshift_integral, merger_rate_per_sec, 
+export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
        detector_frame_merger_rate_density, expected_number_of_events,
        madau_dickinson_source_frame_distribution, power_law_source_frame_distribution,
        redshift_grid, SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
-       _build_redshift_grid, log_prob_from_bundle, luminosity_distance_at_sample,
-       build_redshift_grid_bundle, RedshiftInterpolatedDistribution, _normalized_log_density
+       luminosity_distance_at_sample,
+       build_redshift_prior, cosmology_and_redshift_prior,
+       RedshiftInterpolatedDistribution, _normalized_log_density
 
 """
-    RedshiftBundle(distance, pdf)
+    RedshiftPrior(dN_dz)
 
-Domain bundle pairing the comoving-distance cumulative integral with the
-detector-frame merger-rate PDF cumulative integral, both sampled on the same
-uniform redshift grid.
-
-- `distance::CumulativeIntegral1D` : antiderivative of `1/E(z, Ωm)` used by
-  [`comoving_distance`](@ref) / [`luminosity_distance`](@ref).
-- `pdf::CumulativeIntegral1D`      : detector-frame merger-rate density; its
+Domain wrapper for the detector-frame merger-rate density cumulative integral.
+Its
   [`normalizer`](@ref) is the redshift integral ``∫ p(z)\\,dz`` driving
   [`merger_rate_per_sec`](@ref) and its cumulative table supports inverse-CDF
   sampling in [`RedshiftInterpolatedDistribution`](@ref).
 """
-struct RedshiftBundle{D <: CumulativeIntegral1D, P <: CumulativeIntegral1D}
-    distance::D
-    pdf::P
+struct RedshiftPrior{P <: CumulativeIntegral1D}
+    dN_dz::P
 end
 
 """
-    redshift_integral(bundle::RedshiftBundle) -> Real
+    redshift_integral(prior::RedshiftPrior) -> Real
 
-Convenience wrapper for `normalizer(bundle.pdf)` — the detector-frame
+Convenience wrapper for `normalizer(prior.dN_dz)` — the detector-frame
 redshift-integrated merger-rate density on the grid.
 """
-redshift_integral(bundle::RedshiftBundle) = normalizer(bundle.pdf)
+redshift_integral(prior::RedshiftPrior) = normalizer(prior.dN_dz)
 
 function detector_frame_merger_rate_density(
         z::Real,
@@ -53,24 +48,24 @@ end
 
 """
     merger_rate_per_sec(
-        bundle, local_merger_rate_gpc3_yr, observation_time_yr, observation_time_sec,
+        prior, local_merger_rate_gpc3_yr, observation_time_yr, observation_time_sec,
     ) -> Float64
 
 Detector-frame merger rate in events/sec:
-`expected_number_of_events(local_rate, redshift_integral(bundle), observation_time_yr) /
+`expected_number_of_events(local_rate, redshift_integral(prior), observation_time_yr) /
 observation_time_sec`. `observation_time_yr` sets the events count, `observation_time_sec`
 converts to per-second units; they are taken independently rather than assuming a fixed
 seconds-per-year so the cache's stored pair of times round-trips exactly.
 """
 function merger_rate_per_sec(
-        bundle::RedshiftBundle,
+        prior::RedshiftPrior,
         local_merger_rate_gpc3_yr::Real,
         observation_time_yr::Real,
         observation_time_sec::Real
 )
     n_events = expected_number_of_events(
         local_merger_rate_gpc3_yr,
-        redshift_integral(bundle),
+        redshift_integral(prior),
         observation_time_yr
     )
     return n_events / observation_time_sec
@@ -176,52 +171,31 @@ end
     end
 end
 
-function _build_redshift_grid(
-        source_frame_fn,
-        H0::Real,
-        Ωm::Real,
-        z_min::Real,
-        z_max::Real,
-        num_interp::Integer
-)
-    z_grid = collect(LinRange(Float64(z_min), Float64(z_max), Int(num_interp)))
-    return _build_redshift_grid(source_frame_fn, H0, Ωm, z_grid)
-end
-
-function _build_redshift_grid(
-        source_frame_fn,
-        H0::Real,
-        Ωm::Real,
-        z_grid::AbstractVector{<:Real}
-)
-    z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
-    inv_E_vals = [inv(E(w, Ωm)) for w in z_grid_f]
-    distance = _cumulative_integral_from_values(z_grid_f, inv_E_vals)
-    d_h = SPEED_OF_LIGHT_KM_S / H0
+function build_redshift_prior(source_frame_fn, cache::CosmologyCache)
+    z_grid_f = cache.inv_E_integral.x
     pdf_vals = map(eachindex(z_grid_f)) do i
         @inbounds z = z_grid_f[i]
-        @inbounds d_c = d_h * distance.cumulative[i]
-        dvc_dz = d_h * d_c^2 / E(z, Ωm)
+        @inbounds d_c = cache.d_h * cache.inv_E_integral.cumulative[i]
+        dvc_dz = cache.d_h * d_c^2 / E(z, cache.cosmology.Ωm)
         detector_frame_merger_rate_density(z, dvc_dz, source_frame_fn(z))
     end
-    return RedshiftBundle(distance, _cumulative_integral_from_values(z_grid_f, pdf_vals))
+    return RedshiftPrior(_cumulative_integral_from_values(z_grid_f, pdf_vals))
 end
 
 @inline function _normalized_log_density(pdf_at_value, norm, tiny)
     return log(max(pdf_at_value / max(norm, tiny), tiny))
 end
 
-function log_prob_from_bundle(value::Real, bundle::RedshiftBundle)
-    norm = redshift_integral(bundle)
-    T = promote_type(eltype(bundle.pdf.y), typeof(norm))
+function redshift_log_prob(prior::RedshiftPrior, value::Real)
+    norm = redshift_integral(prior)
+    T = promote_type(eltype(prior.dN_dz.y), typeof(norm))
     tiny = floatmin(T)
-    pdf_at_value = interpolate(bundle.pdf, value)
+    pdf_at_value = interpolate(prior.dN_dz, value)
     return _normalized_log_density(pdf_at_value, norm, tiny)
 end
 
 function luminosity_distance_at_sample(
-        bundle::RedshiftBundle,
-        H0::Real,
+        cache::CosmologyCache,
         interp::SampleInterpolant,
         z_grid::AbstractVector{<:Real},
         z_samples::AbstractVector{<:Real},
@@ -229,48 +203,59 @@ function luminosity_distance_at_sample(
 )
     z = @inbounds z_samples[sample_index]
     integral = _cdf_at_sample(
-        bundle.distance.cumulative, bundle.distance.y, interp, z_grid, sample_index)
-    return (1 + z) * (SPEED_OF_LIGHT_KM_S / H0) * integral
+        cache.inv_E_integral.cumulative,
+        cache.inv_E_integral.y,
+        interp,
+        z_grid,
+        sample_index
+    )
+    return (1 + z) * cache.d_h * integral
 end
 
-function build_redshift_grid_bundle(
+function build_redshift_prior(
         h::NamedTuple,
         spec::RedshiftPriorSpec,
-        z_grid::AbstractVector{<:Real}
+        cache::CosmologyCache
 )
     isnothing(spec.time_delay_model) || throw(
         ArgumentError("time-delay redshift models are not supported in the Julia v0 port"),
     )
     spec.family == MadauDickinson || throw(
         ArgumentError(
-        "build_redshift_grid_bundle only supports the MadauDickinson redshift prior family",
+        "build_redshift_prior only supports the MadauDickinson redshift prior family",
     ),
     )
-    sfn = z -> madau_dickinson_source_frame_distribution(
-        z;
-        γ = h.γ,
-        κ = h.κ,
-        zpeak = h.zpeak
-    )
-    return _build_redshift_grid(
-        sfn,
-        h.H0,
-        h.Ωm,
-        z_grid
-    )
+    # Streamlined closure: capture only the necessary scalars
+    γ, κ, zpeak = h.γ, h.κ, h.zpeak
+    sfn = z -> madau_dickinson_source_frame_distribution(z; γ, κ, zpeak)
+    return build_redshift_prior(sfn, cache)
 end
 
-function build_redshift_grid_bundle(h::NamedTuple, spec::RedshiftPriorSpec)
-    return build_redshift_grid_bundle(h, spec, redshift_grid(spec))
+function cosmology_and_redshift_prior(
+        h::NamedTuple,
+        spec::RedshiftPriorSpec,
+        z_grid::AbstractVector{<:Real} = redshift_grid(spec)
+)
+    cache = CosmologyCache(h, z_grid)
+    return cache, build_redshift_prior(h, spec, cache)
+end
+
+function build_redshift_prior(
+        h::NamedTuple,
+        spec::RedshiftPriorSpec,
+        z_grid::AbstractVector{<:Real} = redshift_grid(spec)
+)
+    return build_redshift_prior(h, spec, CosmologyCache(h, z_grid))
 end
 
 
-struct RedshiftInterpolatedDistribution{B <: RedshiftBundle} <: ContinuousUnivariateDistribution
-    bundle::B
+struct RedshiftInterpolatedDistribution{P <: RedshiftPrior} <:
+       ContinuousUnivariateDistribution
+    prior::P
 end
 
-Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.bundle.pdf.x)
-Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.bundle.pdf.x)
+Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.prior.dN_dz.x)
+Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.prior.dN_dz.x)
 
 function Distributions.insupport(d::RedshiftInterpolatedDistribution, value::Real)
     return minimum(d) <= value <= maximum(d)
@@ -278,13 +263,13 @@ end
 
 function Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real)
     insupport(d, value) || return -Inf
-    return log_prob_from_bundle(value, d.bundle)
+    return redshift_log_prob(d.prior, value)
 end
 
 function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
-    target = rand(rng) * redshift_integral(d.bundle)
-    cumulative = d.bundle.pdf.cumulative
-    x = d.bundle.pdf.x
+    target = rand(rng) * redshift_integral(d.prior)
+    cumulative = d.prior.dN_dz.cumulative
+    x = d.prior.dN_dz.x
     n = length(cumulative)
     idx = searchsortedlast(cumulative, target)
     idx <= 0 && return x[1]

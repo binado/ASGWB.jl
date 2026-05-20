@@ -55,6 +55,9 @@ begin
     using CairoMakie
     using LaTeXStrings
     using Distributions
+    using LinearAlgebra: BLAS
+    # Avoid BLAS oversubscription with MCMCThreads
+    BLAS.set_num_threads(1)
     default(size = (900, 450))
 end
 
@@ -159,7 +162,6 @@ begin
         return InitFromParams((; (s => theta0[s] for s in sample_only)...))
     end
 
-    cd(pkgdir(ASGWB))
     @info "loading importance cache" path=cache detectors=join((d.name for d in detectors), ",")
     t_cache = time()
     problem = load_cache(cache, detectors)

@@ -1,8 +1,3 @@
-abstract type IntrinsicPriorStrategy end
-
-"""Full binary neutron star intrinsic variables in proposal samples."""
-struct FullBNS <: IntrinsicPriorStrategy end
-
 """
     ObservationConfig
 
@@ -64,24 +59,8 @@ Base.@kwdef struct ProposalFiducialParameters
     Λ::Union{Nothing, Float64} = nothing
 end
 
-const FULL_BNS_INTRINSIC_ORDER = [
-    "mass_1_source", "mass_2_source", "redshift", "chi_1", "chi_2", "lambda_1", "lambda_2"]
-
 """HDF5 `proposal_samples` group attribute naming the compact-object proposal class."""
 const PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR = "source_type"
 
 """`proposal_samples` / [`PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR`](@ref) value for BNS importance samples."""
 const PROPOSAL_SAMPLES_SOURCE_TYPE_BNS = "BNS"
-
-function resolve_intrinsic_strategy(intrinsic_site_order::Vector{String})::FullBNS
-    if intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER
-        return FullBNS()
-    end
-    throw(
-        ArgumentError(
-        "unsupported intrinsic_site_order $(repr(intrinsic_site_order)); " *
-        "only the full BNS layout is supported: $(repr(FULL_BNS_INTRINSIC_ORDER)). " *
-        "Redshift-only caches are no longer supported.",
-    ),
-    )
-end

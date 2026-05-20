@@ -6,7 +6,7 @@ using ASGWB:
              HyperParameters,
              logposterior,
              DEFAULT_PARAMETER_ORDER,
-             build_redshift_grid_bundle,
+             cosmology_and_redshift_prior,
              compute_importance_weights,
              merger_rate_per_sec,
              spectral_density,

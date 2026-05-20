@@ -83,15 +83,20 @@ end
         @test evaluation.spectral_density ≈ expected_spectral_density rtol = parity_rtol
         @test evaluation.spectral_density_in_band ≈ expected_spectral_density_in_band rtol = parity_rtol
 
-        bundle = build_redshift_grid_bundle(theta, cache.redshift_prior_spec)
-        iw = compute_importance_weights(cache, theta, bundle)
+        cosmology_cache,
+        redshift_prior = cosmology_and_redshift_prior(
+            theta,
+            cache.redshift_prior_spec,
+            cache.redshift_cache.redshift_grid
+        )
+        iw = compute_importance_weights(cache, theta, cosmology_cache, redshift_prior)
         @test iw.weights ≈ expected_weights rtol = parity_rtol
         @test iw.log_ratio ≈ expected_log_ratio rtol = parity_rtol
         @test iw.target_log_prob ≈ expected_target_log_prob rtol = parity_rtol
         @test iw.dgw_theta_sq ≈ expected_dgw_theta_sq rtol = parity_rtol
 
         rate = merger_rate_per_sec(
-            bundle,
+            redshift_prior,
             cache.local_merger_rate,
             cache.observation.observation_time_yr,
             cache.observation.observation_time_sec
@@ -114,11 +119,23 @@ end
 
     empty_problem = _importance_type_test_problem(0)
     populated_problem = _importance_type_test_problem(1)
-    empty_bundle = build_redshift_grid_bundle(theta, empty_problem.redshift_prior_spec)
-    populated_bundle = build_redshift_grid_bundle(theta, populated_problem.redshift_prior_spec)
+    empty_cosmology_cache,
+    empty_redshift_prior = cosmology_and_redshift_prior(
+        theta,
+        empty_problem.redshift_prior_spec,
+        empty_problem.redshift_cache.redshift_grid
+    )
+    populated_cosmology_cache,
+    populated_redshift_prior = cosmology_and_redshift_prior(
+        theta,
+        populated_problem.redshift_prior_spec,
+        populated_problem.redshift_cache.redshift_grid
+    )
 
-    empty_iw = compute_importance_weights(empty_problem, theta, empty_bundle)
-    populated_iw = compute_importance_weights(populated_problem, theta, populated_bundle)
+    empty_iw = compute_importance_weights(
+        empty_problem, theta, empty_cosmology_cache, empty_redshift_prior)
+    populated_iw = compute_importance_weights(
+        populated_problem, theta, populated_cosmology_cache, populated_redshift_prior)
 
     @test isempty(empty_iw.weights)
     @test eltype(empty_iw.weights) == eltype(populated_iw.weights)

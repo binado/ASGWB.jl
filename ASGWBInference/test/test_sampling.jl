@@ -10,7 +10,8 @@ using ASGWBInference:
                       sample_with_advancedhmc
 
 @testset "AdvancedHMC smoke test" begin
-    fixture_path = joinpath(@__DIR__, "..", "..", "ASGWB", "test", "fixtures", "deterministic_parity.h5")
+    fixture_path = joinpath(
+        @__DIR__, "..", "..", "ASGWB", "test", "fixtures", "deterministic_parity.h5")
 
     h5open(fixture_path, "r") do file
         for (cache_filename, group_name) in (

@@ -31,7 +31,7 @@ const HyperParameters = @NamedTuple{
 
 UnionAll NamedTuple type keyed by [`DEFAULT_PARAMETER_ORDER`](@ref) that matches any
 element types. Used in inner-loop function signatures (`logprior`, `logposterior`,
-`loglikelihood`, `evaluate_importance_terms`, `build_redshift_grid_bundle`,
+`loglikelihood`, `evaluate_importance_terms`, `cosmology_and_redshift_prior`,
 `compute_importance_weights`) so `ForwardDiff.Dual`-valued hyperparameters from HMC
 gradients flow through unchanged.
 """
@@ -85,44 +85,6 @@ end
 abstract type ProposalSampleBundle end
 
 """
-    FullBNSSamplesSoA
-
-Struct-of-arrays proposal-sample container matching the NamedTuple returned by
-`rand(prior, n)` when `prior = intrinsic_prior(FullBNS(), bundle)`:
-
-- `mass::Matrix{Float64}` of size `(2, n)`; row 1 is `mass_1_source`, row 2 is `mass_2_source`.
-- `redshift`, `χ₁`, `χ₂`, `Λ₁`, `Λ₂` are `Vector{Float64}` of length `n`.
-
-HDF5 proposal columns remain ASCII (`chi_1`, `lambda_1`, …). Matches `keys(prior.dists)` for the full-BNS intrinsic prior.
-"""
-const FullBNSSamplesSoA = @NamedTuple{
-    mass::Matrix{Float64},
-    redshift::Vector{Float64},
-    χ₁::Vector{Float64},
-    χ₂::Vector{Float64},
-    Λ₁::Vector{Float64},
-    Λ₂::Vector{Float64}
-}
-
-"""
-    stack_source_masses(mass_1_source, mass_2_source) -> Matrix{Float64}
-
-Pack two same-length mass vectors into the `2 × n` matrix expected by
-[`FullBNSSamplesSoA`](@ref)`.mass` (row 1 = `mass_1_source`, row 2 = `mass_2_source`).
-"""
-function stack_source_masses(
-        mass_1_source::AbstractVector{<:Real},
-        mass_2_source::AbstractVector{<:Real}
-)::Matrix{Float64}
-    n = length(mass_1_source)
-    length(mass_2_source) == n ||
-        throw(ArgumentError("mass_1_source and mass_2_source must have matching lengths"))
-    return permutedims(
-        hcat(collect(Float64, mass_1_source), collect(Float64, mass_2_source)),
-    )
-end
-
-"""
     ProposalData
 
 Proposal-sample bundle for the importance-sampling problem.
@@ -148,7 +110,7 @@ Precomputed redshift-grid state attached to an [`ImportanceSamplingProblem`](@re
 the fixed redshift grid, interpolation metadata for proposal redshifts on that grid,
 and cached hyperparameter-independent full-BNS intrinsic log-probability terms
 (mass, spins, tidal deformability). Redshift log-probability is evaluated from the
-live [`RedshiftBundle`](@ref) each likelihood call.
+live [`RedshiftPrior`](@ref) each likelihood call.
 """
 struct RedshiftGridCache
     redshift_grid::Vector{Float64}
@@ -169,7 +131,7 @@ the integral implied by the live [`HyperParameters`](@ref), not this field.
 
 `redshift_cache` groups the fixed grid, per-sample interpolation metadata, and cached
 hyperparameter-independent full-BNS intrinsic terms (mass, spins, tidal deformability);
-redshift terms are evaluated from the bundle each step.
+redshift terms are evaluated from the live prior each step.
 """
 struct ImportanceSamplingProblem
     proposal::ProposalData
