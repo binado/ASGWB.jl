@@ -53,6 +53,7 @@ function _turing_initial_params(
 end
 
 @model function asgwb_importance_turing_model(
+        asgw_model::AbstractASGWBModel,
         track::Bool,
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution,
@@ -68,35 +69,29 @@ end
     κ ~ d.κ
     zpeak ~ d.zpeak
 
-    h = (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak)
-
-    cosmology_cache,
-    redshift_prior = cosmology_and_redshift_prior(
-        h, problem.redshift_prior_spec, z_grid)
-    iw = compute_importance_weights(problem, h, cosmology_cache, redshift_prior)
-    rate = merger_rate_per_sec(
-        redshift_prior,
-        problem.local_merger_rate,
-        problem.observation.observation_time_yr,
-        problem.observation.observation_time_sec
-    )
-    sd = spectral_density(problem.proposal.cached_flux_over_dgw2, rate; weights = iw.weights)
-    sd_in_band = sd[problem.observation.in_band_mask]
+    Λ = (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak)
+    terms = evaluate_model_terms(asgw_model, Λ, problem, z_grid)
 
     observed_in_band ~
-    MvNormal(sd_in_band, Diagonal(problem.observation.sgwb_scale_in_band .^ 2))
+    MvNormal(
+        terms.spectral_density_in_band,
+        Diagonal(problem.observation.sgwb_scale_in_band .^ 2)
+    )
 
     if track
         m = problem.observation.in_band_mask
         obs = problem.observation
         df = frequency_bin_width(obs.frequencies)
         snr_sq = spectral_snr_squared(
-            sd[m], obs.effective_psd[m], obs.observation_time_sec, df
+            terms.spectral_density[m],
+            obs.effective_psd[m],
+            obs.observation_time_sec,
+            df
         )
 
         return (;
-            number_of_sources = rate * problem.observation.observation_time_sec,
-            effective_sample_size = normalized_ess(iw.weights),
+            number_of_sources = terms.expected_number_of_sources,
+            effective_sample_size = normalized_ess(terms.weights),
             spectral_snr_squared = snr_sq,
             spectral_snr = sqrt(snr_sq)
         )
@@ -128,6 +123,7 @@ function build_turing_model(
     _require_supported_turing_model(model)
     validate_prior(model, prior)
     return asgwb_importance_turing_model(
+        model,
         track,
         problem,
         prior,

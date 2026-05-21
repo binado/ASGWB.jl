@@ -1,8 +1,8 @@
 using Distributions: logpdf, ProductNamedTupleDistribution
 
-function target_log_prob_samples(h::NamedTuple, problem::ImportanceSamplingProblem)
+function target_log_prob_samples(Λ::NamedTuple, problem::ImportanceSamplingProblem)
     redshift_prior = build_redshift_prior(
-        h,
+        Λ,
         problem.redshift_prior_spec,
         problem.redshift_cache.redshift_grid
     )
@@ -15,22 +15,23 @@ function target_log_prob_samples(h::NamedTuple, problem::ImportanceSamplingProbl
 end
 
 """
-    evaluate_importance_terms(h, problem) -> NamedTuple
+    evaluate_model_terms(model, Λ, problem, z_grid) -> NamedTuple
 
-Thin composition of [`compute_importance_weights`](@ref), [`merger_rate_per_sec`](@ref),
-and [`spectral_density`](@ref) that exposes every intermediate used by inference
-diagnostics and the AdvancedHMC likelihood (`dgw_theta_sq`, `target_log_prob`, `log_ratio`, `weights`,
-`redshift_integral`, `expected_number_of_sources`, `spectral_density`,
-`spectral_density_in_band`).
+Evaluate the deterministic likelihood terms for a model hyperparameter state.
 """
-function evaluate_importance_terms(h::NamedTuple, problem::ImportanceSamplingProblem)
+function evaluate_model_terms(
+        ::MadauDickinsonModifiedPropagation,
+        Λ::NamedTuple,
+        problem::ImportanceSamplingProblem,
+        z_grid::AbstractVector{<:Real}
+)
     cosmology_cache,
     redshift_prior = cosmology_and_redshift_prior(
-        h,
+        Λ,
         problem.redshift_prior_spec,
-        problem.redshift_cache.redshift_grid
+        z_grid
     )
-    iw = compute_importance_weights(problem, h, cosmology_cache, redshift_prior)
+    iw = compute_importance_weights(problem, Λ, cosmology_cache, redshift_prior)
     rate = merger_rate_per_sec(
         redshift_prior,
         problem.local_merger_rate,
@@ -47,12 +48,36 @@ function evaluate_importance_terms(h::NamedTuple, problem::ImportanceSamplingPro
         ))
 end
 
+"""
+    evaluate_importance_terms(Λ, problem) -> NamedTuple
+
+Thin composition of [`compute_importance_weights`](@ref), [`merger_rate_per_sec`](@ref),
+and [`spectral_density`](@ref) that exposes every intermediate used by inference
+diagnostics and the AdvancedHMC likelihood (`dgw_theta_sq`, `target_log_prob`, `log_ratio`, `weights`,
+`redshift_integral`, `expected_number_of_sources`, `spectral_density`,
+`spectral_density_in_band`).
+"""
+function evaluate_importance_terms(Λ::NamedTuple, problem::ImportanceSamplingProblem)
+    return evaluate_model_terms(
+        MadauDickinsonModifiedPropagation(),
+        Λ,
+        problem,
+        problem.redshift_cache.redshift_grid
+    )
+end
+
 function loglikelihood(
-        h::NamedTuple,
+        Λ::NamedTuple,
         problem::ImportanceSamplingProblem;
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
-    evaluation = evaluate_importance_terms(h, problem)
+    evaluation = evaluate_model_terms(
+        model,
+        Λ,
+        problem,
+        problem.redshift_cache.redshift_grid
+    )
     observed_in_band = observed_spectral_density[problem.observation.in_band_mask]
     residual = observed_in_band .- evaluation.spectral_density_in_band
     return -0.5 * sum(
@@ -62,13 +87,19 @@ function loglikelihood(
 end
 
 function logposterior(
-        h::NamedTuple,
+        Λ::NamedTuple,
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
-    return logpdf(prior, h) +
-           loglikelihood(h, problem; observed_spectral_density = observed_spectral_density)
+    return logpdf(prior, Λ) +
+           loglikelihood(
+        Λ,
+        problem;
+        model = model,
+        observed_spectral_density = observed_spectral_density
+    )
 end
 
 """
@@ -96,8 +127,8 @@ For the dimensionless energy density ``\\Omega_{\\mathrm{GW}}(f)``, use [`Ωgw`]
 this vector and the corresponding frequency bins from `problem.observation.frequencies`.
 """
 function fiducial_spectral_density(problem::ImportanceSamplingProblem)
-    h = fiducial_hyperparameters(problem)
-    return evaluate_importance_terms(h, problem).spectral_density
+    Λ = fiducial_hyperparameters(problem)
+    return evaluate_importance_terms(Λ, problem).spectral_density
 end
 
 """

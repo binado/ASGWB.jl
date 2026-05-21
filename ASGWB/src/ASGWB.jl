@@ -137,6 +137,7 @@ export importance_weights,
        spectral_snr_squared,
        spectral_snr,
        Ωgw,
+       evaluate_model_terms,
        evaluate_importance_terms
 
 # Diagnostics

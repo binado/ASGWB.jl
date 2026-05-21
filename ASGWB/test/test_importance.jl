@@ -51,6 +51,12 @@ end
     theta = PARITY_THETA
 
     evaluation = evaluate_importance_terms(theta, cache)
+    model_evaluation = evaluate_model_terms(
+        MadauDickinsonModifiedPropagation(),
+        theta,
+        cache,
+        cache.redshift_cache.redshift_grid
+    )
     @test length(evaluation.weights) == length(cache.proposal.samples.redshift)
     @test all(isfinite, evaluation.weights)
     @test all(isfinite, evaluation.log_ratio)
@@ -58,6 +64,14 @@ end
     @test all(isfinite, evaluation.spectral_density)
     @test isfinite(evaluation.redshift_integral)
     @test isfinite(evaluation.expected_number_of_sources)
+    @test model_evaluation.weights ≈ evaluation.weights
+    @test model_evaluation.log_ratio ≈ evaluation.log_ratio
+    @test model_evaluation.target_log_prob ≈ evaluation.target_log_prob
+    @test model_evaluation.dgw_theta_sq ≈ evaluation.dgw_theta_sq
+    @test model_evaluation.spectral_density ≈ evaluation.spectral_density
+    @test model_evaluation.spectral_density_in_band ≈ evaluation.spectral_density_in_band
+    @test model_evaluation.expected_number_of_sources ≈
+          evaluation.expected_number_of_sources
 
     cosmology_cache,
     redshift_prior = cosmology_and_redshift_prior(

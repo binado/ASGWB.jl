@@ -33,15 +33,15 @@ function ASGWBLogDensity(
 end
 
 """
-    constrained_parameters(ld::ASGWBLogDensity, z) -> (theta_nt, logabsdet)
+    constrained_parameters(ld::ASGWBLogDensity, z) -> (Λ, logabsdet)
 
 Transform unconstrained parameters `z` back to the physical parameter space
 defined by the prior. Returns a named tuple of parameters and the log-absolute-determinant
 of the Jacobian of the inverse transformation.
 """
 function constrained_parameters(ld::ASGWBLogDensity, z::AbstractVector{<:Real})
-    theta_nt, logabsdet = with_logabsdet_jacobian(inverse(ld.transform), z)
-    return theta_nt, logabsdet
+    Λ, logabsdet = with_logabsdet_jacobian(inverse(ld.transform), z)
+    return Λ, logabsdet
 end
 
 """
@@ -62,8 +62,8 @@ function LogDensityProblems.capabilities(::Type{<:ASGWBLogDensity})
 end
 
 function LogDensityProblems.logdensity(ld::ASGWBLogDensity, z::AbstractVector{<:Real})
-    theta_nt, logabsdet = constrained_parameters(ld, z)
-    return logposterior(theta_nt, ld.problem, ld.prior) + logabsdet
+    Λ, logabsdet = constrained_parameters(ld, z)
+    return logposterior(Λ, ld.problem, ld.prior; model = ld.model) + logabsdet
 end
 
 """
@@ -128,8 +128,8 @@ function sample_with_advancedhmc(
     stats = sample(hamiltonian, kernel, z0, n_samples, adaptor, n_adapts; progress = false)
 
     samples_constrained = map(samples_unconstrained) do z
-        theta_nt, _ = constrained_parameters(ld, z)
-        float_hyperparameters(ld.model, theta_nt; context = "sampled hyperparameters")
+        Λ, _ = constrained_parameters(ld, z)
+        float_hyperparameters(ld.model, Λ; context = "sampled hyperparameters")
     end
 
     return samples_constrained, stats, ld

@@ -51,8 +51,8 @@ function fiducial_redshift_integral(
         fid::ProposalFiducialParameters,
         spec::RedshiftPriorSpec
 )::Float64
-    h = hyperparameters_from_fiducial(fid, spec)
-    redshift_prior = build_redshift_prior(h, spec)
+    Λ = hyperparameters_from_fiducial(fid, spec)
+    redshift_prior = build_redshift_prior(Λ, spec)
     return Float64(redshift_integral(redshift_prior))
 end
 
@@ -103,8 +103,8 @@ function reconstruct_proposal_log_prob(
         spec::RedshiftPriorSpec,
         fid::ProposalFiducialParameters
 )::Vector{Float64}
-    h = hyperparameters_from_fiducial(fid, spec)
-    redshift_prior = build_redshift_prior(h, spec)
+    Λ = hyperparameters_from_fiducial(fid, spec)
+    redshift_prior = build_redshift_prior(Λ, spec)
     cached_log_prob = logpdf(intrinsic_prior(FullBNS()), samples)
     return cached_log_prob .+ redshift_log_prob_samples(redshift_prior, samples.redshift)
 end

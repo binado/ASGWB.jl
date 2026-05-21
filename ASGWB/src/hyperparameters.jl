@@ -38,17 +38,17 @@ function _check_unique_hyperparameters(model::AbstractASGWBModel)
 end
 
 """
-    validate_hyperparameters(model, h; context="hyperparameters")
+    validate_hyperparameters(model, Λ; context="hyperparameters")
 
-Require `h` to contain exactly the model hyperparameters.
+Require `Λ` to contain exactly the model hyperparameters.
 """
 function validate_hyperparameters(
         model::AbstractASGWBModel,
-        h::NamedTuple;
+        Λ::NamedTuple;
         context::AbstractString = "hyperparameters"
 )
     order = _check_unique_hyperparameters(model)
-    names = keys(h)
+    names = keys(Λ)
     Set(names) == Set(order) && return nothing
 
     missing = Tuple(s for s in order if s ∉ names)
@@ -60,17 +60,17 @@ function validate_hyperparameters(
 end
 
 """
-    float_hyperparameters(model, h; context="hyperparameters") -> NamedTuple
+    float_hyperparameters(model, Λ; context="hyperparameters") -> NamedTuple
 
 Validate and convert a model hyperparameter tuple to `Float64` in model order.
 """
 function float_hyperparameters(
         model::AbstractASGWBModel,
-        h::NamedTuple;
+        Λ::NamedTuple;
         context::AbstractString = "hyperparameters"
 )
-    validate_hyperparameters(model, h; context = context)
-    return (; (k => Float64(h[k]) for k in hyperparameters(model))...)
+    validate_hyperparameters(model, Λ; context = context)
+    return (; (k => Float64(Λ[k]) for k in hyperparameters(model))...)
 end
 
 """
