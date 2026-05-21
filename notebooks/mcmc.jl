@@ -95,7 +95,7 @@ begin
 
     cache = "analysis_numpyro_julia_cache.h5"
     detectors = [Detector("S1"), Detector("R1")]
-    sample_only = [:H0,]
+    sample_only = (:H0,)
 
     priors = (
         H0 = Uniform(20, 140),

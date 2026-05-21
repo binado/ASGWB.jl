@@ -1,7 +1,7 @@
 using Test
 using Turing
 using ASGWB
-using ASGWBInference: build_turing_model, sample_with_turing
+using ASGWBInference: build_turing_model, condition_turing_model, sample_with_turing
 
 if !@isdefined parity_cache_path
     include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_test_cache.jl"))
@@ -17,6 +17,8 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
         model = build_turing_model(cache, priors; track = false)
         @test Turing.logjoint(model, theta0) ≈ logposterior(theta0, cache, priors) rtol = 1e-6
+        @test_throws ArgumentError condition_turing_model(model, theta0, priors, ())
+        @test_throws ArgumentError condition_turing_model(model, theta0, priors, (:unknown,))
 
         model_track = build_turing_model(cache, priors; track = true)
         returned_nt = Turing.returned(model_track, theta0)

@@ -21,6 +21,7 @@ function condition_turing_model(
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
 )
     sample_only === nothing && return model
+    validate_sample_only!(sample_only, prior)
     order = hyperparameter_order(prior)
     fixed = Tuple(s for s in order if s ∉ sample_only)
     isempty(fixed) && return model
