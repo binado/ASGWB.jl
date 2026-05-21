@@ -15,7 +15,7 @@ if !@isdefined parity_cache_path
 end
 include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
-@testset "AdvancedHMC initial point follows prior order" begin
+@testset "AdvancedHMC initial point follows model order" begin
     cache = load_cache(parity_cache_path(:posterior), [Detector("H1"), Detector("L1")])
     theta0 = PARITY_THETA
     reordered_priors = product_distribution((
@@ -28,11 +28,14 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         H0 = Uniform(20.0, 140.0)
     ))
 
-    problem = ASGWBLogDensity(cache, reordered_priors)
-    ordered_theta0 = (; (k => theta0[k] for k in hyperparameter_order(reordered_priors))...)
+    @test_throws ArgumentError ASGWBLogDensity(cache, reordered_priors)
+
+    problem = ASGWBLogDensity(cache, PARITY_PRIORS)
+    ordered_theta0 = (;
+        (k => theta0[k] for k in hyperparameters(MadauDickinsonModifiedPropagation()))...)
 
     @test unconstrained_initial_point(problem, theta0) ==
-          collect(Bijectors.link(reordered_priors, ordered_theta0))
+          collect(Bijectors.link(PARITY_PRIORS, ordered_theta0))
 end
 
 @testset "AdvancedHMC smoke test" begin

@@ -2,38 +2,54 @@ using Distributions: MvNormal, ProductNamedTupleDistribution
 using LinearAlgebra: Diagonal
 using Turing
 
-using ASGWB: hyperparameter_order, validate_sample_only!
+function _require_supported_turing_model(model::MadauDickinsonModifiedPropagation)
+    return nothing
+end
+
+function _require_supported_turing_model(model::AbstractASGWBModel)
+    throw(
+        ArgumentError(
+        "Turing inference is implemented for MadauDickinsonModifiedPropagation; got $(typeof(model))",
+    ),
+    )
+end
 
 """
-    condition_turing_model(model, theta0, prior, sample_only::Union{Nothing,Tuple}) -> model
+    condition_turing_model(turing_model, theta0, prior, sample_only; model=...) -> model
 
 If `sample_only === nothing`, return `model` unchanged (all hyperparameters are sampled).
 
-Otherwise `sample_only` lists the subset of [`hyperparameter_order`](@ref)(`prior`) that remain
+Otherwise `sample_only` lists the subset of [`hyperparameters`](@ref)(`model`) that remain
 stochastic; all other hyperparameters are **fixed** to the corresponding entries of `theta0`
 using Turing’s conditioning operator `|` (see
 [Turing docs: conditioning on data](https://turinglang.org/docs/core-functionality/#conditioning-on-data)).
 """
 function condition_turing_model(
-        model,
+        turing_model,
         theta0::NamedTuple,
         prior::ProductNamedTupleDistribution,
-        sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
+        sample_only::Union{Nothing, Tuple{Vararg{Symbol}}};
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
 )
-    sample_only === nothing && return model
-    validate_sample_only!(sample_only, prior)
-    order = hyperparameter_order(prior)
+    _require_supported_turing_model(model)
+    validate_prior(model, prior)
+    ordered_theta0 = float_hyperparameters(model, theta0; context = "initial hyperparameters")
+    sample_only === nothing && return turing_model
+    validate_sample_only!(sample_only, model)
+    order = hyperparameters(model)
     fixed = Tuple(s for s in order if s ∉ sample_only)
-    isempty(fixed) && return model
-    return model | (; (s => theta0[s] for s in fixed)...)
+    isempty(fixed) && return turing_model
+    return turing_model | (; (s => ordered_theta0[s] for s in fixed)...)
 end
 
 function _turing_initial_params(
         theta0::NamedTuple,
-        sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
+        sample_only::Union{Nothing, Tuple{Vararg{Symbol}}},
+        model::AbstractASGWBModel
 )
-    sample_only === nothing && return InitFromParams(theta0)
-    return InitFromParams((; (s => theta0[s] for s in sample_only)...))
+    ordered_theta0 = float_hyperparameters(model, theta0; context = "initial hyperparameters")
+    sample_only === nothing && return InitFromParams(ordered_theta0)
+    return InitFromParams((; (s => ordered_theta0[s] for s in sample_only)...))
 end
 
 @model function asgwb_importance_turing_model(
@@ -105,9 +121,12 @@ Construct a Turing `DynamicPPL.Model` for the ASGWB importance sampling likeliho
 function build_turing_model(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
         track::Bool = false,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
+    _require_supported_turing_model(model)
+    validate_prior(model, prior)
     return asgwb_importance_turing_model(
         track,
         problem,
@@ -121,8 +140,9 @@ end
     sample_with_turing(problem, prior, theta0; kwargs...) -> (chain, model)
 
 NUTS sampling for the importance likelihood model. Keyword `sample_only` lists which of
-[`hyperparameter_order`](@ref)(`prior`) remain stochastic; all others are fixed to the corresponding entries
-of `theta0` using Turing’s `|` operator (see [`condition_turing_model`](@ref)).
+[`hyperparameters`](@ref)(`model`) remain stochastic; all others are fixed to the
+corresponding entries of `theta0` using Turing’s `|` operator (see
+[`condition_turing_model`](@ref)).
 """
 function sample_with_turing(
         problem::ImportanceSamplingProblem,
@@ -133,22 +153,33 @@ function sample_with_turing(
         target_acceptance::Float64 = 0.8,
         track::Bool = false,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density,
-        sample_only::Union{Nothing, Tuple{Vararg{Symbol}}} = nothing
+        sample_only::Union{Nothing, Tuple{Vararg{Symbol}}} = nothing,
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
 )
-    validate_sample_only!(sample_only, prior)
-    model = build_turing_model(
+    _require_supported_turing_model(model)
+    validate_prior(model, prior)
+    validate_hyperparameters(model, theta0; context = "initial hyperparameters")
+    validate_sample_only!(sample_only, model)
+    turing_model = build_turing_model(
         problem,
         prior;
+        model = model,
         track = track,
         observed_spectral_density = observed_spectral_density
     )
-    conditioned = condition_turing_model(model, theta0, prior, sample_only)
+    conditioned = condition_turing_model(
+        turing_model,
+        theta0,
+        prior,
+        sample_only;
+        model = model
+    )
     chain = sample(
         conditioned,
         Turing.NUTS(n_adapts, target_acceptance),
         n_samples;
         progress = false,
-        initial_params = _turing_initial_params(theta0, sample_only)
+        initial_params = _turing_initial_params(theta0, sample_only, model)
     )
     return chain, conditioned
 end

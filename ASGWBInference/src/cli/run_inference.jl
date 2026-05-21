@@ -1,7 +1,15 @@
 module RunInferenceCLI
 
 using ASGWB
-using ASGWB: load_cache, Detector, hyperparameter_order, validate_sample_only!
+using ASGWB:
+             load_cache,
+             Detector,
+             MadauDickinsonModifiedPropagation,
+             float_hyperparameters,
+             hyperparameters,
+             validate_hyperparameters,
+             validate_prior,
+             validate_sample_only!
 using ..InferenceImpl: build_turing_model
 
 using Turing
@@ -37,6 +45,8 @@ const PRIORS = (
     κ = Uniform(0.05, 10),
     zpeak = Uniform(0.05, 10)
 )
+
+const INFERENCE_MODEL = MadauDickinsonModifiedPropagation()
 
 """Resolve `path` relative to `base` if it is not absolute."""
 function resolve_path(path::AbstractString, base::AbstractString)
@@ -174,7 +184,11 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     detectors = [Detector(n) for n in settings["detectors"]]
     sample_only = Tuple(Symbol(s) for s in settings["sample_only"])
     seed = settings["seed"]::Int
-    init = (; (Symbol(k) => v for (k, v) in settings["init"])...)
+    init = float_hyperparameters(
+        INFERENCE_MODEL,
+        (; (Symbol(k) => v for (k, v) in settings["init"])...);
+        context = "init hyperparameters"
+    )
 
     sampler = settings["sampler"]
     n_samples = sampler["n_samples"]::Int
@@ -197,8 +211,10 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
 
     validate_init_against_priors(PRIORS, init)
     priors_turing = product_distribution(PRIORS)
-    validate_sample_only!(sample_only, priors_turing)
-    order = hyperparameter_order(priors_turing)
+    validate_prior(INFERENCE_MODEL, priors_turing)
+    validate_hyperparameters(INFERENCE_MODEL, init; context = "init hyperparameters")
+    validate_sample_only!(sample_only, INFERENCE_MODEL)
+    order = hyperparameters(INFERENCE_MODEL)
     fixed_sites = (; (k => init[k] for k in order if k ∉ sample_only)...)
 
     # Cluster-friendly defaults: avoid BLAS oversubscription with MCMCThreads.
@@ -229,7 +245,12 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
 
     @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
     model = build_turing_model(
-        problem, priors_turing; track = true, observed_spectral_density = observed)
+        problem,
+        priors_turing;
+        model = INFERENCE_MODEL,
+        track = true,
+        observed_spectral_density = observed
+    )
     conditioned = model | fixed_sites
     nuts = Turing.NUTS(
         n_adapts,

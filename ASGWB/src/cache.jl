@@ -1,7 +1,7 @@
 """
     hyperparameters_from_fiducial(fid::ProposalFiducialParameters, spec::RedshiftPriorSpec) -> NamedTuple
 
-Build coerced hyperparameters ([`coerce_hyperparameters`](@ref)) from cache `hyperparameters` scalars and the file’s
+Build model-validated fiducial hyperparameters from cache `hyperparameters` scalars and the file’s
 [`RedshiftPriorSpec`](@ref). Used when reconstructing per-sample proposal log-density
 from redshift grids (e.g. caches that omit `proposal_log_prob`).
 
@@ -25,14 +25,18 @@ function hyperparameters_from_fiducial(
         ),
         )
     end
-    return coerce_hyperparameters(;
-        H0 = fid.H0,
-        Ωm = fid.Ωm,
-        Ξ₀ = fid.Ξ₀,
-        Ξₙ = fid.Ξₙ,
-        γ = g,
-        κ = κ′,
-        zpeak = zp
+    return float_hyperparameters(
+        MadauDickinsonModifiedPropagation(),
+        (;
+            H0 = fid.H0,
+            Ωm = fid.Ωm,
+            Ξ₀ = fid.Ξ₀,
+            Ξₙ = fid.Ξₙ,
+            γ = g,
+            κ = κ′,
+            zpeak = zp
+        );
+        context = "fiducial hyperparameters"
     )
 end
 

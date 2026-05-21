@@ -3,8 +3,12 @@ module InferenceImpl
 using ASGWB
 using ASGWB:
              ImportanceSamplingProblem,
-             coerce_hyperparameters,
-             hyperparameter_order,
+             AbstractASGWBModel,
+             MadauDickinsonModifiedPropagation,
+             float_hyperparameters,
+             hyperparameters,
+             validate_hyperparameters,
+             validate_prior,
              validate_sample_only!,
              logposterior,
              cosmology_and_redshift_prior,

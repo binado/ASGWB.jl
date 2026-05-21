@@ -20,8 +20,8 @@ present, is ignored on load; [`load_cache`](@ref) always fills the observation u
 [`fiducial_spectral_density`](@ref) so the default likelihood data match the current Julia pipeline.
 Caches may omit
 `redshift_integral_fiducial`; it is then set from [`fiducial_redshift_integral`](@ref).
-Inference state is a flat hyperparameter `NamedTuple` (see [`coerce_hyperparameters`](@ref));
-caches carry
+Inference state is a flat hyperparameter `NamedTuple` validated against an
+[`AbstractASGWBModel`](@ref) contract; caches carry
 [`ProposalFiducialParameters`](@ref) in `fiducial_parameters` (HDF5 group `hyperparameters`).
 """
 module ASGWB
@@ -55,8 +55,14 @@ export ImportanceSamplingProblem,
        MadauDickinson,
        PowerLaw,
        parse_redshift_prior_family,
+       AbstractASGWBModel,
+       MadauDickinsonModifiedPropagation,
+       hyperparameters,
        coerce_hyperparameters,
+       float_hyperparameters,
        hyperparameter_order,
+       validate_hyperparameters,
+       validate_prior,
        validate_sample_only!,
        ProposalFiducialParameters,
        ProposalSampleBundle,

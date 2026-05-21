@@ -74,7 +74,7 @@ end
 """
     fiducial_hyperparameters(problem::ImportanceSamplingProblem) -> NamedTuple
 
-Build coerced hyperparameters ([`coerce_hyperparameters`](@ref)) from the cache’s [`ProposalFiducialParameters`](@ref)
+Build model-validated hyperparameters from the cache’s [`ProposalFiducialParameters`](@ref)
 and [`RedshiftPriorSpec`](@ref). Same rules as [`hyperparameters_from_fiducial`](@ref)
 (population scalars on the proposal fiducial dict when the prior family requires them).
 """

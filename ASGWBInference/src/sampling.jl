@@ -15,17 +15,21 @@ transformation between unconstrained parameters (where the sampler operates)
 and constrained physical parameters.
 """
 struct ASGWBLogDensity{
-    C <: ImportanceSamplingProblem, P <: ProductNamedTupleDistribution, B}
+    C <: ImportanceSamplingProblem, P <: ProductNamedTupleDistribution, B,
+    M <: AbstractASGWBModel}
     problem::C
     prior::P
     transform::B
+    model::M
 end
 
 function ASGWBLogDensity(
         problem::ImportanceSamplingProblem,
-        prior::ProductNamedTupleDistribution
+        prior::ProductNamedTupleDistribution;
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
 )
-    return ASGWBLogDensity(problem, prior, bijector(prior))
+    validate_prior(model, prior)
+    return ASGWBLogDensity(problem, prior, bijector(prior), model)
 end
 
 """
@@ -47,11 +51,12 @@ Transform a set of physical hyperparameters `theta0` into the unconstrained
 parameter space.
 """
 function unconstrained_initial_point(ld::ASGWBLogDensity, theta0::NamedTuple)
-    ordered_theta0 = (; (k => theta0[k] for k in hyperparameter_order(ld.prior))...)
+    validate_hyperparameters(ld.model, theta0; context = "initial hyperparameters")
+    ordered_theta0 = (; (k => theta0[k] for k in hyperparameters(ld.model))...)
     return collect(Bijectors.link(ld.prior, ordered_theta0))
 end
 
-LogDensityProblems.dimension(ld::ASGWBLogDensity) = length(keys(ld.prior.dists))
+LogDensityProblems.dimension(ld::ASGWBLogDensity) = length(hyperparameters(ld.model))
 function LogDensityProblems.capabilities(::Type{<:ASGWBLogDensity})
     LogDensityProblems.LogDensityOrder{0}()
 end
@@ -102,9 +107,10 @@ function sample_with_advancedhmc(
         theta0::NamedTuple;
         n_adapts::Int = 25,
         n_samples::Int = 25,
-        target_acceptance::Float64 = 0.8
+        target_acceptance::Float64 = 0.8,
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
 )
-    ld = ASGWBLogDensity(problem, prior)
+    ld = ASGWBLogDensity(problem, prior; model = model)
     z0 = unconstrained_initial_point(ld, theta0)
     ad_problem = ad_logdensity(ld)
 
@@ -123,7 +129,7 @@ function sample_with_advancedhmc(
 
     samples_constrained = map(samples_unconstrained) do z
         theta_nt, _ = constrained_parameters(ld, z)
-        coerce_hyperparameters(theta_nt)
+        float_hyperparameters(ld.model, theta_nt; context = "sampled hyperparameters")
     end
 
     return samples_constrained, stats, ld
