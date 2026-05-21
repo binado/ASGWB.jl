@@ -1,3 +1,4 @@
+# Test-only synthetic importance caches. Include after `using ASGWB` (see `runtests.jl`).
 using HDF5
 
 const _PARITY_OBSERVED_SPECTRAL_DENSITY = [0.0, 0.1, 0.2]

@@ -40,7 +40,6 @@ include("spectral_density.jl")
 include("snr.jl")
 include("diagnostics.jl")
 include("posterior.jl")
-include("parity_test_cache.jl")
 include("io.jl")
 
 # Types
@@ -72,10 +71,7 @@ export ImportanceSamplingProblem,
        redshift
 
 # IO
-export parity_cache_path,
-       resolve_parity_cache_path,
-       write_parity_cache_h5,
-       load_cache,
+export load_cache,
        reconstruct_proposal_log_prob,
        reconstruct_dgw_fid_sq,
        IMPORTANCE_CACHE_COMMAND_ATTR,

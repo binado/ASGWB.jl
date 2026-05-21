@@ -1,7 +1,7 @@
 module RunInferenceCLI
 
 using ASGWB
-using ASGWB: load_cache, resolve_parity_cache_path, Detector, DEFAULT_PARAMETER_ORDER
+using ASGWB: load_cache, Detector, DEFAULT_PARAMETER_ORDER
 using ..InferenceImpl: build_turing_model
 
 using Turing
@@ -170,12 +170,7 @@ function resolve_adtype(name::AbstractString)
 end
 
 function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = false)
-    raw_cache = settings["cache_path"]::String
-    cache = if startswith(raw_cache, "parity:")
-        resolve_parity_cache_path(raw_cache)
-    else
-        resolve_path(raw_cache, settings_dir)
-    end
+    cache = resolve_path(settings["cache_path"]::String, settings_dir)
     detectors = [Detector(n) for n in settings["detectors"]]
     sample_only = Tuple(Symbol(s) for s in settings["sample_only"])
     seed = settings["seed"]::Int

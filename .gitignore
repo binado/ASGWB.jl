@@ -55,3 +55,4 @@ ASGWBInference/out-test/
 # PackageCompiler and ASGWBInference build artifacts
 ASGWBInference/build/
 ASGWBInference/deps/build.log
+ASGWBInference/deps/parity_precompile.h5

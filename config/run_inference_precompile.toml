@@ -1,4 +1,4 @@
-cache_path = "parity:posterior"
+cache_path = "../ASGWBInference/deps/parity_precompile.h5"
 detectors = ["H1", "L1"]
 sample_only = ["H0"]
 seed = 1

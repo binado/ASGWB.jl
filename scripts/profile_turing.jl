@@ -18,6 +18,9 @@
 
 module ASGWBProfileCLI
 
+const _REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
+const _PARITY_TEST_CACHE = joinpath(_REPO_ROOT, "ASGWB", "test", "parity_test_cache.jl")
+
 using Distributions: logpdf, product_distribution, Uniform
 using ASGWB
 using ASGWBInference.InferenceImpl:
@@ -27,7 +30,6 @@ using ASGWBInference.InferenceImpl:
                                     unconstrained_initial_point
 using ASGWB:
              load_cache,
-             resolve_parity_cache_path,
              cosmology_and_redshift_prior,
              compute_importance_weights,
              merger_rate_per_sec,
@@ -517,7 +519,14 @@ function profile_turing(;
     @info "loading config" path = config_file
     cfg = TOML.parsefile(config_file)
 
-    cache_path = resolve_parity_cache_path(_require(cfg, "cache_path")::String)
+    raw_cache = _require(cfg, "cache_path")::String
+    cache_path = if startswith(raw_cache, "parity:")
+        isdefined(@__MODULE__, :resolve_parity_cache_path) ||
+            include(_PARITY_TEST_CACHE)
+        resolve_parity_cache_path(raw_cache)
+    else
+        raw_cache
+    end
     detectors = [Detector(n) for n in _require_string_array(cfg, "detectors")]
     seed = get(cfg, "seed", nothing)
     observed_csv = get(cfg, "observed_spectral_density_csv", nothing)
