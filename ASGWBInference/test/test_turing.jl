@@ -3,6 +3,9 @@ using Turing
 using ASGWB
 using ASGWBInference: build_turing_model, sample_with_turing
 
+if !@isdefined parity_cache_path
+    include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_test_cache.jl"))
+end
 include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
 @testset "Turing model smoke test" begin

@@ -47,7 +47,8 @@ Transform a set of physical hyperparameters `theta0` into the unconstrained
 parameter space.
 """
 function unconstrained_initial_point(ld::ASGWBLogDensity, theta0::NamedTuple)
-    return collect(Bijectors.link(ld.prior, theta0))
+    ordered_theta0 = (; (k => theta0[k] for k in hyperparameter_order(ld.prior))...)
+    return collect(Bijectors.link(ld.prior, ordered_theta0))
 end
 
 LogDensityProblems.dimension(ld::ASGWBLogDensity) = length(keys(ld.prior.dists))

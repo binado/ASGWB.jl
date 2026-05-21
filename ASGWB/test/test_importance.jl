@@ -2,6 +2,9 @@ using ASGWB
 using ForwardDiff
 using Test
 
+if !@isdefined parity_cache_path
+    include(joinpath(@__DIR__, "parity_test_cache.jl"))
+end
 include(joinpath(@__DIR__, "parity_fixtures.jl"))
 
 function _importance_type_test_problem(n::Integer)
