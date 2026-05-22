@@ -23,6 +23,7 @@ export ASGWBLogDensity,
        run_inference_from_env,
        julia_main
 
+include("chain_io.jl")
 include("cli/run_inference.jl")
 include("cli/stack_partial_chains.jl")
 include("cli/profile_turing_main.jl")

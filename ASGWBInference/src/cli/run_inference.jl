@@ -9,6 +9,7 @@ using ASGWB:
              validate_hyperparameters,
              validate_prior,
              validate_subset
+using ..ChainIO: atomic_save_chain
 using ..InferenceImpl: build_turing_model, condition_turing_model
 
 using Turing
@@ -256,7 +257,8 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     @info "seeding RNG" rng_seed=seed
     Random.seed!(seed)
 
-    do_save_state = true
+    final_save_state = false
+    checkpoint_save_state = true
 
     @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
     model = build_turing_model(
@@ -282,24 +284,24 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     callback = checkpoint_every > 0 ?
                CheckpointCallback(
         checkpoint_every, base, output_dir, conditioned, nuts, num_chains;
-        save_state = do_save_state
+        save_state = checkpoint_save_state
     ) : nothing
 
     chain = if callback === nothing
         sample(
             conditioned, nuts, MCMCThreads(), n_samples, num_chains;
-            progress = progress, save_state = do_save_state
+            progress = progress, save_state = final_save_state
         )
     else
         sample(
             conditioned, nuts, MCMCThreads(), n_samples, num_chains;
-            progress = progress, save_state = do_save_state, callback = callback
+            progress = progress, save_state = final_save_state, callback = callback
         )
     end
     @info "NUTS finished" chain_size=size(chain)
 
     @info "writing chain to JLD2" path=output_jld2
-    jldsave(output_jld2; chain)
+    atomic_save_chain(output_jld2, chain)
 
     if callback !== nothing
         retained_checkpoint_paths = filter(isfile, checkpoint_paths(callback, num_chains))

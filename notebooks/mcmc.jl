@@ -264,7 +264,7 @@ begin
             sam.n_samples,
             num_threads;
             progress = true,
-            save_state = true
+            save_state = false
         )
         @info "NUTS finished" chain_size = size(chain)
     end

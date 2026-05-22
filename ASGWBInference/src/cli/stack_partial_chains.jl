@@ -1,6 +1,7 @@
 module StackPartialChainsCLI
 
 using ASGWB
+using ..ChainIO: atomic_save_chain
 using AbstractMCMC: chainsstack
 using MCMCChains: Chains
 using JLD2
@@ -93,7 +94,7 @@ function stack(
     stacked = chainsstack(chains)
     output_dir = dirname(output)
     isempty(output_dir) || mkpath(output_dir)
-    jldsave(output; chain = stacked)
+    atomic_save_chain(output, stacked)
 
     @info "wrote stacked chain" path=output size=size(stacked)
     return nothing
