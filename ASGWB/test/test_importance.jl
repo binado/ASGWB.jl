@@ -2,6 +2,9 @@ using ASGWB
 using ForwardDiff
 using Test
 
+if !@isdefined parity_cache_path
+    include(joinpath(@__DIR__, "parity_test_cache.jl"))
+end
 include(joinpath(@__DIR__, "parity_fixtures.jl"))
 
 function _importance_type_test_problem(n::Integer)
@@ -47,14 +50,25 @@ end
     cache = load_cache(parity_cache_path(:posterior), [Detector("H1"), Detector("L1")])
     theta = PARITY_THETA
 
-    evaluation = evaluate_importance_terms(theta, cache)
-    @test length(evaluation.weights) == length(cache.proposal.samples.redshift)
-    @test all(isfinite, evaluation.weights)
-    @test all(isfinite, evaluation.log_ratio)
-    @test all(isfinite, evaluation.target_log_prob)
-    @test all(isfinite, evaluation.spectral_density)
-    @test isfinite(evaluation.redshift_integral)
-    @test isfinite(evaluation.expected_number_of_sources)
+    model_evaluation = evaluate_model_terms(
+        MadauDickinsonModifiedPropagation(),
+        theta,
+        cache
+    )
+    model_evaluation_with_grid = evaluate_model_terms(
+        MadauDickinsonModifiedPropagation(),
+        theta,
+        cache,
+        cache.redshift_cache.redshift_grid
+    )
+    @test length(model_evaluation.weights) == length(cache.proposal.samples.redshift)
+    @test all(isfinite, model_evaluation.weights)
+    @test all(isfinite, model_evaluation.log_ratio)
+    @test all(isfinite, model_evaluation.target_log_prob)
+    @test all(isfinite, model_evaluation.spectral_density)
+    @test isfinite(model_evaluation.redshift_integral)
+    @test isfinite(model_evaluation.expected_number_of_sources)
+    @test model_evaluation_with_grid.spectral_density ≈ model_evaluation.spectral_density
 
     cosmology_cache,
     redshift_prior = cosmology_and_redshift_prior(
@@ -63,10 +77,10 @@ end
         cache.redshift_cache.redshift_grid
     )
     iw = compute_importance_weights(cache, theta, cosmology_cache, redshift_prior)
-    @test iw.weights ≈ evaluation.weights
-    @test iw.log_ratio ≈ evaluation.log_ratio
-    @test iw.target_log_prob ≈ evaluation.target_log_prob
-    @test iw.dgw_theta_sq ≈ evaluation.dgw_theta_sq
+    @test iw.weights ≈ model_evaluation.weights
+    @test iw.log_ratio ≈ model_evaluation.log_ratio
+    @test iw.target_log_prob ≈ model_evaluation.target_log_prob
+    @test iw.dgw_theta_sq ≈ model_evaluation.dgw_theta_sq
 
     rate = merger_rate_per_sec(
         redshift_prior,
@@ -75,7 +89,8 @@ end
         cache.observation.observation_time_sec
     )
     @test isfinite(rate)
-    @test evaluation.expected_number_of_sources ≈ rate * cache.observation.observation_time_sec
+    @test model_evaluation.expected_number_of_sources ≈
+          rate * cache.observation.observation_time_sec
 end
 
 @testset "empty importance weights preserve AD element types" begin

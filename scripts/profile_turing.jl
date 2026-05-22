@@ -37,7 +37,9 @@ using ASGWB:
              logposterior,
              luminosity_distance,
              redshift,
-             HyperParameters,
+             canonical_hyperparameters,
+             MadauDickinsonModifiedPropagation,
+             validate_prior,
              Detector
 using BenchmarkTools
 using DelimitedFiles
@@ -50,6 +52,8 @@ using Serialization
 using Statistics: mean
 using TOML
 using Turing: DynamicPPL
+
+const INFERENCE_MODEL = MadauDickinsonModifiedPropagation()
 
 # ---------------------------------------------------------------------------
 # TOML config helpers
@@ -105,19 +109,23 @@ function _priors_from_toml(priors_tbl::Dict)
         Ξₙ = Uniform(_uniform_bounds(priors_tbl, "chin")...),
         γ = Uniform(_uniform_bounds(priors_tbl, "gamma")...),
         κ = Uniform(_uniform_bounds(priors_tbl, "kappa")...),
-        zpeak = Uniform(_uniform_bounds(priors_tbl, "z_peak")...),
+        zpeak = Uniform(_uniform_bounds(priors_tbl, "z_peak")...)
     ))
 end
 
 function _theta0_from_toml(init_tbl::Dict)
-    return HyperParameters(;
-        H0 = Float64(init_tbl["H0"]),
-        Ωm = Float64(init_tbl["Omega_m"]),
-        Ξ₀ = Float64(init_tbl["chi0"]),
-        Ξₙ = Float64(init_tbl["chin"]),
-        γ = Float64(init_tbl["gamma"]),
-        κ = Float64(init_tbl["kappa"]),
-        zpeak = Float64(init_tbl["z_peak"])
+    return canonical_hyperparameters(
+        INFERENCE_MODEL,
+        (;
+            H0 = init_tbl["H0"],
+            Ωm = init_tbl["Omega_m"],
+            Ξ₀ = init_tbl["chi0"],
+            Ξₙ = init_tbl["chin"],
+            γ = init_tbl["gamma"],
+            κ = init_tbl["kappa"],
+            zpeak = init_tbl["z_peak"]
+        );
+        context = "initial hyperparameters"
     )
 end
 
@@ -129,7 +137,7 @@ function _validate_init_in_priors(prior, init_tbl::Dict)
         "chin" => :Ξₙ,
         "gamma" => :γ,
         "kappa" => :κ,
-        "z_peak" => :zpeak,
+        "z_peak" => :zpeak
     )
         haskey(init_tbl, key) || continue
         v = Float64(init_tbl[key])
@@ -213,7 +221,7 @@ function _run(;
         cache_path::String,
         detectors::Vector{Detector},
         priors,
-        θ0::HyperParameters,
+        θ0::NamedTuple,
         seed::Union{Nothing, Int},
         observed_spectral_density_csv::Union{Nothing, String},
         seconds::Float64,
@@ -250,12 +258,19 @@ function _run(;
     # ------------------------------------------------------------------
 
     # Native (ASGWBLogDensity) path — pure Julia, no DynamicPPL
-    ld = ASGWBLogDensity(problem, priors)
+    validate_prior(INFERENCE_MODEL, priors)
+    ld = ASGWBLogDensity(problem, priors; model = INFERENCE_MODEL)
     z0 = unconstrained_initial_point(ld, θ0)
     ad_ld = ad_logdensity(ld)
 
     # Turing / DynamicPPL path
-    model = build_turing_model(problem, priors; track = false, observed_spectral_density = observed)
+    model = build_turing_model(
+        problem,
+        priors;
+        model = INFERENCE_MODEL,
+        track = false,
+        observed_spectral_density = observed
+    )
     lf, z0_turing = _build_turing_logdensity(model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)
 

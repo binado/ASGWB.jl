@@ -15,49 +15,55 @@ transformation between unconstrained parameters (where the sampler operates)
 and constrained physical parameters.
 """
 struct ASGWBLogDensity{
-    C <: ImportanceSamplingProblem, P <: ProductNamedTupleDistribution, B}
+    C <: ImportanceSamplingProblem, P <: ProductNamedTupleDistribution, B,
+    M <: AbstractASGWBModel}
     problem::C
     prior::P
     transform::B
+    model::M
 end
 
 function ASGWBLogDensity(
         problem::ImportanceSamplingProblem,
-        prior::ProductNamedTupleDistribution
+        prior::ProductNamedTupleDistribution;
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
 )
-    return ASGWBLogDensity(problem, prior, bijector(prior))
+    validate_prior(model, prior)
+    return ASGWBLogDensity(problem, prior, bijector(prior), model)
 end
 
 """
-    constrained_parameters(ld::ASGWBLogDensity, z) -> (theta_nt, logabsdet)
+    constrained_parameters(ld::ASGWBLogDensity, z) -> (Λ, logabsdet)
 
 Transform unconstrained parameters `z` back to the physical parameter space
 defined by the prior. Returns a named tuple of parameters and the log-absolute-determinant
 of the Jacobian of the inverse transformation.
 """
 function constrained_parameters(ld::ASGWBLogDensity, z::AbstractVector{<:Real})
-    theta_nt, logabsdet = with_logabsdet_jacobian(inverse(ld.transform), z)
-    return theta_nt, logabsdet
+    Λ, logabsdet = with_logabsdet_jacobian(inverse(ld.transform), z)
+    return Λ, logabsdet
 end
 
 """
-    unconstrained_initial_point(ld::ASGWBLogDensity, theta0::HyperParameters) -> Vector{Float64}
+    unconstrained_initial_point(ld::ASGWBLogDensity, theta0::NamedTuple) -> Vector{Float64}
 
 Transform a set of physical hyperparameters `theta0` into the unconstrained
 parameter space.
 """
-function unconstrained_initial_point(ld::ASGWBLogDensity, theta0::HyperParameters)
-    return collect(Bijectors.link(ld.prior, theta0))
+function unconstrained_initial_point(ld::ASGWBLogDensity, theta0::NamedTuple)
+    validate_hyperparameters(ld.model, theta0; context = "initial hyperparameters")
+    ordered_theta0 = (; (k => theta0[k] for k in hyperparameters(ld.model))...)
+    return collect(Bijectors.link(ld.prior, ordered_theta0))
 end
 
-LogDensityProblems.dimension(ld::ASGWBLogDensity) = length(keys(ld.prior.dists))
+LogDensityProblems.dimension(ld::ASGWBLogDensity) = length(hyperparameters(ld.model))
 function LogDensityProblems.capabilities(::Type{<:ASGWBLogDensity})
     LogDensityProblems.LogDensityOrder{0}()
 end
 
 function LogDensityProblems.logdensity(ld::ASGWBLogDensity, z::AbstractVector{<:Real})
-    theta_nt, logabsdet = constrained_parameters(ld, z)
-    return logposterior(theta_nt, ld.problem, ld.prior) + logabsdet
+    Λ, logabsdet = constrained_parameters(ld, z)
+    return logposterior(Λ, ld.problem, ld.prior; model = ld.model) + logabsdet
 end
 
 """
@@ -98,12 +104,13 @@ Sample from the ASGWB posterior using `AdvancedHMC.jl` directly (without Turing)
 function sample_with_advancedhmc(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution,
-        theta0::HyperParameters;
+        theta0::NamedTuple;
         n_adapts::Int = 25,
         n_samples::Int = 25,
-        target_acceptance::Float64 = 0.8
+        target_acceptance::Float64 = 0.8,
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
 )
-    ld = ASGWBLogDensity(problem, prior)
+    ld = ASGWBLogDensity(problem, prior; model = model)
     z0 = unconstrained_initial_point(ld, theta0)
     ad_problem = ad_logdensity(ld)
 
@@ -121,8 +128,8 @@ function sample_with_advancedhmc(
     stats = sample(hamiltonian, kernel, z0, n_samples, adaptor, n_adapts; progress = false)
 
     samples_constrained = map(samples_unconstrained) do z
-        theta_nt, _ = constrained_parameters(ld, z)
-        HyperParameters(theta_nt)
+        Λ, _ = constrained_parameters(ld, z)
+        canonical_hyperparameters(ld.model, Λ; context = "sampled hyperparameters")
     end
 
     return samples_constrained, stats, ld

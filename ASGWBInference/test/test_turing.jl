@@ -1,8 +1,11 @@
 using Test
 using Turing
 using ASGWB
-using ASGWBInference: build_turing_model, sample_with_turing
+using ASGWBInference: build_turing_model, condition_turing_model
 
+if !@isdefined parity_cache_path
+    include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_test_cache.jl"))
+end
 include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
 @testset "Turing model smoke test" begin
@@ -14,6 +17,9 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
         model = build_turing_model(cache, priors; track = false)
         @test Turing.logjoint(model, theta0) ≈ logposterior(theta0, cache, priors) rtol = 1e-6
+        @test condition_turing_model(model, theta0, priors, nothing) === model
+        @test_throws ArgumentError condition_turing_model(model, theta0, priors, ())
+        @test_throws ArgumentError condition_turing_model(model, theta0, priors, (:unknown,))
 
         model_track = build_turing_model(cache, priors; track = true)
         returned_nt = Turing.returned(model_track, theta0)
@@ -28,22 +34,26 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         @test returned_nt.spectral_snr >= 0
         @test returned_nt.spectral_snr^2 ≈ returned_nt.spectral_snr_squared
 
-        chain,
-        sampled_model = sample_with_turing(
-            cache, priors, theta0; n_adapts = 3, n_samples = 3, track = false)
+        # Verify manual NUTS sampling flow
+        sampled_model = condition_turing_model(model, theta0, priors, nothing)
+        chain = sample(
+            sampled_model,
+            Turing.NUTS(3, 0.8),
+            3;
+            progress = false
+        )
 
         @test Turing.logjoint(sampled_model, theta0) ≈ Turing.logjoint(model, theta0) rtol = 1e-6
         @test size(chain, 1) == 3
+        @test sort(collect(Symbol.(Turing.MCMCChains.names(chain, :parameters)))) ==
+              sort(collect(keys(theta0)))
 
-        chain_h0,
-        cond_h0 = sample_with_turing(
-            cache,
-            priors,
-            theta0;
-            n_adapts = 3,
-            n_samples = 3,
-            track = false,
-            sample_only = (:H0,)
+        cond_h0 = condition_turing_model(model, theta0, priors, (:H0,))
+        chain_h0 = sample(
+            cond_h0,
+            Turing.NUTS(3, 0.8),
+            3;
+            progress = false
         )
         pnames = sort(collect(Symbol.(Turing.MCMCChains.names(chain_h0, :parameters))))
         @test pnames == [:H0]

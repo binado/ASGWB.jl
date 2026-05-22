@@ -3,13 +3,15 @@ module InferenceImpl
 using ASGWB
 using ASGWB:
              ImportanceSamplingProblem,
-             HyperParameters,
+             AbstractASGWBModel,
+             MadauDickinsonModifiedPropagation,
+             evaluate_model_terms,
+             canonical_hyperparameters,
+             hyperparameters,
+             validate_hyperparameters,
+             validate_prior,
+             validate_subset,
              logposterior,
-             DEFAULT_PARAMETER_ORDER,
-             cosmology_and_redshift_prior,
-             compute_importance_weights,
-             merger_rate_per_sec,
-             spectral_density,
              normalized_ess,
              spectral_snr_squared,
              frequency_bin_width
@@ -33,7 +35,6 @@ export ASGWBLogDensity,
        finite_difference_logdensity_and_gradient,
        sample_with_advancedhmc,
        build_turing_model,
-       sample_with_turing,
        condition_turing_model
 
 end

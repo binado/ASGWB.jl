@@ -20,7 +20,8 @@ present, is ignored on load; [`load_cache`](@ref) always fills the observation u
 [`fiducial_spectral_density`](@ref) so the default likelihood data match the current Julia pipeline.
 Caches may omit
 `redshift_integral_fiducial`; it is then set from [`fiducial_redshift_integral`](@ref).
-Inference state is a flat [`HyperParameters`](@ref) `NamedTuple`; caches carry
+Inference state is a flat hyperparameter `NamedTuple` validated against an
+[`AbstractASGWBModel`](@ref) contract; caches carry
 [`ProposalFiducialParameters`](@ref) in `fiducial_parameters` (HDF5 group `hyperparameters`).
 """
 module ASGWB
@@ -29,6 +30,7 @@ using CBCDistributions
 
 include("types.jl")
 include("inference_types.jl")
+include("hyperparameters.jl")
 include("detector/psd.jl")
 include("detector/detector.jl")
 include("detector/overlap.jl")
@@ -44,7 +46,6 @@ include("io.jl")
 
 # Types
 export ImportanceSamplingProblem,
-       ImportanceCache,
        importance_sampling_problem,
        ProposalData,
        ObservationConfig,
@@ -53,7 +54,13 @@ export ImportanceSamplingProblem,
        MadauDickinson,
        PowerLaw,
        parse_redshift_prior_family,
-       HyperParameters,
+       AbstractASGWBModel,
+       MadauDickinsonModifiedPropagation,
+       hyperparameters,
+       canonical_hyperparameters,
+       validate_hyperparameters,
+       validate_prior,
+       validate_subset,
        ProposalFiducialParameters,
        ProposalSampleBundle,
        FullBNSSamplesSoA,
@@ -127,7 +134,7 @@ export importance_weights,
        spectral_snr_squared,
        spectral_snr,
        Ωgw,
-       evaluate_importance_terms
+       evaluate_model_terms
 
 # Diagnostics
 export normalized_ess, max_normalized_weight, log_ratio_variance
@@ -138,8 +145,5 @@ export loglikelihood,
        fiducial_hyperparameters,
        fiducial_spectral_density,
        fiducial_redshift_integral
-
-# Hyperparameter ordering (used with product priors / Bijectors in ASGWBInference)
-export DEFAULT_PARAMETER_ORDER
 
 end

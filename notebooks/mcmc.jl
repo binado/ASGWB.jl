@@ -16,7 +16,7 @@
 # %% [markdown]
 # # MCMC
 #
-# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with `HyperParameters` and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
+# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 #
 # On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
 #
@@ -36,14 +36,17 @@ begin
     # Ensure dependencies are installed for fresh clones or clean depots
     Pkg.instantiate()
     using ASGWB
-    using ASGWBInference: build_turing_model
+    using ASGWBInference: build_turing_model, condition_turing_model
     using ASGWB:
                  load_cache,
-                 evaluate_importance_terms,
+                 evaluate_model_terms,
                  Ωgw,
-                 HyperParameters,
-                 Detector,
-                 DEFAULT_PARAMETER_ORDER
+                 canonical_hyperparameters,
+                 MadauDickinsonModifiedPropagation,
+                 hyperparameters,
+                 validate_prior,
+                 validate_subset,
+                 Detector
     using Turing
     using AdvancedHMC
     using Random
@@ -92,9 +95,10 @@ begin
 
     # --- edit everything below (same role as the JSON used by `scripts/run_turing.jl`) ---
 
+    inference_model = MadauDickinsonModifiedPropagation()
     cache = "analysis_numpyro_julia_cache.h5"
     detectors = [Detector("S1"), Detector("R1")]
-    sample_only = [:H0,]
+    sample_only = (:H0,)
 
     priors = (
         H0 = Uniform(20, 140),
@@ -107,13 +111,12 @@ begin
     )
 
     init = (H0 = 67.66, Ωm = 0.3096, Ξ₀ = 1.0, Ξₙ = 1.91, γ = 2.7, κ = 5.7, zpeak = 2.0)
-    fixed_sites = (; (k => init[k] for k in DEFAULT_PARAMETER_ORDER if k ∉ sample_only)...)
 
     sampler = (n_samples = 2000, n_adapts = 2000, target_acceptance = 0.9)
 
     seed = 1
     observed_spectral_density_csv = nothing
-    output_suffix = join(map(string, sample_only), "-")
+    output_suffix = sample_only === nothing ? "all" : join(map(string, sample_only), "-")
     output_jld2 = "chains-$output_suffix.jld2"
     chain_input_jld2 = nothing
 
@@ -127,7 +130,20 @@ begin
         κ = priors.κ,
         zpeak = priors.zpeak
     ))
-    θ0 = HyperParameters(; init...)
+    validate_prior(inference_model, priors_turing)
+    if sample_only !== nothing
+        isempty(sample_only) && throw(
+            ArgumentError(
+            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
+        ),
+        )
+        validate_subset(sample_only, inference_model)
+    end
+    order = hyperparameters(inference_model)
+    fixed_sites = sample_only === nothing ?
+                  NamedTuple() :
+                  (; (k => init[k] for k in order if k ∉ sample_only)...)
+    θ0 = canonical_hyperparameters(inference_model, init)
 end
 
 # %%
@@ -135,27 +151,8 @@ fixed_sites
 
 # %%
 begin
-    function validate_sample_only(sample_only::Union{Nothing, Tuple{Vararg{Symbol}}})
-        sample_only === nothing && return nothing
-        isempty(sample_only) && throw(
-            ArgumentError(
-            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
-        ),
-        )
-        for s in sample_only
-            s in DEFAULT_PARAMETER_ORDER || throw(
-                ArgumentError(
-                "sample_only contains $(repr(s)); expected symbols from $(DEFAULT_PARAMETER_ORDER)",
-            ),
-            )
-        end
-        length(unique(sample_only)) == length(sample_only) ||
-            throw(ArgumentError("sample_only must not repeat symbols"))
-        return nothing
-    end
-
     function turing_initial_params(
-            theta0::HyperParameters,
+            theta0::NamedTuple,
             sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
     )
         sample_only === nothing && return InitFromParams(theta0)
@@ -190,14 +187,21 @@ begin
     else
         Tuple(sample_only)
     end
-    #validate_sample_only(sample_only_tup)
+    if sample_only_tup !== nothing
+        isempty(sample_only_tup) && throw(
+            ArgumentError(
+            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
+        ),
+        )
+        validate_subset(sample_only_tup, inference_model)
+    end
     sam = sampler
     nothing
 end
 
 # %%
 begin
-    ev = evaluate_importance_terms(θ0, problem)
+    ev = evaluate_model_terms(MadauDickinsonModifiedPropagation(), θ0, problem)
     f = problem.observation.frequencies
     Ωgw_plot = Ωgw(ev.spectral_density, f, θ0.H0)
     mask = Ωgw_plot .> 0.0
@@ -235,9 +239,19 @@ begin
     else
         @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
         model = build_turing_model(
-            problem, priors_turing; track = true, observed_spectral_density = observed
+            problem,
+            priors_turing;
+            model = inference_model,
+            track = true,
+            observed_spectral_density = observed
         )
-        conditioned = model | fixed_sites
+        conditioned = condition_turing_model(
+            model,
+            θ0,
+            priors_turing,
+            sample_only_tup;
+            model = inference_model
+        )
         nuts = Turing.NUTS(
             sam.n_adapts,
             sam.target_acceptance;

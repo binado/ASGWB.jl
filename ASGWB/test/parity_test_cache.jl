@@ -10,12 +10,12 @@ const _INTRINSIC_SITE_ORDER_STRINGS = [
     "chi_1",
     "chi_2",
     "lambda_1",
-    "lambda_2",
+    "lambda_2"
 ]
 
 const _PARITY_CACHE_ATTRS = (
     command = "ASGWB/test/parity_fixtures.jl (generated test cache)",
-    git_revision = "parity-snapshots",
+    git_revision = "parity-snapshots"
 )
 
 function _write_hyperparameters!(hg, hp)
@@ -56,8 +56,8 @@ function _write_cache_root!(
         local_merger_rate::Real,
         observation_time_sec::Real,
         observation_time_yr::Real,
-        redshift_integral_fiducial::Union{Real, Nothing} = nothing,
-    )
+        redshift_integral_fiducial::Union{Real, Nothing} = nothing
+)
     a = attributes(f)
     a[IMPORTANCE_CACHE_COMMAND_ATTR] = _PARITY_CACHE_ATTRS.command
     a[IMPORTANCE_CACHE_GIT_REVISION_ATTR] = _PARITY_CACHE_ATTRS.git_revision
@@ -114,7 +114,7 @@ function _write_posterior_cache_h5(path::AbstractString)
             f;
             local_merger_rate = 1e-7,
             observation_time_sec = 2.0,
-            observation_time_yr = 1e-6,
+            observation_time_yr = 1e-6
         )
         write(f, "intrinsic_site_order", _INTRINSIC_SITE_ORDER_STRINGS)
         write(f, "proposal_intrinsic_vector", Matrix(permutedims(intrinsic_vector)))
@@ -168,7 +168,7 @@ function _write_full_intrinsic_cache_h5(path::AbstractString)
             f;
             local_merger_rate = 1e-7,
             observation_time_sec = 2.0,
-            observation_time_yr = 1e-6,
+            observation_time_yr = 1e-6
         )
         write(f, "intrinsic_site_order", _INTRINSIC_SITE_ORDER_STRINGS)
         write(f, "proposal_intrinsic_vector", Matrix(permutedims(intrinsic_vector)))
@@ -215,7 +215,7 @@ function _write_importance_context_cache_h5(path::AbstractString)
             local_merger_rate = 161.0,
             observation_time_sec = 3.15576e7,
             observation_time_yr = 1.0,
-            redshift_integral_fiducial = 1.0,
+            redshift_integral_fiducial = 1.0
         )
         write(f, "intrinsic_site_order", _INTRINSIC_SITE_ORDER_STRINGS)
         write(f, "proposal_intrinsic_vector", Matrix(permutedims(intrinsic_vector)))

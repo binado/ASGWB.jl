@@ -18,7 +18,7 @@ end
 
 @inline function _importance_terms_at_sample(
         problem::ImportanceSamplingProblem,
-        h::HyperParametersNT,
+        h::NamedTuple,
         cosmology_cache::CosmologyCache,
         prior::RedshiftPrior,
         norm::Real,
@@ -47,7 +47,7 @@ end
 
 function _importance_output_eltypes(
         problem::ImportanceSamplingProblem,
-        h::HyperParametersNT,
+        h::NamedTuple,
         cosmology_cache::CosmologyCache,
         prior::RedshiftPrior
 )
@@ -81,7 +81,7 @@ end
     compute_importance_weights(problem, h, cosmology_cache, prior) -> NamedTuple
 
 High-level builder: given the [`ImportanceSamplingProblem`](@ref), live
-[`HyperParameters`](@ref), a [`CosmologyCache`](@ref), and a [`RedshiftPrior`](@ref), compute
+hyperparameter `NamedTuple`, a [`CosmologyCache`](@ref), and a [`RedshiftPrior`](@ref), compute
 per-sample importance weights and the intermediate quantities used by diagnostics
 and the parity shim.
 
@@ -89,7 +89,7 @@ Returns a NamedTuple with fields `weights`, `log_ratio`, `target_log_prob`, `dgw
 """
 function compute_importance_weights(
         problem::ImportanceSamplingProblem,
-        h::HyperParametersNT,
+        h::NamedTuple,
         cosmology_cache::CosmologyCache,
         prior::RedshiftPrior
 )

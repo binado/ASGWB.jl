@@ -1,7 +1,7 @@
 """
-    hyperparameters_from_fiducial(fid::ProposalFiducialParameters, spec::RedshiftPriorSpec) -> HyperParameters
+    hyperparameters_from_fiducial(fid::ProposalFiducialParameters, spec::RedshiftPriorSpec) -> NamedTuple
 
-Build [`HyperParameters`](@ref) from cache `hyperparameters` scalars and the file’s
+Build model-validated fiducial hyperparameters from cache `hyperparameters` scalars and the file’s
 [`RedshiftPriorSpec`](@ref). Used when reconstructing per-sample proposal log-density
 from redshift grids (e.g. caches that omit `proposal_log_prob`).
 
@@ -11,7 +11,7 @@ Power-law caches are rejected: live hyperparameter reconstruction is MadauDickin
 function hyperparameters_from_fiducial(
         fid::ProposalFiducialParameters,
         spec::RedshiftPriorSpec
-)::HyperParameters
+)
     spec.family == MadauDickinson || throw(
         ArgumentError(
         "live hyperparameter reconstruction supports MadauDickinson only; PowerLaw caches are metadata-only",
@@ -25,14 +25,18 @@ function hyperparameters_from_fiducial(
         ),
         )
     end
-    return HyperParameters(;
-        H0 = fid.H0,
-        Ωm = fid.Ωm,
-        Ξ₀ = fid.Ξ₀,
-        Ξₙ = fid.Ξₙ,
-        γ = g,
-        κ = κ′,
-        zpeak = zp
+    return canonical_hyperparameters(
+        MadauDickinsonModifiedPropagation(),
+        (;
+            H0 = fid.H0,
+            Ωm = fid.Ωm,
+            Ξ₀ = fid.Ξ₀,
+            Ξₙ = fid.Ξₙ,
+            γ = g,
+            κ = κ′,
+            zpeak = zp
+        );
+        context = "fiducial hyperparameters"
     )
 end
 
@@ -47,8 +51,8 @@ function fiducial_redshift_integral(
         fid::ProposalFiducialParameters,
         spec::RedshiftPriorSpec
 )::Float64
-    h = hyperparameters_from_fiducial(fid, spec)
-    redshift_prior = build_redshift_prior(h, spec)
+    Λ = hyperparameters_from_fiducial(fid, spec)
+    redshift_prior = build_redshift_prior(Λ, spec)
     return Float64(redshift_integral(redshift_prior))
 end
 
@@ -99,8 +103,8 @@ function reconstruct_proposal_log_prob(
         spec::RedshiftPriorSpec,
         fid::ProposalFiducialParameters
 )::Vector{Float64}
-    h = hyperparameters_from_fiducial(fid, spec)
-    redshift_prior = build_redshift_prior(h, spec)
+    Λ = hyperparameters_from_fiducial(fid, spec)
+    redshift_prior = build_redshift_prior(Λ, spec)
     cached_log_prob = logpdf(intrinsic_prior(FullBNS()), samples)
     return cached_log_prob .+ redshift_log_prob_samples(redshift_prior, samples.redshift)
 end

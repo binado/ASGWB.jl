@@ -1,87 +1,3 @@
-"""Ordering of parameters in the flat `HyperParameters` NamedTuple used by
-`product_distribution` / Bijectors / HMC."""
-const DEFAULT_PARAMETER_ORDER = (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
-
-"""
-    HyperParameters
-
-Flat Madau–Dickinson inference state as a concrete `Float64` `NamedTuple` alias keyed by
-[`DEFAULT_PARAMETER_ORDER`](@ref). Used directly by the product-distribution prior
-(`logpdf(prior, h)`), by Bijectors (`Bijectors.link(prior, h)`), and inside the Turing
-`@model`. The keyword constructor [`HyperParameters(; H0, Ωm, …)`](@ref) and the
-from-NamedTuple constructor [`HyperParameters(nt)`](@ref) coerce inputs to `Float64`
-for user-facing code. Inner loops that see `ForwardDiff.Dual` values (e.g. HMC
-log-density gradient) work against the [`HyperParametersNT`](@ref) UnionAll alias which
-accepts any element types.
-
-On-disk HDF5 caches use ASCII dataset names (`Omega_m`, `chi0`, `gamma`, …); see [`load_cache`](@ref).
-"""
-const HyperParameters = @NamedTuple{
-    H0::Float64,
-    Ωm::Float64,
-    Ξ₀::Float64,
-    Ξₙ::Float64,
-    γ::Float64,
-    κ::Float64,
-    zpeak::Float64
-}
-
-"""
-    HyperParametersNT
-
-UnionAll NamedTuple type keyed by [`DEFAULT_PARAMETER_ORDER`](@ref) that matches any
-element types. Used in inner-loop function signatures (`logposterior`,
-`loglikelihood`, `evaluate_importance_terms`, `cosmology_and_redshift_prior`,
-`compute_importance_weights`) so `ForwardDiff.Dual`-valued hyperparameters from HMC
-gradients flow through unchanged.
-"""
-const HyperParametersNT = NamedTuple{DEFAULT_PARAMETER_ORDER}
-
-"""
-    HyperParameters(; H0, Ωm, Ξ₀=1.0, Ξₙ=0.0, γ, κ, zpeak) -> HyperParameters
-
-Convenience keyword constructor returning a flat [`HyperParameters`](@ref) NamedTuple
-with `Float64` coercion.
-"""
-function HyperParameters(;
-        H0::Real,
-        Ωm::Real,
-        Ξ₀::Real = 1.0,
-        Ξₙ::Real = 0.0,
-        γ::Real,
-        κ::Real,
-        zpeak::Real
-)::HyperParameters
-    return (
-        H0 = Float64(H0),
-        Ωm = Float64(Ωm),
-        Ξ₀ = Float64(Ξ₀),
-        Ξₙ = Float64(Ξₙ),
-        γ = Float64(γ),
-        κ = Float64(κ),
-        zpeak = Float64(zpeak)
-    )
-end
-
-"""
-    HyperParameters(nt::NamedTuple) -> HyperParameters
-
-Build a [`HyperParameters`](@ref) NamedTuple (with `Float64` coercion) from any
-NamedTuple carrying at least `:H0, :Ωm, :γ, :κ, :zpeak`. `Ξ₀` /
-`Ξₙ` default to `1.0` / `0.0` when absent.
-"""
-function HyperParameters(nt::NamedTuple)::HyperParameters
-    return HyperParameters(;
-        H0 = nt.H0,
-        Ωm = nt.Ωm,
-        Ξ₀ = haskey(nt, :Ξ₀) ? nt.Ξ₀ : 1.0,
-        Ξₙ = haskey(nt, :Ξₙ) ? nt.Ξₙ : 0.0,
-        γ = nt.γ,
-        κ = nt.κ,
-        zpeak = nt.zpeak
-    )
-end
-
 abstract type ProposalSampleBundle end
 
 """
@@ -124,10 +40,10 @@ end
 In-memory importance-sampling context. See [`importance_sampling_problem`](@ref) and
 [`load_cache`](@ref). `fiducial_parameters` merges population scalars from HDF5
 `hyperparameters` and `redshift_prior_spec` ([`ProposalFiducialParameters`](@ref)), not the live
-[`HyperParameters`](@ref) state. `redshift_integral_fiducial` is carried for cache round-trip and
-may differ from [`fiducial_redshift_integral`](@ref) when the file’s optional
+live hyperparameter `NamedTuple` state. `redshift_integral_fiducial` is carried for cache
+round-trip and may differ from [`fiducial_redshift_integral`](@ref) when the file’s optional
 `redshift_integral_fiducial` attribute overrides the recomputed value; likelihood evaluation uses
-the integral implied by the live [`HyperParameters`](@ref), not this field.
+the integral implied by the live hyperparameters, not this field.
 
 `redshift_cache` groups the fixed grid, per-sample interpolation metadata, and cached
 hyperparameter-independent full-BNS intrinsic terms (mass, spins, tidal deformability);
@@ -200,10 +116,3 @@ function importance_sampling_problem(
         strategy
     )
 end
-
-"""
-    ImportanceCache
-
-Deprecated alias for [`ImportanceSamplingProblem`](@ref); use `ImportanceSamplingProblem` in new code.
-"""
-const ImportanceCache = ImportanceSamplingProblem

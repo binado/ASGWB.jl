@@ -1,8 +1,15 @@
 module RunInferenceCLI
 
 using ASGWB
-using ASGWB: load_cache, Detector, DEFAULT_PARAMETER_ORDER
-using ..InferenceImpl: build_turing_model
+using ASGWB:
+             load_cache,
+             Detector,
+             MadauDickinsonModifiedPropagation,
+             canonical_hyperparameters,
+             validate_hyperparameters,
+             validate_prior,
+             validate_subset
+using ..InferenceImpl: build_turing_model, condition_turing_model
 
 using Turing
 using AdvancedHMC
@@ -37,6 +44,8 @@ const PRIORS = (
     κ = Uniform(0.05, 10),
     zpeak = Uniform(0.05, 10)
 )
+
+const INFERENCE_MODEL = MadauDickinsonModifiedPropagation()
 
 """Resolve `path` relative to `base` if it is not absolute."""
 function resolve_path(path::AbstractString, base::AbstractString)
@@ -169,12 +178,27 @@ function resolve_adtype(name::AbstractString)
     end
 end
 
+function parse_sample_only(settings::Dict)
+    raw = get(settings, "sample_only", nothing)
+    raw === nothing && return nothing
+    raw isa Vector || throw(
+        ArgumentError("sample_only must be null, omitted, or an array of strings"),
+    )
+    all(x -> x isa AbstractString, raw) ||
+        throw(ArgumentError("sample_only must be an array of strings"))
+    return Tuple(Symbol(s) for s in raw)
+end
+
 function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = false)
     cache = resolve_path(settings["cache_path"]::String, settings_dir)
     detectors = [Detector(n) for n in settings["detectors"]]
-    sample_only = Tuple(Symbol(s) for s in settings["sample_only"])
+    sample_only = parse_sample_only(settings)
     seed = settings["seed"]::Int
-    init = (; (Symbol(k) => v for (k, v) in settings["init"])...)
+    init = canonical_hyperparameters(
+        INFERENCE_MODEL,
+        (; (Symbol(k) => v for (k, v) in settings["init"])...);
+        context = "init hyperparameters"
+    )
 
     sampler = settings["sampler"]
     n_samples = sampler["n_samples"]::Int
@@ -190,25 +214,23 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     output_prefix = get(settings, "output_prefix", "chains")::String
     mkpath(output_dir)
 
-    # Validate sample_only
-    isempty(sample_only) && throw(ArgumentError("sample_only must not be empty"))
-    length(unique(sample_only)) == length(sample_only) ||
-        throw(ArgumentError("sample_only must not repeat symbols"))
-    for s in sample_only
-        s in DEFAULT_PARAMETER_ORDER || throw(
-            ArgumentError("sample_only contains $(repr(s)); expected symbols from $(DEFAULT_PARAMETER_ORDER)"),
-        )
-    end
-
-    fixed_sites = (; (k => init[k] for k in DEFAULT_PARAMETER_ORDER if k ∉ sample_only)...)
-
     timestamp = format(now(), "yyyymmdd-HHMMSS")
-    params_suffix = join(sample_only, "-")
+    params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
     base = "$(output_prefix)-$(params_suffix)-seed$(seed)-$(timestamp)"
     output_jld2 = joinpath(output_dir, "$base.jld2")
 
     validate_init_against_priors(PRIORS, init)
     priors_turing = product_distribution(PRIORS)
+    validate_prior(INFERENCE_MODEL, priors_turing)
+    validate_hyperparameters(INFERENCE_MODEL, init; context = "init hyperparameters")
+    if sample_only !== nothing
+        isempty(sample_only) && throw(
+            ArgumentError(
+            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
+        ),
+        )
+        validate_subset(sample_only, INFERENCE_MODEL)
+    end
 
     # Cluster-friendly defaults: avoid BLAS oversubscription with MCMCThreads.
     BLAS.set_num_threads(1)
@@ -238,8 +260,19 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
 
     @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
     model = build_turing_model(
-        problem, priors_turing; track = true, observed_spectral_density = observed)
-    conditioned = model | fixed_sites
+        problem,
+        priors_turing;
+        model = INFERENCE_MODEL,
+        track = true,
+        observed_spectral_density = observed
+    )
+    conditioned = condition_turing_model(
+        model,
+        init,
+        priors_turing,
+        sample_only;
+        model = INFERENCE_MODEL
+    )
     nuts = Turing.NUTS(
         n_adapts,
         target_acceptance;

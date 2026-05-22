@@ -1,7 +1,8 @@
 using QuadGK
 using Test
 using ForwardDiff
-using CBCDistributions: CumulativeIntegral1D, cdf, hubble_constant_si, interpolate, normalizer
+using CBCDistributions: CumulativeIntegral1D, cdf, hubble_constant_si, interpolate,
+                        normalizer
 
 @testset "hubble_constant_si" begin
     H0 = 70.0

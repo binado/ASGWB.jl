@@ -3,6 +3,11 @@ using HDF5: delete_attribute
 using Distributions: Uniform, logpdf
 using Test
 using Base.Filesystem: cp
+using ASGWB
+
+if !@isdefined parity_cache_path
+    include(joinpath(@__DIR__, "parity_test_cache.jl"))
+end
 
 const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
 
@@ -25,14 +30,17 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
     d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
     scale = (d_l ./ d_gw) .^ 2
     raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
-    h = HyperParameters(;
-        H0 = fid.H0,
-        Ωm = fid.Ωm,
-        Ξ₀ = fid.Ξ₀,
-        Ξₙ = fid.Ξₙ,
-        γ = γ,
-        κ = κ,
-        zpeak = zp
+    h = canonical_hyperparameters(
+        MadauDickinsonModifiedPropagation(),
+        (;
+            H0 = fid.H0,
+            Ωm = fid.Ωm,
+            Ξ₀ = fid.Ξ₀,
+            Ξₙ = fid.Ξₙ,
+            γ = γ,
+            κ = κ,
+            zpeak = zp
+        )
     )
     redshift_prior = build_redshift_prior(h, spec)
     expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)
@@ -185,7 +193,7 @@ end
     expected_lp = reconstruct_proposal_log_prob(
         problem.proposal.samples,
         problem.redshift_prior_spec,
-        problem.fiducial_parameters,
+        problem.fiducial_parameters
     )
     @test problem.proposal.log_prob ≈ expected_lp rtol = 1e-6
     @test problem.proposal.intrinsic_vector ≈ Float64[1.4 1.2 0.1 0.0 0.0 100.0 100.0
@@ -200,7 +208,7 @@ end
           length(problem.observation.frequencies)
     @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
     @test problem.observation.in_band_mask == BitVector([true, true])
-    ev = evaluate_importance_terms(fiducial_hyperparameters(problem), problem)
+    ev = evaluate_model_terms(MadauDickinsonModifiedPropagation(), fiducial_hyperparameters(problem), problem)
     @test problem.observation.fiducial_spectral_density ≈ ev.spectral_density
     @test problem.observation.sgwb_scale_in_band ≈ problem.observation.sgwb_scale
     @test problem.observation.fiducial_spectral_density_in_band ≈
