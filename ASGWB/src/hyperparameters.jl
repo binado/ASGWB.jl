@@ -102,17 +102,19 @@ function validate_hyperparameters(
 end
 
 """
-    float_hyperparameters(model, Λ; context="hyperparameters") -> NamedTuple
+    canonical_hyperparameters(model, Λ; context="hyperparameters", eltype=Float64) -> NamedTuple
 
-Validate and convert a model hyperparameter tuple to `Float64` in model order.
+Validate a hyperparameter tuple against `model`, reorder it to the model's canonical
+hyperparameter order, and convert each value to `eltype`.
 """
-function float_hyperparameters(
+function canonical_hyperparameters(
         model::AbstractASGWBModel,
         Λ::NamedTuple;
-        context::AbstractString = "hyperparameters"
+        context::AbstractString = "hyperparameters",
+        eltype::Type = Float64
 )
     validate_hyperparameters(model, Λ; context = context)
-    return (; (k => Float64(Λ[k]) for k in hyperparameters(model))...)
+    return (; (k => eltype(Λ[k]) for k in hyperparameters(model))...)
 end
 
 """
@@ -166,45 +168,4 @@ function validate_sample_only!(
     )
     validate_subset!(sample_only, prior)
     return nothing
-end
-
-"""
-    coerce_hyperparameters(; H0, Ωm, Ξ₀=1.0, Ξₙ=0.0, γ, κ, zpeak) -> NamedTuple
-
-Legacy wrapper for [`float_hyperparameters`](@ref) on
-[`MadauDickinsonModifiedPropagation`](@ref).
-Inner likelihood paths accept any `NamedTuple` (including `ForwardDiff.Dual` fields during AD).
-"""
-function coerce_hyperparameters(;
-        H0::Real,
-        Ωm::Real,
-        Ξ₀::Real = 1.0,
-        Ξₙ::Real = 0.0,
-        γ::Real,
-        κ::Real,
-        zpeak::Real
-)
-    return float_hyperparameters(
-        MadauDickinsonModifiedPropagation(),
-        (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak);
-        context = "Madau-Dickinson modified-propagation hyperparameters"
-    )
-end
-
-"""
-    coerce_hyperparameters(nt::NamedTuple) -> NamedTuple
-
-Build a `Float64` hyperparameter `NamedTuple` from any tuple with at least
-`:H0, :Ωm, :γ, :κ, :zpeak`. `Ξ₀` / `Ξₙ` default to `1.0` / `0.0` when absent.
-"""
-function coerce_hyperparameters(nt::NamedTuple)
-    return coerce_hyperparameters(;
-        H0 = nt.H0,
-        Ωm = nt.Ωm,
-        Ξ₀ = haskey(nt, :Ξ₀) ? nt.Ξ₀ : 1.0,
-        Ξₙ = haskey(nt, :Ξₙ) ? nt.Ξₙ : 0.0,
-        γ = nt.γ,
-        κ = nt.κ,
-        zpeak = nt.zpeak
-    )
 end

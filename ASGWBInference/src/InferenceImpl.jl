@@ -6,7 +6,7 @@ using ASGWB:
              AbstractASGWBModel,
              MadauDickinsonModifiedPropagation,
              evaluate_model_terms,
-             float_hyperparameters,
+             canonical_hyperparameters,
              hyperparameters,
              validate_hyperparameters,
              validate_prior,

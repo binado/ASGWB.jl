@@ -16,7 +16,7 @@
 # %% [markdown]
 # # MCMC
 #
-# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with `coerce_hyperparameters` and the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
+# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 #
 # On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
 #
@@ -41,7 +41,8 @@ begin
                  load_cache,
                  evaluate_importance_terms,
                  Ωgw,
-                 coerce_hyperparameters,
+                 canonical_hyperparameters,
+                 MadauDickinsonModifiedPropagation,
                  hyperparameter_order,
                  validate_sample_only!,
                  Detector
@@ -130,7 +131,7 @@ begin
     validate_sample_only!(sample_only, priors_turing)
     order = hyperparameter_order(priors_turing)
     fixed_sites = (; (k => init[k] for k in order if k ∉ sample_only)...)
-    θ0 = coerce_hyperparameters(; init...)
+    θ0 = canonical_hyperparameters(MadauDickinsonModifiedPropagation(), init)
 end
 
 # %%

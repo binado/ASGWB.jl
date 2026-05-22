@@ -25,7 +25,7 @@ function hyperparameters_from_fiducial(
         ),
         )
     end
-    return float_hyperparameters(
+    return canonical_hyperparameters(
         MadauDickinsonModifiedPropagation(),
         (;
             H0 = fid.H0,

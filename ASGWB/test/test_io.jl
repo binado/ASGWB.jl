@@ -3,6 +3,11 @@ using HDF5: delete_attribute
 using Distributions: Uniform, logpdf
 using Test
 using Base.Filesystem: cp
+using ASGWB
+
+if !@isdefined parity_cache_path
+    include(joinpath(@__DIR__, "parity_test_cache.jl"))
+end
 
 const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
 
@@ -25,14 +30,17 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
     d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
     scale = (d_l ./ d_gw) .^ 2
     raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
-    h = coerce_hyperparameters(;
-        H0 = fid.H0,
-        Ωm = fid.Ωm,
-        Ξ₀ = fid.Ξ₀,
-        Ξₙ = fid.Ξₙ,
-        γ = γ,
-        κ = κ,
-        zpeak = zp
+    h = canonical_hyperparameters(
+        MadauDickinsonModifiedPropagation(),
+        (;
+            H0 = fid.H0,
+            Ωm = fid.Ωm,
+            Ξ₀ = fid.Ξ₀,
+            Ξₙ = fid.Ξₙ,
+            γ = γ,
+            κ = κ,
+            zpeak = zp
+        )
     )
     redshift_prior = build_redshift_prior(h, spec)
     expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)

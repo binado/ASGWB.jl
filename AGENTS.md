@@ -17,7 +17,7 @@ If `just` is unavailable, use the Julia commands in the `justfile`, for example 
 
 Target Julia version is 1.12. Formatting is controlled by `.JuliaFormatter.toml` with `style = "sciml"`; run `just fmt` before committing. Keep code type-stable where practical, especially in likelihood, redshift, and spectral-density paths.
 
-Use existing Unicode scientific identifiers, including `Ωm`, `Ξ₀`, `Ξₙ`, `γ`, `κ`, `Λ`, `χ₁`, and `χ₂`. Live inference hyperparameters are a flat `NamedTuple`; `coerce_hyperparameters` coerces to `Float64` at boundaries. Unconstrained HMC/Turing vector layout follows `keys(prior.dists)` on the `product_distribution` prior (`hyperparameter_order`). Test files follow `test_<area>.jl`, such as `test_redshift.jl`.
+Use existing Unicode scientific identifiers, including `Ωm`, `Ξ₀`, `Ξₙ`, `γ`, `κ`, `Λ`, `χ₁`, and `χ₂`. Live inference hyperparameters are a flat `NamedTuple`; `canonical_hyperparameters` validates, orders, and converts boundary inputs. Unconstrained HMC/Turing vector layout follows `keys(prior.dists)` on the `product_distribution` prior (`hyperparameter_order`). Test files follow `test_<area>.jl`, such as `test_redshift.jl`.
 
 ## Testing Guidelines
 

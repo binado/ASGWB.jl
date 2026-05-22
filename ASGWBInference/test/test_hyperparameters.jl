@@ -3,8 +3,7 @@ using Bijectors
 using Distributions: product_distribution, Uniform
 using ASGWB:
              MadauDickinsonModifiedPropagation,
-             coerce_hyperparameters,
-             float_hyperparameters,
+             canonical_hyperparameters,
              hyperparameters,
              validate_hyperparameters,
              validate_prior
@@ -35,14 +34,17 @@ using ASGWB:
     @test validate_prior(model, prior_a) === nothing
     @test_throws ArgumentError validate_prior(model, prior_b)
 
-    θ = coerce_hyperparameters(;
-        H0 = 70.0,
-        Ωm = 0.3,
-        Ξ₀ = 1.0,
-        Ξₙ = 0.0,
-        γ = 2.0,
-        κ = 3.0,
-        zpeak = 1.5
+    θ = canonical_hyperparameters(
+        model,
+        (;
+            H0 = 70.0,
+            Ωm = 0.3,
+            Ξ₀ = 1.0,
+            Ξₙ = 0.0,
+            γ = 2.0,
+            κ = 3.0,
+            zpeak = 1.5
+        )
     )
     θ_unordered = (;
         zpeak = θ.zpeak,
@@ -55,7 +57,8 @@ using ASGWB:
     )
 
     @test validate_hyperparameters(model, θ_unordered) === nothing
-    @test float_hyperparameters(model, θ_unordered) == θ
+    @test canonical_hyperparameters(model, θ_unordered) == θ
+    @test canonical_hyperparameters(model, θ_unordered; eltype = BigFloat).H0 isa BigFloat
     @test_throws ArgumentError validate_hyperparameters(model, (; H0 = 70.0, Ωm = 0.3))
     @test_throws ArgumentError validate_hyperparameters(model, merge(θ, (; extra = 1.0)))
     @test collect(Bijectors.link(prior_a, θ)) isa Vector

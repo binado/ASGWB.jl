@@ -129,7 +129,7 @@ function sample_with_advancedhmc(
 
     samples_constrained = map(samples_unconstrained) do z
         Λ, _ = constrained_parameters(ld, z)
-        float_hyperparameters(ld.model, Λ; context = "sampled hyperparameters")
+        canonical_hyperparameters(ld.model, Λ; context = "sampled hyperparameters")
     end
 
     return samples_constrained, stats, ld

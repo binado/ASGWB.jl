@@ -33,7 +33,7 @@ function condition_turing_model(
 )
     _require_supported_turing_model(model)
     validate_prior(model, prior)
-    ordered_theta0 = float_hyperparameters(model, theta0; context = "initial hyperparameters")
+    ordered_theta0 = canonical_hyperparameters(model, theta0; context = "initial hyperparameters")
     sample_only === nothing && return turing_model
     validate_sample_only!(sample_only, model)
     order = hyperparameters(model)
@@ -47,7 +47,7 @@ function _turing_initial_params(
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}},
         model::AbstractASGWBModel
 )
-    ordered_theta0 = float_hyperparameters(model, theta0; context = "initial hyperparameters")
+    ordered_theta0 = canonical_hyperparameters(model, theta0; context = "initial hyperparameters")
     sample_only === nothing && return InitFromParams(ordered_theta0)
     return InitFromParams((; (s => ordered_theta0[s] for s in sample_only)...))
 end

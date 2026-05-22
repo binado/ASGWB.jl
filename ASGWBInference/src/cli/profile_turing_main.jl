@@ -29,7 +29,8 @@ using ASGWB:
              logposterior,
              luminosity_distance,
              redshift,
-             coerce_hyperparameters,
+             canonical_hyperparameters,
+             MadauDickinsonModifiedPropagation,
              Detector
 using ..InferenceImpl:
                        ASGWBLogDensity,
@@ -107,14 +108,18 @@ function _priors_from_toml(priors_tbl::Dict)
 end
 
 function _theta0_from_toml(init_tbl::Dict)
-    return coerce_hyperparameters(;
-        H0 = Float64(init_tbl["H0"]),
-        Ωm = Float64(init_tbl["Omega_m"]),
-        Ξ₀ = Float64(init_tbl["chi0"]),
-        Ξₙ = Float64(init_tbl["chin"]),
-        γ = Float64(init_tbl["gamma"]),
-        κ = Float64(init_tbl["kappa"]),
-        zpeak = Float64(init_tbl["z_peak"])
+    return canonical_hyperparameters(
+        MadauDickinsonModifiedPropagation(),
+        (;
+            H0 = init_tbl["H0"],
+            Ωm = init_tbl["Omega_m"],
+            Ξ₀ = init_tbl["chi0"],
+            Ξₙ = init_tbl["chin"],
+            γ = init_tbl["gamma"],
+            κ = init_tbl["kappa"],
+            zpeak = init_tbl["z_peak"]
+        );
+        context = "initial hyperparameters"
     )
 end
 

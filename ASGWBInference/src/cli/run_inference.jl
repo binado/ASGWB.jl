@@ -5,7 +5,7 @@ using ASGWB:
              load_cache,
              Detector,
              MadauDickinsonModifiedPropagation,
-             float_hyperparameters,
+             canonical_hyperparameters,
              hyperparameters,
              validate_hyperparameters,
              validate_prior,
@@ -184,7 +184,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     detectors = [Detector(n) for n in settings["detectors"]]
     sample_only = Tuple(Symbol(s) for s in settings["sample_only"])
     seed = settings["seed"]::Int
-    init = float_hyperparameters(
+    init = canonical_hyperparameters(
         INFERENCE_MODEL,
         (; (Symbol(k) => v for (k, v) in settings["init"])...);
         context = "init hyperparameters"

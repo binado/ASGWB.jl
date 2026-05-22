@@ -1,13 +1,19 @@
 using Test
 using CBCDistributions
+using ASGWB
 
 @testset "sample interpolation helpers" begin
-    theta = coerce_hyperparameters(;
-        H0 = 67.0,
-        Ωm = 0.315,
-        γ = 2.7,
-        κ = 3.0,
-        zpeak = 2.5
+    theta = canonical_hyperparameters(
+        MadauDickinsonModifiedPropagation(),
+        (;
+            H0 = 67.0,
+            Ωm = 0.315,
+            Ξ₀ = 1.0,
+            Ξₙ = 0.0,
+            γ = 2.7,
+            κ = 3.0,
+            zpeak = 2.5
+        )
     )
     spec = RedshiftPriorSpec(MadauDickinson, 0.0, 2.0, 101, nothing)
     z_grid = redshift_grid(spec)
