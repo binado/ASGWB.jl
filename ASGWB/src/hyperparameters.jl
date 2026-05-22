@@ -15,17 +15,6 @@ function hyperparameters end
 
 hyperparameters(::MadauDickinsonModifiedPropagation) = (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 
-"""
-    hyperparameter_order(prior::ProductNamedTupleDistribution)
-
-Symbols and order used by `Bijectors.link` / HMC unconstrained vectors (`keys(prior.dists)`).
-Compatibility helper for prior order. Prefer [`hyperparameters`](@ref) on an
-[`AbstractASGWBModel`](@ref) when validating model state.
-"""
-hyperparameter_order(prior::ProductNamedTupleDistribution) = keys(prior.dists)
-
-hyperparameter_order(model::AbstractASGWBModel) = hyperparameters(model)
-
 function _check_unique_hyperparameters(model::AbstractASGWBModel)
     order = hyperparameters(model)
     isempty(order) && throw(
@@ -170,6 +159,3 @@ function validate_sample_only(
     validate_subset(sample_only, prior)
     return nothing
 end
-
-"""Compatibility alias for [`validate_sample_only`](@ref)."""
-validate_sample_only!(args...; kwargs...) = validate_sample_only(args...; kwargs...)

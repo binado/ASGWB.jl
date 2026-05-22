@@ -116,10 +116,3 @@ function importance_sampling_problem(
         strategy
     )
 end
-
-"""
-    ImportanceCache
-
-Deprecated alias for [`ImportanceSamplingProblem`](@ref); use `ImportanceSamplingProblem` in new code.
-"""
-const ImportanceCache = ImportanceSamplingProblem

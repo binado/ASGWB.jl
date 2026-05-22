@@ -57,7 +57,6 @@ using Distributions: product_distribution, Normal, ProductNamedTupleDistribution
         # Nothing is allowed (all sampled)
         @test validate_sample_only(nothing, model) === nothing
         @test validate_sample_only(nothing, prior) === nothing
-        @test validate_sample_only!(nothing, model) === nothing
 
         # Valid tuple
         @test validate_sample_only((:H0, :Ωm), model) === nothing
