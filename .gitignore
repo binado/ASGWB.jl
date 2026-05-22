@@ -42,6 +42,8 @@ JuliaLocalPreferences.toml
 .cursor/
 
 # Local analysis / inference outputs
+chains/
+figures/
 *.png
 *.jls
 *.nc
