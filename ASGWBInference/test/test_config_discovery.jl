@@ -1,4 +1,6 @@
+using Test
 using ASGWBInference: RunInferenceCLI
+using ASGWBInference
 
 @testset "inference config discovery" begin
     repo = normpath(joinpath(@__DIR__, "..", ".."))
@@ -42,6 +44,21 @@ using ASGWBInference: RunInferenceCLI
             end
         end
     end
+end
+
+@testset "sample_only config parsing" begin
+    @test RunInferenceCLI.parse_sample_only(Dict{String, Any}()) === nothing
+    @test RunInferenceCLI.parse_sample_only(Dict{String, Any}("sample_only" => nothing)) ===
+          nothing
+    @test RunInferenceCLI.parse_sample_only(Dict{String, Any}("sample_only" => ["H0"])) ==
+          (:H0,)
+    @test RunInferenceCLI.parse_sample_only(
+        Dict{String, Any}("sample_only" => ["H0", "Omega_m"])) == (:H0, :Omega_m)
+
+    @test_throws ArgumentError RunInferenceCLI.parse_sample_only(
+        Dict{String, Any}("sample_only" => "H0"))
+    @test_throws ArgumentError RunInferenceCLI.parse_sample_only(
+        Dict{String, Any}("sample_only" => [1]))
 end
 
 @testset "julia_main rejects ARGS" begin

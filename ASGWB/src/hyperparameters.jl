@@ -38,13 +38,13 @@ function _check_unique_hyperparameters(model::AbstractASGWBModel)
 end
 
 """
-    validate_subset!(subset::Union{Tuple{Vararg{Symbol}}, NamedTuple}, order) -> subset
+    validate_subset(subset::Union{Tuple{Vararg{Symbol}}, NamedTuple}, order) -> subset
 
 Validate that `subset` (either a tuple of symbols or a NamedTuple) contains only
 unique symbols that are a subset of `order`. Allows empty subsets. Throws `ArgumentError`
 on duplicates or unknown symbols.
 """
-function validate_subset!(
+function validate_subset(
         subset::Tuple{Vararg{Symbol}},
         order::Union{Tuple{Vararg{Symbol}}, Base.KeySet, AbstractVector{Symbol}}
 )
@@ -60,27 +60,30 @@ function validate_subset!(
     return subset
 end
 
-function validate_subset!(
+function validate_subset(
         subset::NamedTuple,
         order::Union{Tuple{Vararg{Symbol}}, Base.KeySet, AbstractVector{Symbol}}
 )
-    validate_subset!(keys(subset), order)
+    validate_subset(keys(subset), order)
     return subset
 end
 
 """
-    validate_subset!(subset, model::AbstractASGWBModel) -> subset
+    validate_subset(subset, model::AbstractASGWBModel) -> subset
 """
-function validate_subset!(subset, model::AbstractASGWBModel)
-    validate_subset!(subset, _check_unique_hyperparameters(model))
+function validate_subset(subset, model::AbstractASGWBModel)
+    validate_subset(subset, _check_unique_hyperparameters(model))
 end
 
 """
-    validate_subset!(subset, prior::ProductNamedTupleDistribution) -> subset
+    validate_subset(subset, prior::ProductNamedTupleDistribution) -> subset
 """
-function validate_subset!(subset, prior::ProductNamedTupleDistribution)
-    validate_subset!(subset, keys(prior.dists))
+function validate_subset(subset, prior::ProductNamedTupleDistribution)
+    validate_subset(subset, keys(prior.dists))
 end
+
+"""Compatibility alias for [`validate_subset`](@ref)."""
+validate_subset!(args...; kwargs...) = validate_subset(args...; kwargs...)
 
 """
     validate_hyperparameters(model, Λ; context="hyperparameters")
@@ -92,7 +95,7 @@ function validate_hyperparameters(
         Λ::NamedTuple;
         context::AbstractString = "hyperparameters"
 )
-    validate_subset!(Λ, model)
+    validate_subset(Λ, model)
     order = hyperparameters(model)
     if length(keys(Λ)) != length(order)
         missing = Tuple(s for s in order if s ∉ keys(Λ))
@@ -137,12 +140,12 @@ function validate_prior(
 end
 
 """
-    validate_sample_only!(sample_only, model::AbstractASGWBModel)
+    validate_sample_only(sample_only, model::AbstractASGWBModel)
 
 Validate `sample_only` against [`hyperparameters`](@ref). Pass `nothing` to sample all
 hyperparameters. Throws `ArgumentError` on empty, duplicate, or unknown symbols.
 """
-function validate_sample_only!(
+function validate_sample_only(
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}},
         model::AbstractASGWBModel
 )
@@ -152,11 +155,11 @@ function validate_sample_only!(
         "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
     ),
     )
-    validate_subset!(sample_only, model)
+    validate_subset(sample_only, model)
     return nothing
 end
 
-function validate_sample_only!(
+function validate_sample_only(
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}},
         prior::ProductNamedTupleDistribution
 )
@@ -166,6 +169,9 @@ function validate_sample_only!(
         "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
     ),
     )
-    validate_subset!(sample_only, prior)
+    validate_subset(sample_only, prior)
     return nothing
 end
+
+"""Compatibility alias for [`validate_sample_only`](@ref)."""
+validate_sample_only!(args...; kwargs...) = validate_sample_only(args...; kwargs...)

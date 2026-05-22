@@ -17,6 +17,7 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
         model = build_turing_model(cache, priors; track = false)
         @test Turing.logjoint(model, theta0) ≈ logposterior(theta0, cache, priors) rtol = 1e-6
+        @test condition_turing_model(model, theta0, priors, nothing) === model
         @test_throws ArgumentError condition_turing_model(model, theta0, priors, ())
         @test_throws ArgumentError condition_turing_model(model, theta0, priors, (:unknown,))
 
@@ -39,6 +40,8 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
         @test Turing.logjoint(sampled_model, theta0) ≈ Turing.logjoint(model, theta0) rtol = 1e-6
         @test size(chain, 1) == 3
+        @test sort(collect(Symbol.(Turing.MCMCChains.names(chain, :parameters)))) ==
+              sort(collect(keys(theta0)))
 
         chain_h0,
         cond_h0 = sample_with_turing(

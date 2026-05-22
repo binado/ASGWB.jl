@@ -35,7 +35,7 @@ function condition_turing_model(
     validate_prior(model, prior)
     ordered_theta0 = canonical_hyperparameters(model, theta0; context = "initial hyperparameters")
     sample_only === nothing && return turing_model
-    validate_sample_only!(sample_only, model)
+    validate_sample_only(sample_only, model)
     order = hyperparameters(model)
     fixed = Tuple(s for s in order if s ∉ sample_only)
     isempty(fixed) && return turing_model
@@ -155,7 +155,7 @@ function sample_with_turing(
     _require_supported_turing_model(model)
     validate_prior(model, prior)
     validate_hyperparameters(model, theta0; context = "initial hyperparameters")
-    validate_sample_only!(sample_only, model)
+    validate_sample_only(sample_only, model)
     turing_model = build_turing_model(
         problem,
         prior;

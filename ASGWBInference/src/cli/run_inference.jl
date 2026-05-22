@@ -6,11 +6,10 @@ using ASGWB:
              Detector,
              MadauDickinsonModifiedPropagation,
              canonical_hyperparameters,
-             hyperparameters,
              validate_hyperparameters,
              validate_prior,
-             validate_sample_only!
-using ..InferenceImpl: build_turing_model
+             validate_sample_only
+using ..InferenceImpl: build_turing_model, condition_turing_model
 
 using Turing
 using AdvancedHMC
@@ -179,10 +178,21 @@ function resolve_adtype(name::AbstractString)
     end
 end
 
+function parse_sample_only(settings::Dict)
+    raw = get(settings, "sample_only", nothing)
+    raw === nothing && return nothing
+    raw isa Vector || throw(
+        ArgumentError("sample_only must be null, omitted, or an array of strings"),
+    )
+    all(x -> x isa AbstractString, raw) ||
+        throw(ArgumentError("sample_only must be an array of strings"))
+    return Tuple(Symbol(s) for s in raw)
+end
+
 function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = false)
     cache = resolve_path(settings["cache_path"]::String, settings_dir)
     detectors = [Detector(n) for n in settings["detectors"]]
-    sample_only = Tuple(Symbol(s) for s in settings["sample_only"])
+    sample_only = parse_sample_only(settings)
     seed = settings["seed"]::Int
     init = canonical_hyperparameters(
         INFERENCE_MODEL,
@@ -205,7 +215,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     mkpath(output_dir)
 
     timestamp = format(now(), "yyyymmdd-HHMMSS")
-    params_suffix = join(sample_only, "-")
+    params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
     base = "$(output_prefix)-$(params_suffix)-seed$(seed)-$(timestamp)"
     output_jld2 = joinpath(output_dir, "$base.jld2")
 
@@ -213,9 +223,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     priors_turing = product_distribution(PRIORS)
     validate_prior(INFERENCE_MODEL, priors_turing)
     validate_hyperparameters(INFERENCE_MODEL, init; context = "init hyperparameters")
-    validate_sample_only!(sample_only, INFERENCE_MODEL)
-    order = hyperparameters(INFERENCE_MODEL)
-    fixed_sites = (; (k => init[k] for k in order if k ∉ sample_only)...)
+    validate_sample_only(sample_only, INFERENCE_MODEL)
 
     # Cluster-friendly defaults: avoid BLAS oversubscription with MCMCThreads.
     BLAS.set_num_threads(1)
@@ -251,7 +259,13 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
         track = true,
         observed_spectral_density = observed
     )
-    conditioned = model | fixed_sites
+    conditioned = condition_turing_model(
+        model,
+        init,
+        priors_turing,
+        sample_only;
+        model = INFERENCE_MODEL
+    )
     nuts = Turing.NUTS(
         n_adapts,
         target_acceptance;

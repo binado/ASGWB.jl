@@ -49,6 +49,19 @@ function evaluate_model_terms(
 end
 
 """
+    evaluate_model_terms(model, Λ, problem) -> NamedTuple
+
+Evaluate deterministic likelihood terms using the problem's redshift grid.
+"""
+function evaluate_model_terms(
+        model::AbstractASGWBModel,
+        Λ::NamedTuple,
+        problem::ImportanceSamplingProblem
+)
+    return evaluate_model_terms(model, Λ, problem, problem.redshift_cache.redshift_grid)
+end
+
+"""
     evaluate_importance_terms(Λ, problem) -> NamedTuple
 
 Thin composition of [`compute_importance_weights`](@ref), [`merger_rate_per_sec`](@ref),
@@ -58,12 +71,7 @@ diagnostics and the AdvancedHMC likelihood (`dgw_theta_sq`, `target_log_prob`, `
 `spectral_density_in_band`).
 """
 function evaluate_importance_terms(Λ::NamedTuple, problem::ImportanceSamplingProblem)
-    return evaluate_model_terms(
-        MadauDickinsonModifiedPropagation(),
-        Λ,
-        problem,
-        problem.redshift_cache.redshift_grid
-    )
+    return evaluate_model_terms(MadauDickinsonModifiedPropagation(), Λ, problem)
 end
 
 function loglikelihood(
@@ -72,12 +80,7 @@ function loglikelihood(
         model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
-    evaluation = evaluate_model_terms(
-        model,
-        Λ,
-        problem,
-        problem.redshift_cache.redshift_grid
-    )
+    evaluation = evaluate_model_terms(model, Λ, problem)
     observed_in_band = observed_spectral_density[problem.observation.in_band_mask]
     residual = observed_in_band .- evaluation.spectral_density_in_band
     return -0.5 * sum(

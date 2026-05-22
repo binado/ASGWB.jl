@@ -36,15 +36,16 @@ begin
     # Ensure dependencies are installed for fresh clones or clean depots
     Pkg.instantiate()
     using ASGWB
-    using ASGWBInference: build_turing_model
+    using ASGWBInference: build_turing_model, condition_turing_model
     using ASGWB:
                  load_cache,
                  evaluate_importance_terms,
                  Ωgw,
                  canonical_hyperparameters,
                  MadauDickinsonModifiedPropagation,
-                 hyperparameter_order,
-                 validate_sample_only!,
+                 hyperparameters,
+                 validate_prior,
+                 validate_sample_only,
                  Detector
     using Turing
     using AdvancedHMC
@@ -94,6 +95,7 @@ begin
 
     # --- edit everything below (same role as the JSON used by `scripts/run_turing.jl`) ---
 
+    inference_model = MadauDickinsonModifiedPropagation()
     cache = "analysis_numpyro_julia_cache.h5"
     detectors = [Detector("S1"), Detector("R1")]
     sample_only = (:H0,)
@@ -114,7 +116,7 @@ begin
 
     seed = 1
     observed_spectral_density_csv = nothing
-    output_suffix = join(map(string, sample_only), "-")
+    output_suffix = sample_only === nothing ? "all" : join(map(string, sample_only), "-")
     output_jld2 = "chains-$output_suffix.jld2"
     chain_input_jld2 = nothing
 
@@ -128,10 +130,13 @@ begin
         κ = priors.κ,
         zpeak = priors.zpeak
     ))
-    validate_sample_only!(sample_only, priors_turing)
-    order = hyperparameter_order(priors_turing)
-    fixed_sites = (; (k => init[k] for k in order if k ∉ sample_only)...)
-    θ0 = canonical_hyperparameters(MadauDickinsonModifiedPropagation(), init)
+    validate_prior(inference_model, priors_turing)
+    validate_sample_only(sample_only, inference_model)
+    order = hyperparameters(inference_model)
+    fixed_sites = sample_only === nothing ?
+                  NamedTuple() :
+                  (; (k => init[k] for k in order if k ∉ sample_only)...)
+    θ0 = canonical_hyperparameters(inference_model, init)
 end
 
 # %%
@@ -175,7 +180,7 @@ begin
     else
         Tuple(sample_only)
     end
-    #validate_sample_only(sample_only_tup)
+    validate_sample_only(sample_only_tup, inference_model)
     sam = sampler
     nothing
 end
@@ -220,9 +225,19 @@ begin
     else
         @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
         model = build_turing_model(
-            problem, priors_turing; track = true, observed_spectral_density = observed
+            problem,
+            priors_turing;
+            model = inference_model,
+            track = true,
+            observed_spectral_density = observed
         )
-        conditioned = model | fixed_sites
+        conditioned = condition_turing_model(
+            model,
+            θ0,
+            priors_turing,
+            sample_only_tup;
+            model = inference_model
+        )
         nuts = Turing.NUTS(
             sam.n_adapts,
             sam.target_acceptance;

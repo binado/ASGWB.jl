@@ -54,6 +54,11 @@ end
     model_evaluation = evaluate_model_terms(
         MadauDickinsonModifiedPropagation(),
         theta,
+        cache
+    )
+    model_evaluation_with_grid = evaluate_model_terms(
+        MadauDickinsonModifiedPropagation(),
+        theta,
         cache,
         cache.redshift_cache.redshift_grid
     )
@@ -72,6 +77,7 @@ end
     @test model_evaluation.spectral_density_in_band ≈ evaluation.spectral_density_in_band
     @test model_evaluation.expected_number_of_sources ≈
           evaluation.expected_number_of_sources
+    @test model_evaluation_with_grid.spectral_density ≈ model_evaluation.spectral_density
 
     cosmology_cache,
     redshift_prior = cosmology_and_redshift_prior(

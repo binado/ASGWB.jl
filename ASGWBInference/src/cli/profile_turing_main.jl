@@ -31,6 +31,7 @@ using ASGWB:
              redshift,
              canonical_hyperparameters,
              MadauDickinsonModifiedPropagation,
+             validate_prior,
              Detector
 using ..InferenceImpl:
                        ASGWBLogDensity,
@@ -48,6 +49,8 @@ using Serialization
 using Statistics: mean
 using TOML
 using Turing: DynamicPPL
+
+const INFERENCE_MODEL = MadauDickinsonModifiedPropagation()
 
 # ---------------------------------------------------------------------------
 # TOML config helpers
@@ -109,7 +112,7 @@ end
 
 function _theta0_from_toml(init_tbl::Dict)
     return canonical_hyperparameters(
-        MadauDickinsonModifiedPropagation(),
+        INFERENCE_MODEL,
         (;
             H0 = init_tbl["H0"],
             Ωm = init_tbl["Omega_m"],
@@ -252,12 +255,19 @@ function _run(;
     # ------------------------------------------------------------------
 
     # Native (ASGWBLogDensity) path — pure Julia, no DynamicPPL
-    ld = ASGWBLogDensity(problem, priors)
+    validate_prior(INFERENCE_MODEL, priors)
+    ld = ASGWBLogDensity(problem, priors; model = INFERENCE_MODEL)
     z0 = unconstrained_initial_point(ld, θ0)
     ad_ld = ad_logdensity(ld)
 
     # Turing / DynamicPPL path
-    model = build_turing_model(problem, priors; track = false, observed_spectral_density = observed)
+    model = build_turing_model(
+        problem,
+        priors;
+        model = INFERENCE_MODEL,
+        track = false,
+        observed_spectral_density = observed
+    )
     lf, z0_turing = _build_turing_logdensity(model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)
 
