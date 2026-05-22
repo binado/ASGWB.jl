@@ -24,19 +24,13 @@ begin
 
     using CairoMakie
     using JLD2
-    using MCMCChains
-    using MCMCDiagnosticTools
     using PairPlots
-    using Plots
-    using StatsPlots
     using Statistics
-    using DataFrames
     using Turing
+    using FlexiChains
+    using FlexiChains: Extra, FlexiChain, Parameter, VNChain
     using ASGWB
 end
-
-# %%
-StatsPlots.default(fmt = :svg, dpi = 300)
 
 # %%
 output_dir = joinpath(@__DIR__, "..", get(ENV, "ASGWB_FIGURES_DIR", "output-test-figures"))
@@ -51,15 +45,6 @@ function _makie_save_kwargs(dpi::Int)
     return (; px_per_unit = scale, pt_per_unit = MAKIE_DEFAULT_PT_PER_UNIT * scale)
 end
 
-function _save_plot_object!(p::Plots.Plot, path::AbstractString; dpi::Int)
-    endswith(lowercase(path), ".png") && (p[:dpi] = dpi)
-    return savefig(p, path)
-end
-
-function _save_plot_object!(fig::Figure, path::AbstractString; dpi::Int)
-    return save(path, fig; _makie_save_kwargs(dpi)...)
-end
-
 function _save_plot_object!(obj, path::AbstractString; dpi::Int)
     return save(path, obj; _makie_save_kwargs(dpi)...)
 end
@@ -68,7 +53,7 @@ function save_figure(
         fig,
         name::AbstractString;
         output_dir::Union{Nothing, AbstractString} = output_dir,
-        dpi::Int = FIGURE_DPI,
+        dpi::Int = FIGURE_DPI
 )
     output_dir === nothing && return fig
     mkpath(output_dir)
@@ -108,10 +93,12 @@ end
 # %%
 begin
     chain = _load_chain(chain_path)
+    chain isa FlexiChain ||
+        throw(ArgumentError("expected FlexiChains.FlexiChain, got $(typeof(chain))"))
 end
 
 # %%
-chain_params = names(chain, :parameters)
+chain_params = FlexiChains.parameters(chain)
 
 # %% [markdown]
 # ## Data
@@ -123,14 +110,14 @@ chain_params
 # ## Diagnostics
 
 # %%
-describe(chain)
+summarystats(chain)
 
 # %% [markdown]
 # ## Trace and autocorrelation plots
 
 # %%
 begin
-    fig = traceplot(chain)
+    fig = FlexiChains.mtraceplot(chain)
     save_figure(fig, "traceplot")
     fig
 end
@@ -139,24 +126,23 @@ end
 begin
     n_draws = size(chain, 1)
     autocor_maxlag = min(100, max(1, n_draws - 1))
-    fig = autocorplot(chain; maxlag = autocor_maxlag)
+    fig = FlexiChains.mautocorplot(chain; lags = 1:autocor_maxlag)
     save_figure(fig, "autocorplot")
     fig
 end
 
 # %%
 begin
-    fig = meanplot(chain)
+    fig = FlexiChains.mmeanplot(chain)
     save_figure(fig, "meanplot")
     fig
 end
 
 # %%
-function _ensure_internal_array(chain::Chains, name::Symbol)
-    name in names(chain, :internals) || return nothing
-    vals = Array(chain[:, name, :])
-    ndims(vals) == 2 && return vals
-    return reshape(vals, size(vals, 1), size(vals, 3))
+function _ensure_internal_array(chain::FlexiChain, name::Symbol)
+    key = Extra(name)
+    key in keys(chain) || return nothing
+    return Array(chain[key])
 end
 
 function _moving_average(y::AbstractVector, window::Int)
@@ -205,9 +191,9 @@ function _plot_traces!(ax, A, sym::Symbol; colors, smooth_window::Int, draw_stri
 
         color = colors[mod1(ch, length(colors))]
         sym == :step_size || Makie.lines!(ax, x[1:stride:end], y[1:stride:end];
-            color = RGBA(color, 0.25), linewidth = 0.8)
+            color = Makie.RGBAf(color, 0.25), linewidth = 0.8)
         Makie.lines!(ax, x, _moving_average(y, smooth_window);
-            color = RGBA(color, 1.0), linewidth = 2, label = "chain $(ch)")
+            color = Makie.RGBAf(color, 1.0), linewidth = 2, label = "chain $(ch)")
     end
 
     size(A, 2) > 1 && axislegend(ax; position = :rb, framevisible = false)
@@ -223,7 +209,7 @@ function _plot_traces!(ax, A, sym::Symbol; colors, smooth_window::Int, draw_stri
 end
 
 function plot_sampler_diagnostics(
-        chain::Chains;
+        chain::FlexiChain;
         stats_syms = [:step_size, :acceptance_rate, :tree_depth, :numerical_error],
         figsize = (1000, 800), smooth_window::Int = 25, draw_stride::Int = 5)
     cols = 2
@@ -253,9 +239,15 @@ end
 
 # %%
 begin
-    fig = energyplot(chain)
-    save_figure(fig, "energyplot")
-    fig
+    energy_key = Extra(:hamiltonian_energy)
+    if energy_key in keys(chain)
+        fig = FlexiChains.mtraceplot(chain, energy_key)
+        save_figure(fig, "energyplot")
+        fig
+    else
+        @info "skipping energyplot: $(energy_key) not present in chain"
+        nothing
+    end
 end
 
 # %% [markdown]
@@ -266,7 +258,7 @@ begin
     fig = if length(chain_params) >= 2
         pairplot(chain)
     else
-        StatsPlots.density(chain)
+        Makie.density(chain)
     end
     save_figure(fig, length(chain_params) >= 2 ? "pairplot" : "posterior_density")
     fig
