@@ -42,17 +42,26 @@ StatsPlots.default(fmt = :svg, dpi = 300)
 const output_dir = nothing  # e.g. joinpath(@__DIR__, "figures")
 const FIGURE_DPI = 300
 
+# Makie figure sizes are CSS pixels; 1 in = 96 CSS px (see Makie docs).
+const MAKIE_CSS_PX_PER_INCH = 96
+const MAKIE_DEFAULT_PT_PER_UNIT = 0.75
+
+function _makie_save_kwargs(dpi::Int)
+    scale = dpi / MAKIE_CSS_PX_PER_INCH
+    return (; px_per_unit = scale, pt_per_unit = MAKIE_DEFAULT_PT_PER_UNIT * scale)
+end
+
 function _save_plot_object!(p::Plots.Plot, path::AbstractString; dpi::Int)
     endswith(lowercase(path), ".png") && (p[:dpi] = dpi)
     return savefig(p, path)
 end
 
 function _save_plot_object!(fig::Figure, path::AbstractString; dpi::Int)
-    return save(path, fig; dpi = dpi)
+    return save(path, fig; _makie_save_kwargs(dpi)...)
 end
 
 function _save_plot_object!(obj, path::AbstractString; dpi::Int)
-    return save(path, obj; dpi = dpi)
+    return save(path, obj; _makie_save_kwargs(dpi)...)
 end
 
 function save_figure(
