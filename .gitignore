@@ -45,8 +45,9 @@ JuliaLocalPreferences.toml
 *.png
 *.jls
 *.nc
-analysis_numpyro_julia_cache.h5
-data.h5
+*.hdf5
+*.h5
+*.jld2
 log.log
 logs/
 output/
