@@ -15,7 +15,6 @@ using Distributions: product_distribution, Normal, ProductNamedTupleDistribution
         @test validate_subset((:H0, :Ωm), model) === (:H0, :Ωm)
         @test validate_subset((:H0, :Ωm), prior) === (:H0, :Ωm)
         @test validate_subset((:H0, :Ωm), expected_order) === (:H0, :Ωm)
-        @test validate_subset!((:H0, :Ωm), model) === (:H0, :Ωm)
 
         # Empty subset is allowed in validate_subset
         @test validate_subset((), model) === ()

@@ -82,8 +82,6 @@ function validate_subset(subset, prior::ProductNamedTupleDistribution)
     validate_subset(subset, keys(prior.dists))
 end
 
-"""Compatibility alias for [`validate_subset`](@ref)."""
-validate_subset!(args...; kwargs...) = validate_subset(args...; kwargs...)
 
 """
     validate_hyperparameters(model, Λ; context="hyperparameters")
