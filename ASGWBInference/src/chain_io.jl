@@ -1,21 +1,11 @@
 module ChainIO
 
 using JLD2: jldsave
-using MCMCChains: Chains, setinfo
+using FlexiChains: VNChain
 
-"""
-    slim_chain(chain)
-
-Return a portable analysis artifact by dropping Turing resume state from
-`chain.info`. Parameters and sampler internals remain in the chain value array.
-"""
-function slim_chain(chain::Chains)
-    return setinfo(chain, NamedTuple())
-end
-
-function atomic_save_chain(path::AbstractString, chain::Chains)
+function atomic_save_chain(path::AbstractString, chain::VNChain)
     tmp = path * ".tmp"
-    jldsave(tmp; chain = slim_chain(chain))
+    jldsave(tmp; chain)
     mv(tmp, path; force = true)
     return nothing
 end

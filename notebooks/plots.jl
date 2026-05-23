@@ -24,36 +24,77 @@ begin
 
     using CairoMakie
     using JLD2
-    using MCMCChains
-    using MCMCDiagnosticTools
     using PairPlots
-    using StatsPlots
     using Statistics
-    using DataFrames
     using Turing
+    using FlexiChains
+    using FlexiChains: Extra, FlexiChain
     using ASGWB
 end
 
 # %%
-StatsPlots.default(fmt = :svg, dpi = 300)
+output_dir = joinpath(@__DIR__, "..", get(ENV, "ASGWB_FIGURES_DIR", "output-test-figures"))
+const FIGURE_DPI = 300
+
+# Makie figure sizes are CSS pixels; 1 in = 96 CSS px (see Makie docs).
+const MAKIE_CSS_PX_PER_INCH = 96
+const MAKIE_DEFAULT_PT_PER_UNIT = 0.75
+
+function _makie_save_kwargs(dpi::Int)
+    scale = dpi / MAKIE_CSS_PX_PER_INCH
+    return (; px_per_unit = scale, pt_per_unit = MAKIE_DEFAULT_PT_PER_UNIT * scale)
+end
+
+function _save_plot_object!(obj, path::AbstractString; dpi::Int)
+    return save(path, obj; _makie_save_kwargs(dpi)...)
+end
+
+function save_figure(
+        fig,
+        name::AbstractString;
+        output_dir::Union{Nothing, AbstractString} = output_dir,
+        dpi::Int = FIGURE_DPI
+)
+    output_dir === nothing && return fig
+    mkpath(output_dir)
+    stem = joinpath(output_dir, name)
+    try
+        _save_plot_object!(fig, stem * ".pdf"; dpi)
+    catch err
+        @warn "PDF export failed; saving PNG instead" name exception = err
+        _save_plot_object!(fig, stem * ".png"; dpi)
+    end
+    return fig
+end
 
 # %% [markdown]
 # ## Loading chains
 
 # %%
-filepath = "output/chains-H0-seed13-20260508-183716.jld2"
+filepath = get(ENV, "ASGWB_CHAIN_FILE", "chains/chains-H0-seed13-20260508-183716-slim-flexi.jld2")
 
 chain_path = (realpath ∘ joinpath)(@__DIR__, "..", filepath)
 
 # %%
-begin
-    isfile(chain_path) ||
-        throw(ArgumentError("JLD2 file not found: $(repr(chain_path))"))
-    chain = load(chain_path)["chain"]
+function _load_chain(path::AbstractString)
+    isfile(path) || throw(ArgumentError("JLD2 file not found: $(repr(path))"))
+    data = load(path)
+    if haskey(data, "chain")
+        return data["chain"]
+    elseif haskey(data, "snapshot")
+        return data["snapshot"]
+    else
+        throw(ArgumentError(
+            "JLD2 file contains neither 'chain' nor 'snapshot' key: $(repr(path))",
+        ))
+    end
 end
 
 # %%
-chain_params = names(chain, :parameters)
+chain = _load_chain(chain_path)
+
+# %%
+chain_params = FlexiChains.parameters(chain)
 
 # %% [markdown]
 # ## Data
@@ -65,26 +106,39 @@ chain_params
 # ## Diagnostics
 
 # %%
-describe(chain)
+summarystats(chain)
 
 # %% [markdown]
 # ## Trace and autocorrelation plots
 
 # %%
-traceplot(chain)
+begin
+    fig = FlexiChains.mtraceplot(chain)
+    save_figure(fig, "traceplot")
+    fig
+end
 
 # %%
-autocorplot(chain; maxlag = 100)
+begin
+    n_draws = size(chain, 1)
+    autocor_maxlag = min(100, max(1, n_draws - 1))
+    fig = FlexiChains.mautocorplot(chain; lags = 1:autocor_maxlag)
+    save_figure(fig, "autocorplot")
+    fig
+end
 
 # %%
-meanplot(chain)
+begin
+    fig = FlexiChains.mmeanplot(chain)
+    save_figure(fig, "meanplot")
+    fig
+end
 
 # %%
-function _ensure_internal_array(chain::Chains, name::Symbol)
-    name in names(chain, :internals) || return nothing
-    vals = Array(chain[:, name, :])
-    ndims(vals) == 2 && return vals
-    return reshape(vals, size(vals, 1), size(vals, 3))
+function _ensure_internal_array(chain::FlexiChain, name::Symbol)
+    key = Extra(name)
+    key in keys(chain) || return nothing
+    return Array(chain[key])
 end
 
 function _moving_average(y::AbstractVector, window::Int)
@@ -133,9 +187,9 @@ function _plot_traces!(ax, A, sym::Symbol; colors, smooth_window::Int, draw_stri
 
         color = colors[mod1(ch, length(colors))]
         sym == :step_size || Makie.lines!(ax, x[1:stride:end], y[1:stride:end];
-            color = RGBA(color, 0.25), linewidth = 0.8)
+            color = Makie.RGBAf(color, 0.25), linewidth = 0.8)
         Makie.lines!(ax, x, _moving_average(y, smooth_window);
-            color = RGBA(color, 1.0), linewidth = 2, label = "chain $(ch)")
+            color = Makie.RGBAf(color, 1.0), linewidth = 2, label = "chain $(ch)")
     end
 
     size(A, 2) > 1 && axislegend(ax; position = :rb, framevisible = false)
@@ -151,7 +205,7 @@ function _plot_traces!(ax, A, sym::Symbol; colors, smooth_window::Int, draw_stri
 end
 
 function plot_sampler_diagnostics(
-        chain::Chains;
+        chain::FlexiChain;
         stats_syms = [:step_size, :acceptance_rate, :tree_depth, :numerical_error],
         figsize = (1000, 800), smooth_window::Int = 25, draw_stride::Int = 5)
     cols = 2
@@ -173,20 +227,35 @@ function plot_sampler_diagnostics(
     return fig
 end
 
-plot_sampler_diagnostics(chain)
-
+begin
+    fig = plot_sampler_diagnostics(chain)
+    save_figure(fig, "sampler_diagnostics")
+    fig
+end
 
 # %%
-energyplot(chain)
+begin
+    energy_key = Extra(:hamiltonian_energy)
+    if energy_key in keys(chain)
+        fig = FlexiChains.mtraceplot(chain, energy_key)
+        save_figure(fig, "energyplot")
+        fig
+    else
+        @info "skipping energyplot: $(energy_key) not present in chain"
+        nothing
+    end
+end
 
 # %% [markdown]
 # ## Posterior distributions
 
 # %%
 begin
-    if length(chain_params) >= 2
+    fig = if length(chain_params) >= 2
         pairplot(chain)
     else
-        StatsPlots.density(chain)
+        Makie.density(chain)
     end
+    save_figure(fig, length(chain_params) >= 2 ? "pairplot" : "posterior_density")
+    fig
 end

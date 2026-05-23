@@ -20,7 +20,7 @@
 #
 # On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
 #
-# The first cell activates the **workspace subproject** `Project.toml` under `notebooks/` (Pkg **workspace** with the package root: one shared `Manifest.toml` at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`MCMCChains`**) live there; **`ASGWB`** is a path dev of the sibling `ASGWB/` package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
+# The first cell activates the **workspace subproject** `Project.toml` under `notebooks/` (Pkg **workspace** with the package root: one shared `Manifest.toml` at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`FlexiChains`**, **`PairPlots`**) live there; **`ASGWB`** is a path dev of the sibling `ASGWB/` package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`FlexiChains`** Makie plots and **`PairPlots`** cover MCMC diagnostics (same stack as **`notebooks/plots.jl`**). **`Turing`** and the core **`ASGWB`** stack come from the devved package. Saved **`chain`** JLD2 files are directly consumable by **`plots.jl`**.
 
 # %%
 begin
@@ -52,16 +52,15 @@ begin
     using Random
     using JLD2
     using Logging
-    using MCMCChains
-    using StatsPlots
-    using Plots
+    using FlexiChains
+    using FlexiChains: VNChain
+    using PairPlots
     using CairoMakie
     using LaTeXStrings
     using Distributions
     using LinearAlgebra: BLAS
     # Avoid BLAS oversubscription with MCMCThreads
     BLAS.set_num_threads(1)
-    default(size = (900, 450))
 end
 
 # %%
@@ -264,7 +263,8 @@ begin
             sam.n_samples,
             num_threads;
             progress = true,
-            save_state = false
+            save_state = false,
+            chain_type = VNChain
         )
         @info "NUTS finished" chain_size = size(chain)
     end
@@ -289,19 +289,29 @@ end
 # ## Diagnostic plots
 
 # %%
-describe(chain)
+summarystats(chain)
 
 # %%
-traceplot(chain)
+begin
+    fig = FlexiChains.mtraceplot(chain)
+    fig
+end
 
 # %%
-autocorplot(chain)
+begin
+    n_draws = size(chain, 1)
+    autocor_maxlag = min(100, max(1, n_draws - 1))
+    fig = FlexiChains.mautocorplot(chain; lags = 1:autocor_maxlag)
+    fig
+end
 
 # %%
-let pnames = names(chain, :parameters)
-    if length(pnames) >= 2
-        MCMCChains.corner(chain)
+begin
+    chain_params = FlexiChains.parameters(chain)
+    fig = if length(chain_params) >= 2
+        pairplot(chain)
     else
-        StatsPlots.density(chain)
+        Makie.density(chain)
     end
+    fig
 end

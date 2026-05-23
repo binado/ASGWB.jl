@@ -3,7 +3,7 @@ module StackPartialChainsCLI
 using ASGWB
 using ..ChainIO: atomic_save_chain
 using AbstractMCMC: chainsstack
-using MCMCChains: Chains
+using FlexiChains: VNChain
 using JLD2
 using Turing
 
@@ -43,7 +43,15 @@ function _expand_input(input::AbstractString)
 end
 
 function _read_chain(path::AbstractString)
-    data = load(path)
+    data = try
+        load(path)
+    catch err
+        throw(ArgumentError(
+            "could not load FlexiChains.VNChain from $path. " *
+            "Legacy MCMCChains artifacts must be converted externally before stacking. " *
+            "JLD2 error: $(sprint(showerror, err))"
+        ))
+    end
     chain = if haskey(data, "chain")
         data["chain"]
     elseif haskey(data, "snapshot")
@@ -51,14 +59,17 @@ function _read_chain(path::AbstractString)
     else
         throw(ArgumentError("JLD2 file contains neither 'chain' nor 'snapshot' key: $path"))
     end
-    chain isa Chains || throw(ArgumentError("not an MCMCChains.Chains file: $path"))
-    size(chain, 3) == 1 || @warn "input has more than one chain" path size=size(chain)
+    chain isa VNChain || throw(ArgumentError(
+        "not a FlexiChains.VNChain file: $path. " *
+        "Legacy MCMCChains artifacts must be converted externally before stacking."
+    ))
+    size(chain, 2) == 1 || @warn "input has more than one chain" path size=size(chain)
     return chain
 end
 
 """
-Stack JLD2-saved MCMCChains files, such as per-chain checkpoint partials, into
-one combined MCMCChains.Chains object.  Accepts both `chain` (final output)
+Stack JLD2-saved FlexiChains files, such as per-chain checkpoint partials, into
+one combined FlexiChains.VNChain object. Accepts both `chain` (final output)
 and `snapshot` (checkpoint) keys.
 
 # Args

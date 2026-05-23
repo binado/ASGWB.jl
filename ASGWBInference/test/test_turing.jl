@@ -1,5 +1,6 @@
 using Test
 using Turing
+using FlexiChains
 using ASGWB
 using ASGWBInference: build_turing_model, condition_turing_model
 
@@ -40,12 +41,14 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
             sampled_model,
             Turing.NUTS(3, 0.8),
             3;
-            progress = false
+            progress = false,
+            chain_type = FlexiChains.VNChain
         )
 
         @test Turing.logjoint(sampled_model, theta0) ≈ Turing.logjoint(model, theta0) rtol = 1e-6
+        @test chain isa FlexiChains.VNChain
         @test size(chain, 1) == 3
-        @test sort(collect(Symbol.(Turing.MCMCChains.names(chain, :parameters)))) ==
+        @test sort(collect(Symbol.(FlexiChains.parameters(chain)))) ==
               sort(collect(keys(theta0)))
 
         cond_h0 = condition_turing_model(model, theta0, priors, (:H0,))
@@ -53,11 +56,13 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
             cond_h0,
             Turing.NUTS(3, 0.8),
             3;
-            progress = false
+            progress = false,
+            chain_type = FlexiChains.VNChain
         )
-        pnames = sort(collect(Symbol.(Turing.MCMCChains.names(chain_h0, :parameters))))
+        @test chain_h0 isa FlexiChains.VNChain
+        pnames = sort(collect(Symbol.(FlexiChains.parameters(chain_h0))))
         @test pnames == [:H0]
-        @test all(isfinite, vec(Array(chain_h0[:, :logjoint, :])))
+        @test all(isfinite, vec(Array(chain_h0[:logjoint])))
 
         _chain_sym = Dict(
             "H0" => :H0,
@@ -69,11 +74,11 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
             "z_peak" => :zpeak
         )
         for (name, (low, high)) in prior_bounds
-            values = vec(Array(chain[:, _chain_sym[name], :]))
+            values = vec(Array(chain[_chain_sym[name]]))
             @test all(isfinite, values)
             @test all((low .<= values) .& (values .<= high))
         end
 
-        @test all(isfinite, vec(Array(chain[:, :logjoint, :])))
+        @test all(isfinite, vec(Array(chain[:logjoint])))
     end
 end
