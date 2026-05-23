@@ -20,7 +20,7 @@
 #
 # On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
 #
-# The first cell activates the **workspace subproject** `Project.toml` under `notebooks/` (Pkg **workspace** with the package root: one shared `Manifest.toml` at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`StatsPlots`**, **`Plots`**, **`MCMCChains`**) live there; **`ASGWB`** is a path dev of the sibling `ASGWB/` package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`StatsPlots`** covers MCMC diagnostics. **`Turing`** and the core **`ASGWB`** stack come from the devved package.
+# The first cell activates the **workspace subproject** `Project.toml` under `notebooks/` (Pkg **workspace** with the package root: one shared `Manifest.toml` at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`FlexiChains`**, **`PairPlots`**) live there; **`ASGWB`** is a path dev of the sibling `ASGWB/` package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`FlexiChains`** Makie plots and **`PairPlots`** cover MCMC diagnostics (same stack as **`notebooks/plots.jl`**). **`Turing`** and the core **`ASGWB`** stack come from the devved package. Saved **`chain`** JLD2 files are directly consumable by **`plots.jl`**.
 
 # %%
 begin
@@ -52,16 +52,15 @@ begin
     using Random
     using JLD2
     using Logging
-    using MCMCChains
-    using StatsPlots
-    using Plots
+    using FlexiChains
+    using FlexiChains: FlexiChain, Parameter, VNChain
+    using PairPlots
     using CairoMakie
     using LaTeXStrings
     using Distributions
     using LinearAlgebra: BLAS
     # Avoid BLAS oversubscription with MCMCThreads
     BLAS.set_num_threads(1)
-    default(size = (900, 450))
 end
 
 # %%
@@ -78,6 +77,26 @@ begin
         ),
         )
         return v
+    end
+
+    """Require a plot-ready `FlexiChain` with accessible parameter samples."""
+    function validate_flexi_chain!(chain, path::AbstractString)
+        chain isa FlexiChain || throw(ArgumentError(
+            "expected FlexiChains.FlexiChain in $(repr(path)), got $(typeof(chain)). " *
+            "Convert with: julia --project=ASGWBInference scripts/slim_chain_jld2.jl INPUT.jld2 OUTPUT.jld2 --flexi",
+        ))
+        params = FlexiChains.parameters(chain)
+        missing_params = Symbol[]
+        for pname in params
+            haskey(chain, pname) || haskey(chain, Parameter(pname)) ||
+                push!(missing_params, pname)
+        end
+        isempty(missing_params) && return chain
+        throw(ArgumentError(
+            "FlexiChain in $(repr(path)) lists parameters $(params) but sample data is missing " *
+            "for $(missing_params). Regenerate with `scripts/slim_chain_jld2.jl ... --flexi` " *
+            "(use `--project=ASGWBInference`).",
+        ))
     end
 
     """Check each `init` scalar has positive prior density under the matching `priors` entry."""
@@ -234,7 +253,7 @@ begin
         isfile(chain_path) ||
             throw(ArgumentError("JLD2 chain file not found: $(repr(chain_path))"))
         @info "loading chain from JLD2" path = chain_path
-        chain = load(chain_path)["chain"]
+        chain = validate_flexi_chain!(load(chain_path)["chain"], chain_path)
         @info "chain loaded" chain_size = size(chain)
     else
         @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
@@ -264,7 +283,8 @@ begin
             sam.n_samples,
             num_threads;
             progress = true,
-            save_state = false
+            save_state = false,
+            chain_type = VNChain
         )
         @info "NUTS finished" chain_size = size(chain)
     end
@@ -289,19 +309,29 @@ end
 # ## Diagnostic plots
 
 # %%
-describe(chain)
+summarystats(chain)
 
 # %%
-traceplot(chain)
+begin
+    fig = FlexiChains.mtraceplot(chain)
+    fig
+end
 
 # %%
-autocorplot(chain)
+begin
+    n_draws = size(chain, 1)
+    autocor_maxlag = min(100, max(1, n_draws - 1))
+    fig = FlexiChains.mautocorplot(chain; lags = 1:autocor_maxlag)
+    fig
+end
 
 # %%
-let pnames = names(chain, :parameters)
-    if length(pnames) >= 2
-        MCMCChains.corner(chain)
+begin
+    chain_params = FlexiChains.parameters(chain)
+    fig = if length(chain_params) >= 2
+        pairplot(chain)
     else
-        StatsPlots.density(chain)
+        Makie.density(chain)
     end
+    fig
 end
