@@ -53,7 +53,7 @@ begin
     using JLD2
     using Logging
     using FlexiChains
-    using FlexiChains: FlexiChain, Parameter, VNChain
+    using FlexiChains: VNChain
     using PairPlots
     using CairoMakie
     using LaTeXStrings
@@ -77,26 +77,6 @@ begin
         ),
         )
         return v
-    end
-
-    """Require a plot-ready `FlexiChain` with accessible parameter samples."""
-    function validate_flexi_chain!(chain, path::AbstractString)
-        chain isa FlexiChain || throw(ArgumentError(
-            "expected FlexiChains.FlexiChain in $(repr(path)), got $(typeof(chain)). " *
-            "Convert with: julia --project=ASGWBInference scripts/slim_chain_jld2.jl INPUT.jld2 OUTPUT.jld2 --flexi",
-        ))
-        params = FlexiChains.parameters(chain)
-        missing_params = Symbol[]
-        for pname in params
-            haskey(chain, pname) || haskey(chain, Parameter(pname)) ||
-                push!(missing_params, pname)
-        end
-        isempty(missing_params) && return chain
-        throw(ArgumentError(
-            "FlexiChain in $(repr(path)) lists parameters $(params) but sample data is missing " *
-            "for $(missing_params). Regenerate with `scripts/slim_chain_jld2.jl ... --flexi` " *
-            "(use `--project=ASGWBInference`).",
-        ))
     end
 
     """Check each `init` scalar has positive prior density under the matching `priors` entry."""
@@ -253,7 +233,7 @@ begin
         isfile(chain_path) ||
             throw(ArgumentError("JLD2 chain file not found: $(repr(chain_path))"))
         @info "loading chain from JLD2" path = chain_path
-        chain = validate_flexi_chain!(load(chain_path)["chain"], chain_path)
+        chain = load(chain_path)["chain"]
         @info "chain loaded" chain_size = size(chain)
     else
         @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup

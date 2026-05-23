@@ -28,7 +28,7 @@ begin
     using Statistics
     using Turing
     using FlexiChains
-    using FlexiChains: Extra, FlexiChain, Parameter, VNChain
+    using FlexiChains: Extra, FlexiChain
     using ASGWB
 end
 
@@ -79,44 +79,19 @@ chain_path = (realpath ∘ joinpath)(@__DIR__, "..", filepath)
 function _load_chain(path::AbstractString)
     isfile(path) || throw(ArgumentError("JLD2 file not found: $(repr(path))"))
     data = load(path)
-    chain = if haskey(data, "chain")
-        data["chain"]
+    if haskey(data, "chain")
+        return data["chain"]
     elseif haskey(data, "snapshot")
-        data["snapshot"]
+        return data["snapshot"]
     else
         throw(ArgumentError(
             "JLD2 file contains neither 'chain' nor 'snapshot' key: $(repr(path))",
         ))
     end
-    _validate_flexi_chain!(chain, path)
-    return chain
-end
-
-"""Require a plot-ready `FlexiChain` with accessible parameter samples."""
-function _validate_flexi_chain!(chain, path::AbstractString)
-    chain isa FlexiChain || throw(ArgumentError(
-        "expected FlexiChains.FlexiChain in $(repr(path)), got $(typeof(chain)). " *
-        "Convert with: julia --project=ASGWBInference scripts/slim_chain_jld2.jl INPUT.jld2 OUTPUT.jld2 --flexi",
-    ))
-    params = FlexiChains.parameters(chain)
-    missing_params = Symbol[]
-    for pname in params
-        haskey(chain, pname) || haskey(chain, Parameter(pname)) || push!(missing_params, pname)
-    end
-    isempty(missing_params) && return chain
-    throw(ArgumentError(
-        "FlexiChain in $(repr(path)) lists parameters $(params) but sample data is missing " *
-        "for $(missing_params). Regenerate with `scripts/slim_chain_jld2.jl ... --flexi` " *
-        "(use `--project=ASGWBInference`).",
-    ))
 end
 
 # %%
-begin
-    chain = _load_chain(chain_path)
-    chain isa FlexiChain ||
-        throw(ArgumentError("expected FlexiChains.FlexiChain, got $(typeof(chain))"))
-end
+chain = _load_chain(chain_path)
 
 # %%
 chain_params = FlexiChains.parameters(chain)
