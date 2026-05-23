@@ -4,7 +4,7 @@
 
 ASGWB.jl is a Julia package for astrophysical stochastic gravitational-wave background modeling and inference. The package entry point is `ASGWB/src/ASGWB.jl`, which includes and exports the public API (physics, likelihoods, importance caches). Turing/AdvancedHMC model wrappers and sampling helpers live in the sibling package `ASGWBInference/` (see `ASGWBInference/src/InferenceImpl.jl`). Core modules live in `ASGWB/src/`, with detector-specific code under `ASGWB/src/detector/`. Tests live in `ASGWB/test/` and are listed from `ASGWB/test/runtests.jl`. Detector definitions and noise curves are stored in `ASGWB/assets/detector/`. Production inference is driven by TOML/env config through `ASGWBInference.julia_main()`, while stack/profile helpers remain callable Julia modules under `ASGWBInference/src/cli/`. Developer scripts and utilities remain in `scripts/`, while Pluto files are in `notebooks/`.
 
-Note: the package is still in the prototyping fase, so breaking changes are allowed and backwards compatibility is not a concern.
+Note: the package is still in the prototyping phase, so breaking changes are allowed and backwards compatibility is not a concern.
 
 ## Build, Test, and Development Commands
 

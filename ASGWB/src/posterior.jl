@@ -1,9 +1,15 @@
 using Distributions: logpdf, ProductNamedTupleDistribution
 
-function target_log_prob_samples(Λ::NamedTuple, problem::ImportanceSamplingProblem)
+function target_log_prob_samples(
+        Λ::NamedTuple,
+        problem::ImportanceSamplingProblem;
+        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
+)
+    cosmology = build_cosmology(model, Λ)
     redshift_prior = build_redshift_prior(
         Λ,
         problem.redshift_prior_spec,
+        cosmology,
         problem.redshift_cache.redshift_grid
     )
     target_log_prob = problem.redshift_cache.cached_intrinsic_log_prob .+

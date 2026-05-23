@@ -57,6 +57,18 @@ end
     end
 end
 
+@testset "dark_energy_eos preserves ForwardDiff derivatives" begin
+    f_w0 = w0 -> dark_energy_eos(W0CDM(67.0, 0.3, w0), 0.5)
+    @test ForwardDiff.derivative(f_w0, -0.8) ≈ 1.0
+
+    g_w0 = w0 -> E(0.5, W0CDM(67.0, 0.3, w0))
+    @test isfinite(ForwardDiff.derivative(g_w0, -0.8))
+    @test ForwardDiff.derivative(g_w0, -0.8) != 0.0
+
+    h_wa = wa -> dark_energy_eos(W0WaCDM(67.0, 0.3, -0.9, wa), 0.5)
+    @test ForwardDiff.derivative(h_wa, 0.2) ≈ 0.5 / (1 + 0.5)
+end
+
 @testset "E(z) reduces to ΛCDM at w0=-1" begin
     lcdm = LambdaCDM(70.0, 0.3)
     w0cdm_lim = W0CDM(70.0, 0.3, -1.0)

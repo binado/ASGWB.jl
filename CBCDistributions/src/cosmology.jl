@@ -49,7 +49,7 @@ Base.broadcastable(c::AbstractCosmology) = Ref(c)
 Dark energy equation of state w(z).
 """
 dark_energy_eos(::LambdaCDM, z) = -one(z)
-dark_energy_eos(c::W0CDM, z) = oftype(z, c.w0)
+dark_energy_eos(c::W0CDM, z) = c.w0
 dark_energy_eos(c::W0WaCDM, z) = c.w0 + c.wa * z / (1 + z)
 
 """

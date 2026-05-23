@@ -53,3 +53,19 @@ using Distributions: product_distribution, Normal, ProductNamedTupleDistribution
         @test_throws ArgumentError validate_hyperparameters(model, extra_nt)
     end
 end
+
+@testset "build_cosmology(ProposalFiducialParameters)" begin
+    base = (H0 = 67.0, Ωm = 0.3, Ξ₀ = 1.0, Ξₙ = 0.0)
+
+    lcdm_fid = ProposalFiducialParameters(; base...)
+    @test build_cosmology(lcdm_fid) isa LambdaCDM
+
+    w0_fid = ProposalFiducialParameters(; base..., w0 = -0.9)
+    @test build_cosmology(w0_fid) isa W0CDM
+
+    cpl_fid = ProposalFiducialParameters(; base..., w0 = -0.9, wa = 0.2)
+    @test build_cosmology(cpl_fid) isa W0WaCDM
+
+    bad_fid = ProposalFiducialParameters(; base..., wa = 0.2)
+    @test_throws ArgumentError build_cosmology(bad_fid)
+end

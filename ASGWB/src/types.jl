@@ -71,6 +71,11 @@ Falls back to `LambdaCDM` when `w0` is absent (legacy caches).
 """
 function build_cosmology(fid::ProposalFiducialParameters)
     if fid.wa !== nothing
+        fid.w0 === nothing && throw(
+            ArgumentError(
+            "cache provides wa without w0; cannot build W0WaCDM",
+        ),
+        )
         return W0WaCDM(fid.H0, fid.Ωm, fid.w0, fid.wa)
     elseif fid.w0 !== nothing
         return W0CDM(fid.H0, fid.Ωm, fid.w0)
