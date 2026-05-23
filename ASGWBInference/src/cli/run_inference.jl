@@ -305,9 +305,10 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     atomic_save_chain(output_jld2, chain)
 
     if callback !== nothing
-        retained_checkpoint_paths = filter(isfile, checkpoint_paths(callback, num_chains))
-        if !isempty(retained_checkpoint_paths)
-            @info "retaining partial checkpoint files" count=length(retained_checkpoint_paths) output_dir base
+        paths = filter(isfile, checkpoint_paths(callback, num_chains))
+        if !isempty(paths)
+            rm.(paths; force = true)
+            @info "removed partial checkpoint files" count = length(paths) output_dir base
         end
     end
 
