@@ -72,6 +72,7 @@ end
 
     cosmology_cache,
     redshift_prior = cosmology_and_redshift_prior(
+        cosmology(MadauDickinsonModifiedPropagation(), theta),
         theta,
         cache.redshift_prior_spec,
         cache.redshift_cache.redshift_grid
@@ -107,14 +108,17 @@ end
 
     empty_problem = _importance_type_test_problem(0)
     populated_problem = _importance_type_test_problem(1)
+    cosmology_dual = cosmology(MadauDickinsonModifiedPropagation(), theta)
     empty_cosmology_cache,
     empty_redshift_prior = cosmology_and_redshift_prior(
+        cosmology_dual,
         theta,
         empty_problem.redshift_prior_spec,
         empty_problem.redshift_cache.redshift_grid
     )
     populated_cosmology_cache,
     populated_redshift_prior = cosmology_and_redshift_prior(
+        cosmology_dual,
         theta,
         populated_problem.redshift_prior_spec,
         populated_problem.redshift_cache.redshift_grid

@@ -1,7 +1,11 @@
 cache_path = "../data.h5"
 detectors = ["S1", "R1"]
-sample_only = ["H0"]
+sample_only = ["Ξ₀",]
 seed = 1
+
+[model]
+# Cosmology model: "LambdaCDM" (default), "W0CDM", or "W0WaCDM".
+cosmology = "LambdaCDM"
 
 # Optional. Relative paths are resolved against this TOML file's directory.
 output_dir = "../output"
@@ -10,6 +14,8 @@ output_prefix = "chains"
 [init]
 H0 = 67.66
 "Ωm" = 0.3096
+w0 = -1.0
+wa = 0.0
 "Ξ₀" = 1.0
 "Ξₙ" = 1.91
 "γ" = 2.7

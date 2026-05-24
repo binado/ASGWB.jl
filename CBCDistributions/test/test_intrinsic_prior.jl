@@ -63,7 +63,7 @@ const _theta_default = (
 
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    redshift_prior = build_redshift_prior(theta, spec)
+    redshift_prior = build_redshift_prior(theta, spec, LambdaCDM(theta.H0, theta.Ωm))
     redshift_dist = RedshiftInterpolatedDistribution(redshift_prior)
     @test logpdf(redshift_dist, 0.5) ≈ redshift_log_prob(redshift_prior, 0.5)
     @test !insupport(redshift_dist, spec.z_min - 0.01)
@@ -116,7 +116,7 @@ end
 @testset "IntrinsicPrior batch logpdf matches manual component sum" begin
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    redshift_prior = build_redshift_prior(theta, spec)
+    redshift_prior = build_redshift_prior(theta, spec, LambdaCDM(theta.H0, theta.Ωm))
     prior = intrinsic_prior(FullBNS())
     samples = (
         mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
@@ -207,7 +207,7 @@ end
 @testset "cached intrinsic logpdf matches redshift composition" begin
     theta = _theta_default
     spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    redshift_prior = build_redshift_prior(theta, spec)
+    redshift_prior = build_redshift_prior(theta, spec, LambdaCDM(theta.H0, theta.Ωm))
     prior = intrinsic_prior(FullBNS())
     samples = (
         mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
@@ -243,7 +243,7 @@ end
     )
     cached_log_prob = logpdf(intrinsic_prior(FullBNS()), samples)
     h_dual = (; theta..., γ = ForwardDiff.Dual(2.7, 1.0))
-    redshift_prior_dual = build_redshift_prior(h_dual, spec)
+    redshift_prior_dual = build_redshift_prior(h_dual, spec, LambdaCDM(theta.H0, theta.Ωm))
     prior_dual = intrinsic_prior(FullBNS())
     expected = logpdf(prior_dual, samples) .+
                redshift_log_prob.(Ref(redshift_prior_dual), samples.redshift)

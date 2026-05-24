@@ -5,7 +5,10 @@ using ASGWB:
              load_cache,
              Detector,
              MadauDickinsonModifiedPropagation,
+             cosmology_type,
+             propagation_model,
              canonical_hyperparameters,
+             hyperparameters,
              validate_hyperparameters,
              validate_prior,
              validate_subset
@@ -39,6 +42,8 @@ end
 const PRIORS = (
     H0 = Uniform(20, 140),
     Ωm = Uniform(0.05, 0.95),
+    w0 = Uniform(-3.0, 0.0),
+    wa = Uniform(-3.0, 3.0),
     Ξ₀ = Uniform(0.5, 5),
     Ξₙ = Uniform(0.05, 3),
     γ = Uniform(0.5, 10),
@@ -46,7 +51,16 @@ const PRIORS = (
     zpeak = Uniform(0.05, 10)
 )
 
-const INFERENCE_MODEL = MadauDickinsonModifiedPropagation()
+"""Select the subset of `priors` corresponding to `names`."""
+function select_priors(priors::NamedTuple, names::Tuple{Vararg{Symbol}})
+    return NamedTuple{names}(priors)
+end
+
+function _resolve_inference_model(settings::Dict)
+    cosmology_name = get(get(settings, "model", Dict()), "cosmology", "LambdaCDM")::String
+    C = cosmology_type(cosmology_name)
+    return MadauDickinsonModifiedPropagation{C}()
+end
 
 """Resolve `path` relative to `base` if it is not absolute."""
 function resolve_path(path::AbstractString, base::AbstractString)
@@ -195,9 +209,12 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     detectors = [Detector(n) for n in settings["detectors"]]
     sample_only = parse_sample_only(settings)
     seed = settings["seed"]::Int
+    inference_model = _resolve_inference_model(settings)
+    model_params = hyperparameters(inference_model)
+    all_init = (; (Symbol(k) => v for (k, v) in settings["init"])...)
     init = canonical_hyperparameters(
-        INFERENCE_MODEL,
-        (; (Symbol(k) => v for (k, v) in settings["init"])...);
+        inference_model,
+        NamedTuple{model_params}(all_init);
         context = "init hyperparameters"
     )
 
@@ -220,17 +237,18 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     base = "$(output_prefix)-$(params_suffix)-seed$(seed)-$(timestamp)"
     output_jld2 = joinpath(output_dir, "$base.jld2")
 
-    validate_init_against_priors(PRIORS, init)
-    priors_turing = product_distribution(PRIORS)
-    validate_prior(INFERENCE_MODEL, priors_turing)
-    validate_hyperparameters(INFERENCE_MODEL, init; context = "init hyperparameters")
+    selected_priors = select_priors(PRIORS, model_params)
+    validate_init_against_priors(selected_priors, init)
+    priors_turing = product_distribution(selected_priors)
+    validate_prior(inference_model, priors_turing)
+    validate_hyperparameters(inference_model, init; context = "init hyperparameters")
     if sample_only !== nothing
         isempty(sample_only) && throw(
             ArgumentError(
             "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
         ),
         )
-        validate_subset(sample_only, INFERENCE_MODEL)
+        validate_subset(sample_only, inference_model)
     end
 
     # Cluster-friendly defaults: avoid BLAS oversubscription with MCMCThreads.
@@ -249,6 +267,14 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
 
     @info "loading importance cache" path=cache
     problem = load_cache(cache, detectors)
+    cache_cosmology = cosmology_type(problem.fiducial_parameters)
+    infer_cosmology = cosmology_type(inference_model)
+    cache_cosmology === infer_cosmology || throw(
+        ArgumentError(
+        "cache cosmology $(cache_cosmology) does not match [model].cosmology " *
+        "($(infer_cosmology)); rebuild the cache or fix config",
+    ),
+    )
     @info "cache loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 
     @info "using fiducial in-band spectrum from cache as observed data"
@@ -261,19 +287,19 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     checkpoint_save_state = true
 
     @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
-    model = build_turing_model(
+    turing_model = build_turing_model(
         problem,
         priors_turing;
-        model = INFERENCE_MODEL,
+        model = inference_model,
         track = true,
         observed_spectral_density = observed
     )
     conditioned = condition_turing_model(
-        model,
+        turing_model,
         init,
         priors_turing,
         sample_only;
-        model = INFERENCE_MODEL
+        model = inference_model
     )
     nuts = Turing.NUTS(
         n_adapts,

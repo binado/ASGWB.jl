@@ -52,4 +52,41 @@ using Distributions: product_distribution, Normal, ProductNamedTupleDistribution
         extra_nt = (; (k => 1.0 for k in expected_order)..., extra_key = 1.0)
         @test_throws ArgumentError validate_hyperparameters(model, extra_nt)
     end
+
+    @testset "hyperparameters W0CDM / W0WaCDM" begin
+        @test hyperparameters(MadauDickinsonModifiedPropagation{W0CDM}()) ==
+              (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
+        @test hyperparameters(MadauDickinsonModifiedPropagation{W0WaCDM}()) ==
+              (:H0, :Ωm, :w0, :wa, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
+    end
+end
+
+@testset "cosmology(propagation_model, Λ)" begin
+    base = (H0 = 67.0, Ωm = 0.3, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 5.7, zpeak = 2.0)
+
+    lcdm_fid = ProposalFiducialParameters(; base...)
+    model_lcdm = propagation_model(lcdm_fid)
+    Λ_lcdm = (; base...)
+    @test cosmology(model_lcdm, Λ_lcdm) isa LambdaCDM
+
+    w0_fid = ProposalFiducialParameters(; base..., w0 = -0.9)
+    model_w0 = propagation_model(w0_fid)
+    Λ_w0 = (; base..., w0 = -0.9)
+    @test cosmology(model_w0, Λ_w0) isa W0CDM
+
+    cpl_fid = ProposalFiducialParameters(; base..., w0 = -0.9, wa = 0.2)
+    model_cpl = propagation_model(cpl_fid)
+    Λ_cpl = (; base..., w0 = -0.9, wa = 0.2)
+    @test cosmology(model_cpl, Λ_cpl) isa W0WaCDM
+
+    bad_fid = ProposalFiducialParameters(; base..., wa = 0.2)
+    @test_throws ArgumentError propagation_model(bad_fid)
+
+    @test fiducial_cosmology(lcdm_fid) isa LambdaCDM
+    @test fiducial_cosmology(w0_fid) isa W0CDM
+    @test fiducial_cosmology(cpl_fid) isa W0WaCDM
+    @test ASGWB._fiducial_cosmology_nt(lcdm_fid) == (H0 = base.H0, Ωm = base.Ωm)
+    @test ASGWB._fiducial_cosmology_nt(w0_fid) == (; (H0 = base.H0, Ωm = base.Ωm)..., w0 = -0.9)
+    @test ASGWB._fiducial_cosmology_nt(cpl_fid) ==
+          (; (H0 = base.H0, Ωm = base.Ωm)..., w0 = -0.9, wa = 0.2)
 end

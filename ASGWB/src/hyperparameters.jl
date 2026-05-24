@@ -1,10 +1,19 @@
+using CBCDistributions: AbstractCosmology, cosmology_parameters
+import CBCDistributions: cosmology
 using Distributions: ProductNamedTupleDistribution
 
 """Abstract supertype for ASGWB forward models with explicit hyperparameter contracts."""
 abstract type AbstractASGWBModel end
 
-"""Madau-Dickinson population with modified gravitational-wave propagation."""
-struct MadauDickinsonModifiedPropagation <: AbstractASGWBModel end
+"""
+Madau-Dickinson population with modified gravitational-wave propagation.
+
+Type parameter `C <: AbstractCosmology` selects the cosmology model.
+`MadauDickinsonModifiedPropagation()` defaults to `LambdaCDM`.
+"""
+struct MadauDickinsonModifiedPropagation{C <: AbstractCosmology} <: AbstractASGWBModel end
+
+MadauDickinsonModifiedPropagation() = MadauDickinsonModifiedPropagation{LambdaCDM}()
 
 """
     hyperparameters(model::AbstractASGWBModel) -> Tuple{Vararg{Symbol}}
@@ -13,7 +22,40 @@ Symbols and order used by a model's flat hyperparameter state.
 """
 function hyperparameters end
 
-hyperparameters(::MadauDickinsonModifiedPropagation) = (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
+"""
+    model_parameters(::Type{<:MadauDickinsonModifiedPropagation}) -> Tuple{Vararg{Symbol}}
+
+Hyperparameter symbols owned by the Madau–Dickinson modified-propagation forward model
+(excluding cosmology parameters).
+"""
+model_parameters(::Type{<:MadauDickinsonModifiedPropagation}) = (:Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
+
+function hyperparameters(::Type{MadauDickinsonModifiedPropagation{C}}) where {C <:
+                                                                              AbstractCosmology}
+    return (
+        cosmology_parameters(C)...,
+        model_parameters(MadauDickinsonModifiedPropagation{C})...
+    )
+end
+
+hyperparameters(m::MadauDickinsonModifiedPropagation) = hyperparameters(typeof(m))
+
+"""
+    cosmology(model::MadauDickinsonModifiedPropagation{C}, h::NamedTuple) -> AbstractCosmology
+
+Construct the cosmology for `model` from live hyperparameter state `h` (delegates to [`CBCDistributions.cosmology`](@ref)).
+"""
+function cosmology(m::MadauDickinsonModifiedPropagation{C}, h::NamedTuple) where {C <:
+                                                                                  AbstractCosmology}
+    cosmology(C, h)
+end
+
+"""
+    cosmology_type(model::MadauDickinsonModifiedPropagation{C}) -> Type{C}
+
+Return the cosmology subtype baked into the forward model's type parameter.
+"""
+cosmology_type(::MadauDickinsonModifiedPropagation{C}) where {C <: AbstractCosmology} = C
 
 function _check_unique_hyperparameters(model::AbstractASGWBModel)
     order = hyperparameters(model)

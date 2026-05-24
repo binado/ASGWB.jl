@@ -2,17 +2,16 @@
 # inside a NUTS gradient evaluation, before deciding whether to refactor
 # the cosmology `quadgk` path.
 #
-# Run from the package root, for example:
-#   julia --project=ASGWBInference -e 'using ASGWBInference; ASGWBInference.ASGWBProfileMainCLI.profile(config_file="config/profile_turing.toml")'
-#
-# Or the standalone script (ASGWBInference env):
+# Run from the repository root, for example:
 #   julia --project=ASGWBInference scripts/profile_turing.jl --config-file=config/profile_turing.toml
 #
+# Optional: --seconds=2.0 --profile-samples=500 --alloc --profile-out=profile.dat
+#
 # Sites under investigation:
-#   - ASGWB/src/cosmology.jl:9-13     quadgk inside comoving_distance
-#   - ASGWB/src/redshift.jl           differential_comoving_volume.(z_grid, H0, Ωm) broadcast
-#   - ASGWB/src/importance.jl         luminosity_distance.(z, H0, Ωm) per-sample broadcast
-#   - ASGWBInference/src/turing_model.jl  the model being profiled
+#   - CBCDistributions/src/cosmology.jl   quadgk inside comoving_distance
+#   - ASGWB/src/redshift.jl               differential_comoving_volume on z_grid
+#   - ASGWB/src/cache.jl, importance.jl   luminosity_distance per proposal sample
+#   - ASGWBInference/src/turing_model.jl  DynamicPPL model being profiled
 #
 # This script is *measurement only*: it does not edit any ASGWB/src/ files.
 
@@ -39,6 +38,7 @@ using ASGWB:
              redshift,
              canonical_hyperparameters,
              MadauDickinsonModifiedPropagation,
+             cosmology,
              validate_prior,
              Detector
 using BenchmarkTools
@@ -279,7 +279,7 @@ function _run(;
     spec = problem.redshift_prior_spec
     cosmology_cache0,
     redshift_prior0 = cosmology_and_redshift_prior(
-        h, spec, problem.redshift_cache.redshift_grid)
+        cosmology(INFERENCE_MODEL, h), h, spec, problem.redshift_cache.redshift_grid)
     iw0 = compute_importance_weights(problem, h, cosmology_cache0, redshift_prior0)
     rate0 = merger_rate_per_sec(
         redshift_prior0,
@@ -289,8 +289,6 @@ function _run(;
     )
     weights0 = iw0.weights
     z_samples = redshift(problem)
-    H0_val = h.H0
-    Ωm_val = h.Ωm
 
     # ------------------------------------------------------------------
     # Warmup — trigger JIT / AD compilation before any benchmark
@@ -300,7 +298,8 @@ function _run(;
     LogDensityProblems.logdensity_and_gradient(ad_ld, z0)
     LogDensityProblems.logdensity(lf, z0_turing)
     LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
-    logposterior(h, problem, priors; observed_spectral_density = observed)
+    logposterior(h, problem, priors;
+        model = INFERENCE_MODEL, observed_spectral_density = observed)
 
     # ------------------------------------------------------------------
     # BenchmarkTools suite
@@ -319,6 +318,7 @@ function _run(;
         $h,
         $problem,
         $priors;
+        model = $INFERENCE_MODEL,
         observed_spectral_density = $observed
     )
 
@@ -332,7 +332,7 @@ function _run(;
 
     suite["stage"] = BenchmarkGroup()
     suite["stage"]["redshift"] = @benchmarkable cosmology_and_redshift_prior(
-        $h, $spec, $(problem.redshift_cache.redshift_grid))
+        cosmology($INFERENCE_MODEL, $h), $h, $spec, $(problem.redshift_cache.redshift_grid))
     suite["stage"]["weights"] = @benchmarkable compute_importance_weights(
         $problem, $h, $cosmology_cache0, $redshift_prior0)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
@@ -347,9 +347,10 @@ function _run(;
         weights = $weights0
     )
     suite["stage"]["prior"] = @benchmarkable logpdf($priors, $h)
-    # Bare luminosity_distance broadcast — isolates the per-sample quadgk
-    # cost currently in ASGWB/src/importance.jl:36 and ASGWB/src/cache.jl:70.
-    suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $H0_val, $Ωm_val)
+    # Bare luminosity_distance broadcast — isolates per-sample distance work in
+    # cache reconstruction and importance weighting (see ASGWB/src/cache.jl).
+    c0 = cosmology(INFERENCE_MODEL, h)
+    suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $c0)
 
     @info "tuning benchmark suite (evals/sample calibration)"
     tune!(suite)

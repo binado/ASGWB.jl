@@ -26,7 +26,6 @@ export ASGWBLogDensity,
 include("chain_io.jl")
 include("cli/run_inference.jl")
 include("cli/stack_partial_chains.jl")
-include("cli/profile_turing_main.jl")
 
 """
     run_inference(config_path)

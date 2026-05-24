@@ -170,6 +170,7 @@ end
 
 const _CACHE_FIDUCIAL_KEYS = ("H0", "Omega_m", "chi0", "chin")
 const _CACHE_OPTIONAL_POPULATION_KEYS = ("gamma", "kappa", "z_peak", "lamb")
+const _CACHE_OPTIONAL_COSMOLOGY_KEYS = ("w0", "wa")
 
 function _read_optional_float_scalar(
         group::HDF5.Group,
@@ -206,7 +207,9 @@ function _read_proposal_fiducial_parameters(
         haskey(hyper, k) || throw(ArgumentError("missing hyperparameter $(k)"))
     end
     allowed = Set{String}(
-        collect(_CACHE_FIDUCIAL_KEYS) ∪ collect(_CACHE_OPTIONAL_POPULATION_KEYS),
+        collect(_CACHE_FIDUCIAL_KEYS) ∪
+        collect(_CACHE_OPTIONAL_POPULATION_KEYS) ∪
+        collect(_CACHE_OPTIONAL_COSMOLOGY_KEYS),
     )
     for k in keys(hyper)
         kn = String(k)
@@ -247,7 +250,9 @@ function _read_proposal_fiducial_parameters(
         γ = γ,
         κ = κ,
         zpeak = zp,
-        Λ = Λ_pl
+        Λ = Λ_pl,
+        w0 = _read_optional_float_scalar(hyper, "w0"),
+        wa = _read_optional_float_scalar(hyper, "wa")
     )
 end
 

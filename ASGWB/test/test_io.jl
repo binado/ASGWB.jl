@@ -26,12 +26,9 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
         κ = κ,
         zpeak = zp
     )
-    d_l = luminosity_distance.(z, fid.H0, fid.Ωm)
-    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
-    scale = (d_l ./ d_gw) .^ 2
-    raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
+    model = propagation_model(fid)
     h = canonical_hyperparameters(
-        MadauDickinsonModifiedPropagation(),
+        model,
         (;
             H0 = fid.H0,
             Ωm = fid.Ωm,
@@ -42,7 +39,11 @@ const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
             zpeak = zp
         )
     )
-    redshift_prior = build_redshift_prior(h, spec)
+    d_l = luminosity_distance.(z, cosmology(model, h))
+    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
+    scale = (d_l ./ d_gw) .^ 2
+    raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
+    redshift_prior = build_redshift_prior(h, spec, cosmology(model, h))
     expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)
     expected_ri = Float64(ASGWB.redshift_integral(redshift_prior))
 
@@ -208,7 +209,8 @@ end
           length(problem.observation.frequencies)
     @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
     @test problem.observation.in_band_mask == BitVector([true, true])
-    ev = evaluate_model_terms(MadauDickinsonModifiedPropagation(), fiducial_hyperparameters(problem), problem)
+    model = propagation_model(problem.fiducial_parameters)
+    ev = evaluate_model_terms(model, fiducial_hyperparameters(problem), problem)
     @test problem.observation.fiducial_spectral_density ≈ ev.spectral_density
     @test problem.observation.sgwb_scale_in_band ≈ problem.observation.sgwb_scale
     @test problem.observation.fiducial_spectral_density_in_band ≈
@@ -228,6 +230,107 @@ end
     @test problem.redshift_integral_fiducial == 1.0
     @test problem.strategy isa FullBNS
     @test redshift(problem) ≈ [0.1, 0.2]
+end
+
+@testset "fiducial_spectral_density uses W0CDM when cache stores w0" begin
+    fixture_path = parity_cache_path(:importance_context)
+    ref = load_cache(fixture_path, _TEST_LOAD_DETS)
+    z = ref.proposal.samples.redshift
+    spec = ref.redshift_prior_spec
+    γ, κ, zp = 2.7, 3.0, 2.5
+    w0_val = -0.9
+    fid = ProposalFiducialParameters(;
+        H0 = ref.fiducial_parameters.H0,
+        Ωm = ref.fiducial_parameters.Ωm,
+        Ξ₀ = ref.fiducial_parameters.Ξ₀,
+        Ξₙ = ref.fiducial_parameters.Ξₙ,
+        γ = γ,
+        κ = κ,
+        zpeak = zp,
+        w0 = w0_val
+    )
+    model = propagation_model(fid)
+    @test model isa MadauDickinsonModifiedPropagation{W0CDM}
+    h = canonical_hyperparameters(
+        model,
+        (;
+            H0 = fid.H0,
+            Ωm = fid.Ωm,
+            w0 = w0_val,
+            Ξ₀ = fid.Ξ₀,
+            Ξₙ = fid.Ξₙ,
+            γ = γ,
+            κ = κ,
+            zpeak = zp
+        )
+    )
+    d_l = luminosity_distance.(z, cosmology(model, h))
+    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
+    scale = (d_l ./ d_gw) .^ 2
+    raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
+
+    path, io = mktemp()
+    close(io)
+    try
+        h5open(path, "w") do f
+            a = attributes(f)
+            a[IMPORTANCE_CACHE_COMMAND_ATTR] = "synthetic w0 test"
+            a[IMPORTANCE_CACHE_GIT_REVISION_ATTR] = "test"
+            a["local_merger_rate"] = ref.local_merger_rate
+            a["observation_time_sec"] = ref.observation.observation_time_sec
+            a["observation_time_yr"] = ref.observation.observation_time_yr
+            write(f, "intrinsic_site_order", ref.proposal.intrinsic_site_order)
+            write(
+                f,
+                "proposal_intrinsic_vector",
+                Matrix(permutedims(ref.proposal.intrinsic_vector))
+            )
+            write(f, "frequencies", ref.observation.frequencies)
+            write(f, "in_band_mask", Vector{Bool}(ref.observation.in_band_mask))
+            write(f, "cached_flux", raw_flux)
+            g = create_group(f, "proposal_samples")
+            attributes(g)[PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR] = PROPOSAL_SAMPLES_SOURCE_TYPE_BNS
+            s = ref.proposal.samples
+            write(g, "mass_1_source", Vector(s.mass[1, :]))
+            write(g, "mass_2_source", Vector(s.mass[2, :]))
+            write(g, "redshift", s.redshift)
+            write(g, "chi_1", s.χ₁)
+            write(g, "chi_2", s.χ₂)
+            write(g, "lambda_1", s.Λ₁)
+            write(g, "lambda_2", s.Λ₂)
+            hg = create_group(f, "hyperparameters")
+            write(hg, "H0", fid.H0)
+            write(hg, "Omega_m", fid.Ωm)
+            write(hg, "chi0", fid.Ξ₀)
+            write(hg, "chin", fid.Ξₙ)
+            write(hg, "gamma", γ)
+            write(hg, "kappa", κ)
+            write(hg, "z_peak", zp)
+            write(hg, "w0", w0_val)
+            sg = create_group(f, "redshift_prior_spec")
+            write(sg, "family", "madau_dickinson")
+            write(sg, "z_min", spec.z_min)
+            write(sg, "z_max", spec.z_max)
+            write(sg, "num_interp", spec.num_interp)
+        end
+
+        p = load_cache(path, _TEST_LOAD_DETS)
+        @test propagation_model(p.fiducial_parameters) isa
+              MadauDickinsonModifiedPropagation{W0CDM}
+        Λ = fiducial_hyperparameters(p)
+        ev = evaluate_model_terms(propagation_model(p.fiducial_parameters), Λ, p)
+        @test fiducial_spectral_density(p) ≈ ev.spectral_density
+        h_lcdm = canonical_hyperparameters(
+            MadauDickinsonModifiedPropagation(),
+            (;
+                (k => Λ[k]
+            for k in hyperparameters(MadauDickinsonModifiedPropagation()))...)
+        )
+        ev_lcdm = evaluate_model_terms(MadauDickinsonModifiedPropagation(), h_lcdm, p)
+        @test !(fiducial_spectral_density(p) ≈ ev_lcdm.spectral_density)
+    finally
+        rm(path; force = true)
+    end
 end
 
 @testset "load_cache rejects unsupported proposal_samples source_type" begin

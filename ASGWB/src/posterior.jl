@@ -1,9 +1,15 @@
 using Distributions: logpdf, ProductNamedTupleDistribution
 
-function target_log_prob_samples(Λ::NamedTuple, problem::ImportanceSamplingProblem)
+function target_log_prob_samples(
+        Λ::NamedTuple,
+        problem::ImportanceSamplingProblem;
+        model::AbstractASGWBModel
+)
+    c = cosmology(model, Λ)
     redshift_prior = build_redshift_prior(
         Λ,
         problem.redshift_prior_spec,
+        c,
         problem.redshift_cache.redshift_grid
     )
     target_log_prob = problem.redshift_cache.cached_intrinsic_log_prob .+
@@ -20,13 +26,14 @@ end
 Evaluate the deterministic likelihood terms for a model hyperparameter state.
 """
 function evaluate_model_terms(
-        ::MadauDickinsonModifiedPropagation,
+        model::MadauDickinsonModifiedPropagation,
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem,
         z_grid::AbstractVector{<:Real}
 )
     cosmology_cache,
     redshift_prior = cosmology_and_redshift_prior(
+        cosmology(model, Λ),
         Λ,
         problem.redshift_prior_spec,
         z_grid
@@ -64,7 +71,7 @@ end
 function loglikelihood(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
+        model::AbstractASGWBModel,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
     evaluation = evaluate_model_terms(model, Λ, problem)
@@ -80,7 +87,7 @@ function logposterior(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
+        model::AbstractASGWBModel,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
     return logpdf(prior, Λ) +
@@ -117,8 +124,10 @@ For the dimensionless energy density ``\\Omega_{\\mathrm{GW}}(f)``, use [`Ωgw`]
 this vector and the corresponding frequency bins from `problem.observation.frequencies`.
 """
 function fiducial_spectral_density(problem::ImportanceSamplingProblem)
+    fid = problem.fiducial_parameters
+    model = propagation_model(fid)
     Λ = fiducial_hyperparameters(problem)
-    return evaluate_model_terms(MadauDickinsonModifiedPropagation(), Λ, problem).spectral_density
+    return evaluate_model_terms(model, Λ, problem).spectral_density
 end
 
 """

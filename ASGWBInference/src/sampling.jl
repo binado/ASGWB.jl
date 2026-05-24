@@ -7,7 +7,7 @@ using LogDensityProblems
 using LogDensityProblemsAD
 
 """
-    ASGWBLogDensity(problem, prior)
+    ASGWBLogDensity(problem, prior; model)
 
 A struct representing the log-density of the ASGWB importance sampling model,
 conforming to the `LogDensityProblems.jl` interface. It handles the
@@ -26,7 +26,7 @@ end
 function ASGWBLogDensity(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
+        model::AbstractASGWBModel
 )
     validate_prior(model, prior)
     return ASGWBLogDensity(problem, prior, bijector(prior), model)
@@ -97,7 +97,7 @@ function finite_difference_logdensity_and_gradient(
 end
 
 """
-    sample_with_advancedhmc(problem, prior, theta0; kwargs...) -> (samples, stats, ld)
+    sample_with_advancedhmc(problem, prior, theta0; model, kwargs...) -> (samples, stats, ld)
 
 Sample from the ASGWB posterior using `AdvancedHMC.jl` directly (without Turing).
 """
@@ -105,10 +105,10 @@ function sample_with_advancedhmc(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution,
         theta0::NamedTuple;
+        model::AbstractASGWBModel,
         n_adapts::Int = 25,
         n_samples::Int = 25,
-        target_acceptance::Float64 = 0.8,
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
+        target_acceptance::Float64 = 0.8
 )
     ld = ASGWBLogDensity(problem, prior; model = model)
     z0 = unconstrained_initial_point(ld, theta0)

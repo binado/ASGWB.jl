@@ -15,21 +15,24 @@ function _require_supported_turing_model(model::AbstractASGWBModel)
 end
 
 """
-    condition_turing_model(turing_model, theta0, prior, sample_only; model=...) -> model
+    condition_turing_model(turing_model, theta0, prior, sample_only; model) -> model
 
 If `sample_only === nothing`, return `model` unchanged (all hyperparameters are sampled).
 
 Otherwise `sample_only` lists the subset of [`hyperparameters`](@ref)(`model`) that remain
 stochastic; all other hyperparameters are **fixed** to the corresponding entries of `theta0`
-using Turing’s conditioning operator `|` (see
+using Turing's conditioning operator `|` (see
 [Turing docs: conditioning on data](https://turinglang.org/docs/core-functionality/#conditioning-on-data)).
+
+`model` must match the forward model used to build the Turing model (and the cache cosmology
+for production runs).
 """
 function condition_turing_model(
         turing_model,
         theta0::NamedTuple,
         prior::ProductNamedTupleDistribution,
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}};
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
+        model::AbstractASGWBModel
 )
     _require_supported_turing_model(model)
     validate_prior(model, prior)
@@ -47,62 +50,69 @@ function condition_turing_model(
     return turing_model | (; (s => ordered_theta0[s] for s in fixed)...)
 end
 
-@model function asgwb_importance_turing_model(
-        asgw_model::AbstractASGWBModel,
-        track::Bool,
-        problem::ImportanceSamplingProblem,
-        prior::ProductNamedTupleDistribution,
-        z_grid::AbstractVector{<:Real},
-        observed_in_band::AbstractVector{<:Real}
-)
-    d = prior.dists
-    H0 ~ d.H0
-    Ωm ~ d.Ωm
+for C in SUPPORTED_COSMOLOGIES
+    flds = cosmology_parameters(C)
+    @eval begin
+        @model function sample_cosmology(c::Val{$C}, d)
+            $([:($f ~ d.$f) for f in flds]...)
+            return (; $(flds...))
+        end
+    end
+end
+
+@model function sample_model_params(m::MadauDickinsonModifiedPropagation, d)
     Ξ₀ ~ d.Ξ₀
     Ξₙ ~ d.Ξₙ
     γ ~ d.γ
     κ ~ d.κ
     zpeak ~ d.zpeak
+    return (; Ξ₀, Ξₙ, γ, κ, zpeak)
+end
 
-    Λ = (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak)
-    terms = evaluate_model_terms(asgw_model, Λ, problem, z_grid)
+@model function asgwb_importance_turing_model(
+        asgw_model::MadauDickinsonModifiedPropagation{C},
+        track::Bool,
+        problem::ImportanceSamplingProblem,
+        prior::ProductNamedTupleDistribution,
+        observed_in_band::AbstractVector{<:Real}
+) where {C <: AbstractCosmology}
+    d = prior.dists
+    cosmo_nt ~ to_submodel(sample_cosmology(Val(C), d), false)
+    model_nt ~ to_submodel(sample_model_params(asgw_model, d), false)
+    Λ = merge(cosmo_nt, model_nt)
+    terms = evaluate_model_terms(
+        asgw_model, Λ, problem, problem.redshift_cache.redshift_grid
+    )
 
-    observed_in_band ~
-    MvNormal(
+    observed_in_band ~ MvNormal(
         terms.spectral_density_in_band,
         Diagonal(problem.observation.sgwb_scale_in_band .^ 2)
     )
 
-    if track
-        m = problem.observation.in_band_mask
-        obs = problem.observation
-        df = frequency_bin_width(obs.frequencies)
-        snr_sq = spectral_snr_squared(
-            terms.spectral_density[m],
-            obs.effective_psd[m],
-            obs.observation_time_sec,
-            df
-        )
-
-        return (;
-            number_of_sources = terms.expected_number_of_sources,
-            effective_sample_size = normalized_ess(terms.weights),
-            spectral_snr_squared = snr_sq,
-            spectral_snr = sqrt(snr_sq)
-        )
-    end
-
-    return nothing
+    track || return nothing
+    obs = problem.observation
+    m = obs.in_band_mask
+    df = frequency_bin_width(obs.frequencies)
+    snr_sq = spectral_snr_squared(
+        terms.spectral_density[m], obs.effective_psd[m], obs.observation_time_sec, df
+    )
+    return (;
+        number_of_sources = terms.expected_number_of_sources,
+        effective_sample_size = normalized_ess(terms.weights),
+        spectral_snr_squared = snr_sq,
+        spectral_snr = sqrt(snr_sq)
+    )
 end
 
 """
-    build_turing_model(problem, prior; track=false, observed_spectral_density=...) -> model
+    build_turing_model(problem, prior; model, track=false, observed_spectral_density=...) -> model
 
 Construct a Turing `DynamicPPL.Model` for the ASGWB importance sampling likelihood.
 
 # Arguments
 - `problem::ImportanceSamplingProblem`: The pre-computed importance sampling cache.
 - `prior::ProductNamedTupleDistribution`: Priors for the hyperparameters.
+- `model::AbstractASGWBModel`: Forward model (must match cache cosmology for production).
 - `track::Bool`: If `true`, the model returns a named tuple of diagnostic quantities
   (ESS, SNR, etc.) alongside the log-joint.
 - `observed_spectral_density`: The "data" to condition on. Defaults to the fiducial
@@ -111,7 +121,7 @@ Construct a Turing `DynamicPPL.Model` for the ASGWB importance sampling likeliho
 function build_turing_model(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
+        model::AbstractASGWBModel,
         track::Bool = false,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
@@ -122,7 +132,6 @@ function build_turing_model(
         track,
         problem,
         prior,
-        problem.redshift_cache.redshift_grid,
         observed_spectral_density[problem.observation.in_band_mask]
     )
 end

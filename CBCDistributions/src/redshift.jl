@@ -177,7 +177,7 @@ function build_redshift_prior(source_frame_fn, cache::CosmologyCache)
     pdf_vals = map(eachindex(z_grid_f)) do i
         @inbounds z = z_grid_f[i]
         @inbounds d_c = cache.d_h * cache.inv_E_integral.cumulative[i]
-        dvc_dz = cache.d_h * d_c^2 / E(z, cache.cosmology.Ωm)
+        dvc_dz = cache.d_h * d_c^2 / E(z, cache.cosmology)
         detector_frame_merger_rate_density(z, dvc_dz, source_frame_fn(z))
     end
     return RedshiftPrior(_cumulative_integral_from_values(z_grid_f, pdf_vals))
@@ -289,20 +289,22 @@ function build_redshift_prior(
 end
 
 function cosmology_and_redshift_prior(
+        cosmology::AbstractCosmology,
         h::NamedTuple,
         spec::RedshiftPriorSpec,
         z_grid::AbstractVector{<:Real} = redshift_grid(spec)
 )
-    cache = CosmologyCache(h, z_grid)
+    cache = CosmologyCache(cosmology, z_grid)
     return cache, build_redshift_prior(h, spec, cache)
 end
 
 function build_redshift_prior(
         h::NamedTuple,
         spec::RedshiftPriorSpec,
+        cosmology::AbstractCosmology,
         z_grid::AbstractVector{<:Real} = redshift_grid(spec)
 )
-    return build_redshift_prior(h, spec, CosmologyCache(h, z_grid))
+    return build_redshift_prior(h, spec, CosmologyCache(cosmology, z_grid))
 end
 
 

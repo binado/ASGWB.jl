@@ -114,7 +114,7 @@ Dimensionless gravitational-wave energy density per logarithmic frequency,
 where ``S_h(f)`` is the strain spectral density (same units as [`spectral_density`](@ref) on fluxes)
 and ``H_0`` is the Hubble constant in **s⁻¹**.
 
-``H_0`` is passed in **km/s/Mpc** (matching hyperparameter `H0` and [`Cosmology`](@ref).`H0`)
+``H_0`` is passed in **km/s/Mpc** (matching hyperparameter `H0` and [`LambdaCDM`](@ref).`H0`)
 and converted internally via [`CBCDistributions.hubble_constant_si`](@ref).
 
 `frequency` and `spectral_density` may be scalars or arrays; they broadcast together (e.g. same-length

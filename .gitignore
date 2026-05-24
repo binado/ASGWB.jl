@@ -1,3 +1,5 @@
+notes
+
 # GWFast ORF reference fixtures (generate with `uv run --script scripts/generate_orf_fixtures.py`)
 ASGWB/test/fixtures/orf_gwfast_reference.npz
 ASGWB/test/fixtures/orf_gwfast_reference_et_triangle.npz
