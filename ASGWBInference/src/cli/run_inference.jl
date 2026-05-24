@@ -268,12 +268,12 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     @info "loading importance cache" path=cache
     problem = load_cache(cache, detectors)
     cache_cosmology = cosmology_type(problem.fiducial_parameters)
-    infer_cosmology = typeof(inference_model).parameters[1]
+    infer_cosmology = cosmology_type(inference_model)
     cache_cosmology === infer_cosmology || throw(
         ArgumentError(
-            "cache cosmology $(cache_cosmology) does not match [model].cosmology " *
-            "($(infer_cosmology)); rebuild the cache or fix config",
-        ),
+        "cache cosmology $(cache_cosmology) does not match [model].cosmology " *
+        "($(infer_cosmology)); rebuild the cache or fix config",
+    ),
     )
     @info "cache loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 

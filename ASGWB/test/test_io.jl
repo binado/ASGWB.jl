@@ -315,13 +315,16 @@ end
         end
 
         p = load_cache(path, _TEST_LOAD_DETS)
-        @test propagation_model(p.fiducial_parameters) isa MadauDickinsonModifiedPropagation{W0CDM}
+        @test propagation_model(p.fiducial_parameters) isa
+              MadauDickinsonModifiedPropagation{W0CDM}
         Λ = fiducial_hyperparameters(p)
         ev = evaluate_model_terms(propagation_model(p.fiducial_parameters), Λ, p)
         @test fiducial_spectral_density(p) ≈ ev.spectral_density
         h_lcdm = canonical_hyperparameters(
             MadauDickinsonModifiedPropagation(),
-            (; (k => Λ[k] for k in hyperparameters(MadauDickinsonModifiedPropagation()))...)
+            (;
+                (k => Λ[k]
+            for k in hyperparameters(MadauDickinsonModifiedPropagation()))...)
         )
         ev_lcdm = evaluate_model_terms(MadauDickinsonModifiedPropagation(), h_lcdm, p)
         @test !(fiducial_spectral_density(p) ≈ ev_lcdm.spectral_density)

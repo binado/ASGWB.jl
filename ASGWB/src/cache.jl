@@ -21,8 +21,9 @@ end
 
 [`MadauDickinsonModifiedPropagation`](@ref) with cosmology type parameter matching `fid`.
 """
-propagation_model(fid::ProposalFiducialParameters) =
+function propagation_model(fid::ProposalFiducialParameters)
     MadauDickinsonModifiedPropagation{cosmology_type(fid)}()
+end
 
 function _fiducial_cosmology_nt(fid::ProposalFiducialParameters)
     C = cosmology_type(fid)

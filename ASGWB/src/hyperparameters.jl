@@ -30,7 +30,8 @@ Hyperparameter symbols owned by the Madau–Dickinson modified-propagation forwa
 """
 model_parameters(::Type{<:MadauDickinsonModifiedPropagation}) = (:Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 
-function hyperparameters(::Type{MadauDickinsonModifiedPropagation{C}}) where {C <: AbstractCosmology}
+function hyperparameters(::Type{MadauDickinsonModifiedPropagation{C}}) where {C <:
+                                                                              AbstractCosmology}
     return (
         cosmology_parameters(C)...,
         model_parameters(MadauDickinsonModifiedPropagation{C})...
@@ -44,8 +45,17 @@ hyperparameters(m::MadauDickinsonModifiedPropagation) = hyperparameters(typeof(m
 
 Construct the cosmology for `model` from live hyperparameter state `h` (delegates to [`CBCDistributions.cosmology`](@ref)).
 """
-cosmology(m::MadauDickinsonModifiedPropagation{C}, h::NamedTuple) where {C <: AbstractCosmology} =
+function cosmology(m::MadauDickinsonModifiedPropagation{C}, h::NamedTuple) where {C <:
+                                                                                  AbstractCosmology}
     cosmology(C, h)
+end
+
+"""
+    cosmology_type(model::MadauDickinsonModifiedPropagation{C}) -> Type{C}
+
+Return the cosmology subtype baked into the forward model's type parameter.
+"""
+cosmology_type(::MadauDickinsonModifiedPropagation{C}) where {C <: AbstractCosmology} = C
 
 function _check_unique_hyperparameters(model::AbstractASGWBModel)
     order = hyperparameters(model)

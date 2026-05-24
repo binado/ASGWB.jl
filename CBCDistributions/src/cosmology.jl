@@ -95,8 +95,8 @@ function cosmology_type(name::AbstractString)
     C = get(_COSMOLOGY_BY_CONFIG_NAME, String(name), nothing)
     C === nothing && throw(
         ArgumentError(
-            "unknown cosmology \"$(name)\"; valid choices: $(sort(collect(keys(_COSMOLOGY_BY_CONFIG_NAME))))",
-        ),
+        "unknown cosmology \"$(name)\"; valid choices: $(sort(collect(keys(_COSMOLOGY_BY_CONFIG_NAME))))",
+    ),
     )
     return C
 end

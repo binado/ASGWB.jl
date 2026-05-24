@@ -47,107 +47,69 @@ function condition_turing_model(
     return turing_model | (; (s => ordered_theta0[s] for s in fixed)...)
 end
 
-function _log_density_given_Λ(
-        Λ::NamedTuple,
-        asgw_model::AbstractASGWBModel,
-        track::Bool,
-        problem::ImportanceSamplingProblem,
-        observed_in_band::AbstractVector{<:Real}
-)
-    terms = evaluate_model_terms(asgw_model, Λ, problem, problem.redshift_cache.redshift_grid)
-    residual = observed_in_band .- terms.spectral_density_in_band
-    log_likelihood = -0.5 * sum(
-        (residual ./ problem.observation.sgwb_scale_in_band) .^ 2 .+
-        log.(2π .* (problem.observation.sgwb_scale_in_band .^ 2)),
-    )
-    if track
-        m = problem.observation.in_band_mask
-        obs = problem.observation
-        df = frequency_bin_width(obs.frequencies)
-        snr_sq = spectral_snr_squared(
-            terms.spectral_density[m],
-            obs.effective_psd[m],
-            obs.observation_time_sec,
-            df
-        )
-        return log_likelihood,
-        (;
-            number_of_sources = terms.expected_number_of_sources,
-            effective_sample_size = normalized_ess(terms.weights),
-            spectral_snr_squared = snr_sq,
-            spectral_snr = sqrt(snr_sq)
-        )
-    end
-    return log_likelihood, nothing
-end
-
-@model function asgwb_importance_turing_model(
-        asgw_model::MadauDickinsonModifiedPropagation{LambdaCDM},
-        track::Bool,
-        problem::ImportanceSamplingProblem,
-        prior::ProductNamedTupleDistribution,
-        observed_in_band::AbstractVector{<:Real}
-)
-    d = prior.dists
+@model function sample_cosmology(c::Val{LambdaCDM}, d)
     H0 ~ d.H0
     Ωm ~ d.Ωm
-    Ξ₀ ~ d.Ξ₀
-    Ξₙ ~ d.Ξₙ
-    γ ~ d.γ
-    κ ~ d.κ
-    zpeak ~ d.zpeak
-
-    Λ = (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak)
-    ll, tracked = _log_density_given_Λ(Λ, asgw_model, track, problem, observed_in_band)
-    Turing.@addlogprob!(ll)
-    return tracked
+    return (; H0, Ωm)
 end
 
-@model function asgwb_importance_turing_model(
-        asgw_model::MadauDickinsonModifiedPropagation{W0CDM},
-        track::Bool,
-        problem::ImportanceSamplingProblem,
-        prior::ProductNamedTupleDistribution,
-        observed_in_band::AbstractVector{<:Real}
-)
-    d = prior.dists
+@model function sample_cosmology(c::Val{W0CDM}, d)
     H0 ~ d.H0
     Ωm ~ d.Ωm
     w0 ~ d.w0
-    Ξ₀ ~ d.Ξ₀
-    Ξₙ ~ d.Ξₙ
-    γ ~ d.γ
-    κ ~ d.κ
-    zpeak ~ d.zpeak
-
-    Λ = (; H0, Ωm, w0, Ξ₀, Ξₙ, γ, κ, zpeak)
-    ll, tracked = _log_density_given_Λ(Λ, asgw_model, track, problem, observed_in_band)
-    Turing.@addlogprob!(ll)
-    return tracked
+    return (; H0, Ωm, w0)
 end
 
-@model function asgwb_importance_turing_model(
-        asgw_model::MadauDickinsonModifiedPropagation{W0WaCDM},
-        track::Bool,
-        problem::ImportanceSamplingProblem,
-        prior::ProductNamedTupleDistribution,
-        observed_in_band::AbstractVector{<:Real}
-)
-    d = prior.dists
+@model function sample_cosmology(c::Val{W0WaCDM}, d)
     H0 ~ d.H0
     Ωm ~ d.Ωm
     w0 ~ d.w0
     wa ~ d.wa
+    return (; H0, Ωm, w0, wa)
+end
+
+@model function sample_model_params(m::MadauDickinsonModifiedPropagation, d)
     Ξ₀ ~ d.Ξ₀
     Ξₙ ~ d.Ξₙ
     γ ~ d.γ
     κ ~ d.κ
     zpeak ~ d.zpeak
+    return (; Ξ₀, Ξₙ, γ, κ, zpeak)
+end
 
-    Λ = (; H0, Ωm, w0, wa, Ξ₀, Ξₙ, γ, κ, zpeak)
-    ll, tracked = _log_density_given_Λ(Λ, asgw_model, track, problem, observed_in_band)
-    Turing.@addlogprob!(ll)
-    return tracked
+@model function asgwb_importance_turing_model(
+        asgw_model::MadauDickinsonModifiedPropagation{C},
+        track::Bool,
+        problem::ImportanceSamplingProblem,
+        prior::ProductNamedTupleDistribution,
+        observed_in_band::AbstractVector{<:Real}
+) where {C <: AbstractCosmology}
+    d = prior.dists
+    cosmo_nt ~ to_submodel(sample_cosmology(Val(C), d), false)
+    model_nt ~ to_submodel(sample_model_params(asgw_model, d), false)
+    Λ = merge(cosmo_nt, model_nt)
+    terms = evaluate_model_terms(
+        asgw_model, Λ, problem, problem.redshift_cache.redshift_grid
+    )
+
+    observed_in_band ~ MvNormal(
+        terms.spectral_density_in_band,
+        Diagonal(problem.observation.sgwb_scale_in_band .^ 2)
+    )
+
+    track || return nothing
+    obs = problem.observation
+    m = obs.in_band_mask
+    df = frequency_bin_width(obs.frequencies)
+    snr_sq = spectral_snr_squared(
+        terms.spectral_density[m], obs.effective_psd[m], obs.observation_time_sec, df
+    )
+    return (;
+        number_of_sources = terms.expected_number_of_sources,
+        effective_sample_size = normalized_ess(terms.weights),
+        spectral_snr_squared = snr_sq,
+        spectral_snr = sqrt(snr_sq)
+    )
 end
 
 """
