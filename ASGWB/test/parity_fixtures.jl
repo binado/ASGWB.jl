@@ -5,8 +5,10 @@
 using ASGWB: canonical_hyperparameters, MadauDickinsonModifiedPropagation
 using Distributions: product_distribution, Uniform
 
+const PARITY_MODEL = MadauDickinsonModifiedPropagation()
+
 const PARITY_THETA = canonical_hyperparameters(
-    MadauDickinsonModifiedPropagation(),
+    PARITY_MODEL,
     (;
         H0 = 70.0,
         Ωm = 0.3,

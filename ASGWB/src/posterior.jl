@@ -3,7 +3,7 @@ using Distributions: logpdf, ProductNamedTupleDistribution
 function target_log_prob_samples(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
+        model::AbstractASGWBModel
 )
     c = cosmology(model, Λ)
     redshift_prior = build_redshift_prior(
@@ -71,7 +71,7 @@ end
 function loglikelihood(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
+        model::AbstractASGWBModel,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
     evaluation = evaluate_model_terms(model, Λ, problem)
@@ -87,7 +87,7 @@ function logposterior(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
+        model::AbstractASGWBModel,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )
     return logpdf(prior, Λ) +

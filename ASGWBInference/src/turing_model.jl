@@ -15,7 +15,7 @@ function _require_supported_turing_model(model::AbstractASGWBModel)
 end
 
 """
-    condition_turing_model(turing_model, theta0, prior, sample_only; model=...) -> model
+    condition_turing_model(turing_model, theta0, prior, sample_only; model) -> model
 
 If `sample_only === nothing`, return `model` unchanged (all hyperparameters are sampled).
 
@@ -23,13 +23,16 @@ Otherwise `sample_only` lists the subset of [`hyperparameters`](@ref)(`model`) t
 stochastic; all other hyperparameters are **fixed** to the corresponding entries of `theta0`
 using Turing's conditioning operator `|` (see
 [Turing docs: conditioning on data](https://turinglang.org/docs/core-functionality/#conditioning-on-data)).
+
+`model` must match the forward model used to build the Turing model (and the cache cosmology
+for production runs).
 """
 function condition_turing_model(
         turing_model,
         theta0::NamedTuple,
         prior::ProductNamedTupleDistribution,
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}};
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation()
+        model::AbstractASGWBModel
 )
     _require_supported_turing_model(model)
     validate_prior(model, prior)
@@ -47,25 +50,14 @@ function condition_turing_model(
     return turing_model | (; (s => ordered_theta0[s] for s in fixed)...)
 end
 
-@model function sample_cosmology(c::Val{LambdaCDM}, d)
-    H0 ~ d.H0
-    Ωm ~ d.Ωm
-    return (; H0, Ωm)
-end
-
-@model function sample_cosmology(c::Val{W0CDM}, d)
-    H0 ~ d.H0
-    Ωm ~ d.Ωm
-    w0 ~ d.w0
-    return (; H0, Ωm, w0)
-end
-
-@model function sample_cosmology(c::Val{W0WaCDM}, d)
-    H0 ~ d.H0
-    Ωm ~ d.Ωm
-    w0 ~ d.w0
-    wa ~ d.wa
-    return (; H0, Ωm, w0, wa)
+for C in SUPPORTED_COSMOLOGIES
+    flds = cosmology_parameters(C)
+    @eval begin
+        @model function sample_cosmology(c::Val{$C}, d)
+            $([:($f ~ d.$f) for f in flds]...)
+            return (; $(flds...))
+        end
+    end
 end
 
 @model function sample_model_params(m::MadauDickinsonModifiedPropagation, d)
@@ -113,13 +105,14 @@ end
 end
 
 """
-    build_turing_model(problem, prior; track=false, observed_spectral_density=...) -> model
+    build_turing_model(problem, prior; model, track=false, observed_spectral_density=...) -> model
 
 Construct a Turing `DynamicPPL.Model` for the ASGWB importance sampling likelihood.
 
 # Arguments
 - `problem::ImportanceSamplingProblem`: The pre-computed importance sampling cache.
 - `prior::ProductNamedTupleDistribution`: Priors for the hyperparameters.
+- `model::AbstractASGWBModel`: Forward model (must match cache cosmology for production).
 - `track::Bool`: If `true`, the model returns a named tuple of diagnostic quantities
   (ESS, SNR, etc.) alongside the log-joint.
 - `observed_spectral_density`: The "data" to condition on. Defaults to the fiducial
@@ -128,7 +121,7 @@ Construct a Turing `DynamicPPL.Model` for the ASGWB importance sampling likeliho
 function build_turing_model(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
-        model::AbstractASGWBModel = MadauDickinsonModifiedPropagation(),
+        model::AbstractASGWBModel,
         track::Bool = false,
         observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
 )

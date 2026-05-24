@@ -10,6 +10,8 @@ using ASGWB:
              W0CDM,
              W0WaCDM,
              cosmology_type,
+             cosmology_parameters,
+             SUPPORTED_COSMOLOGIES,
              evaluate_model_terms,
              canonical_hyperparameters,
              hyperparameters,

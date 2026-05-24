@@ -21,13 +21,17 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         priors = PARITY_PRIORS
         prior_bounds = PARITY_PRIOR_BOUNDS
 
-        model = build_turing_model(cache, priors; track = false)
-        @test Turing.logjoint(model, theta0) ≈ logposterior(theta0, cache, priors) rtol = 1e-6
-        @test condition_turing_model(model, theta0, priors, nothing) === model
-        @test_throws ArgumentError condition_turing_model(model, theta0, priors, ())
-        @test_throws ArgumentError condition_turing_model(model, theta0, priors, (:unknown,))
+        model = build_turing_model(cache, priors; model = PARITY_MODEL, track = false)
+        @test Turing.logjoint(model, theta0) ≈
+              logposterior(theta0, cache, priors; model = PARITY_MODEL) rtol = 1e-6
+        @test condition_turing_model(model, theta0, priors, nothing; model = PARITY_MODEL) ===
+              model
+        @test_throws ArgumentError condition_turing_model(
+            model, theta0, priors, (); model = PARITY_MODEL)
+        @test_throws ArgumentError condition_turing_model(
+            model, theta0, priors, (:unknown,); model = PARITY_MODEL)
 
-        model_track = build_turing_model(cache, priors; track = true)
+        model_track = build_turing_model(cache, priors; model = PARITY_MODEL, track = true)
         returned_nt = Turing.returned(model_track, theta0)
         @test haskey(returned_nt, :effective_sample_size)
         @test isfinite(returned_nt.effective_sample_size)
@@ -41,7 +45,7 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         @test returned_nt.spectral_snr^2 ≈ returned_nt.spectral_snr_squared
 
         # Verify manual NUTS sampling flow
-        sampled_model = condition_turing_model(model, theta0, priors, nothing)
+        sampled_model = condition_turing_model(model, theta0, priors, nothing; model = PARITY_MODEL)
         chain = sample(
             sampled_model,
             Turing.NUTS(3, 0.8),
@@ -56,7 +60,7 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         @test sort(collect(Symbol.(FlexiChains.parameters(chain)))) ==
               sort(collect(keys(theta0)))
 
-        cond_h0 = condition_turing_model(model, theta0, priors, (:H0,))
+        cond_h0 = condition_turing_model(model, theta0, priors, (:H0,); model = PARITY_MODEL)
         chain_h0 = sample(
             cond_h0,
             Turing.NUTS(3, 0.8),

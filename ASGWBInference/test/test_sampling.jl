@@ -28,11 +28,12 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         H0 = Uniform(20.0, 140.0)
     ))
 
-    @test_throws ArgumentError ASGWBLogDensity(cache, reordered_priors)
+    @test_throws ArgumentError ASGWBLogDensity(
+        cache, reordered_priors; model = PARITY_MODEL)
 
-    problem = ASGWBLogDensity(cache, PARITY_PRIORS)
+    problem = ASGWBLogDensity(cache, PARITY_PRIORS; model = PARITY_MODEL)
     ordered_theta0 = (;
-        (k => theta0[k] for k in hyperparameters(MadauDickinsonModifiedPropagation()))...)
+        (k => theta0[k] for k in hyperparameters(PARITY_MODEL))...)
 
     @test unconstrained_initial_point(problem, theta0) ==
           collect(Bijectors.link(PARITY_PRIORS, ordered_theta0))
@@ -45,7 +46,7 @@ end
         priors = PARITY_PRIORS
         prior_bounds = PARITY_PRIOR_BOUNDS
 
-        problem = ASGWBLogDensity(cache, priors)
+        problem = ASGWBLogDensity(cache, priors; model = PARITY_MODEL)
         z0 = unconstrained_initial_point(problem, theta0)
         ad_problem = ad_logdensity(problem)
         logdensity,
@@ -62,7 +63,7 @@ end
 
         samples, stats,
         sampling_problem = sample_with_advancedhmc(
-            cache, priors, theta0; n_adapts = 3, n_samples = 3)
+            cache, priors, theta0; model = PARITY_MODEL, n_adapts = 3, n_samples = 3)
 
         @test sampling_problem isa ASGWBLogDensity
         @test length(samples) == 3

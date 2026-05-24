@@ -298,7 +298,8 @@ function _run(;
     LogDensityProblems.logdensity_and_gradient(ad_ld, z0)
     LogDensityProblems.logdensity(lf, z0_turing)
     LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
-    logposterior(h, problem, priors; observed_spectral_density = observed)
+    logposterior(h, problem, priors;
+        model = INFERENCE_MODEL, observed_spectral_density = observed)
 
     # ------------------------------------------------------------------
     # BenchmarkTools suite
@@ -317,6 +318,7 @@ function _run(;
         $h,
         $problem,
         $priors;
+        model = $INFERENCE_MODEL,
         observed_spectral_density = $observed
     )
 

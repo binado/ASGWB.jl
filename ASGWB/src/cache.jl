@@ -25,12 +25,27 @@ function propagation_model(fid::ProposalFiducialParameters)
     MadauDickinsonModifiedPropagation{cosmology_type(fid)}()
 end
 
-function _fiducial_cosmology_nt(fid::ProposalFiducialParameters)
+function _fiducial_cosmology_nt_fields(fid::ProposalFiducialParameters)
     C = cosmology_type(fid)
     base = (H0 = fid.H0, Ωm = fid.Ωm)
     C === LambdaCDM && return base
     C === W0CDM && return (; base..., w0 = fid.w0)
     return (; base..., w0 = fid.w0, wa = fid.wa)
+end
+
+"""
+    fiducial_cosmology(fid::ProposalFiducialParameters) -> AbstractCosmology
+
+Cosmology instance encoded on cache fiducial hyperparameters (`H0`, `Ωm`, optional `w0`/`wa`).
+"""
+function fiducial_cosmology(fid::ProposalFiducialParameters)
+    return cosmology(cosmology_type(fid), _fiducial_cosmology_nt_fields(fid))
+end
+
+function _fiducial_cosmology_nt(fid::ProposalFiducialParameters)
+    c = fiducial_cosmology(fid)
+    fn = fieldnames(typeof(c))
+    return NamedTuple{fn}(Tuple(getfield(c, f) for f in fn))
 end
 
 """
@@ -101,7 +116,7 @@ function reconstruct_dgw_fid_sq(
         z::AbstractVector{<:Real},
         fid::ProposalFiducialParameters
 )::Vector{Float64}
-    c = cosmology(cosmology_type(fid), _fiducial_cosmology_nt(fid))
+    c = fiducial_cosmology(fid)
     d_l = luminosity_distance.(z, c)
     d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
     return Float64.(d_gw .^ 2)
@@ -121,7 +136,7 @@ function reconstruct_cached_flux_over_dgw2(
 )::Matrix{Float64}
     size(cached_flux, 2) == length(z) ||
         throw(ArgumentError("cached_flux column count must match redshift sample count"))
-    c = cosmology(cosmology_type(fid), _fiducial_cosmology_nt(fid))
+    c = fiducial_cosmology(fid)
     d_l = luminosity_distance.(z, c)
     d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
     scale_row = reshape(Float64.((d_l ./ d_gw) .^ 2), 1, :)
