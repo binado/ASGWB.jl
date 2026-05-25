@@ -24,6 +24,7 @@ begin
 
     using CairoMakie
     using JLD2
+    using LaTeXStrings
     using PairPlots
     using Statistics
     using Turing
@@ -84,6 +85,31 @@ function chain_colors(cfg::PlotConfig, n::Integer; alpha::Real = cfg.alpha)
     return [(cfg.palette[mod1(i, length(cfg.palette))], alpha) for i in 1:n]
 end
 
+# %%
+const PARAM_LABELS = Dict{Symbol, LaTeXString}(
+    :H0 => L"H_0",
+    :Ωm => L"\Omega_m",
+    :w0 => L"w_0",
+    :wa => L"w_a",
+    :Ξ₀ => L"\Xi_0",
+    :Ξₙ => L"\Xi_n",
+    :γ => L"\gamma",
+    :κ => L"\kappa",
+    :zpeak => L"z_{\mathrm{peak}}"
+)
+
+param_label(sym::Symbol) = get(PARAM_LABELS, sym, LaTeXString(string(sym)))
+
+function relabel_axes!(fap, lookup::Dict{Symbol, LaTeXString})
+    fig = fap isa Makie.Figure ? fap : fap.figure
+    for elem in fig.content
+        elem isa Makie.Axis || continue
+        sym = Symbol(string(elem.title[]))
+        haskey(lookup, sym) && (elem.title[] = lookup[sym])
+    end
+    return fap
+end
+
 # %% [markdown]
 # ## Loading chains
 
@@ -130,7 +156,9 @@ summarystats(chain)
 
 # %%
 begin
-    fig = FlexiChains.mtraceplot(chain; color = chain_colors(PLOT_CONFIG, size(chain, 2)))
+    fig = FlexiChains.mtraceplot(
+        chain; color = chain_colors(PLOT_CONFIG, size(chain, 2)), legend_position = :right)
+    relabel_axes!(fig, PARAM_LABELS)
     save_figure(fig, "traceplot")
     fig
 end
@@ -140,131 +168,23 @@ begin
     n_draws = size(chain, 1)
     autocor_maxlag = min(100, max(1, n_draws - 1))
     fig = FlexiChains.mautocorplot(
-        chain; lags = 1:autocor_maxlag, color = chain_colors(PLOT_CONFIG, size(chain, 2)))
+        chain;
+        lags = 1:autocor_maxlag,
+        color = chain_colors(PLOT_CONFIG, size(chain, 2)),
+        legend_position = :right
+    )
+    relabel_axes!(fig, PARAM_LABELS)
     save_figure(fig, "autocorplot")
     fig
 end
 
 # %%
 begin
-    fig = FlexiChains.mmeanplot(chain; color = chain_colors(PLOT_CONFIG, size(chain, 2)))
+    fig = FlexiChains.mmeanplot(
+        chain; color = chain_colors(PLOT_CONFIG, size(chain, 2)), legend_position = :right)
+    relabel_axes!(fig, PARAM_LABELS)
     save_figure(fig, "meanplot")
     fig
-end
-
-# %%
-function _ensure_internal_array(chain::FlexiChain, name::Symbol)
-    key = Extra(name)
-    key in keys(chain) || return nothing
-    return Array(chain[key])
-end
-
-function _moving_average(y::AbstractVector, window::Int)
-    window <= 1 && return Float64.(y)
-
-    values = Float64.(y)
-    prefix = cumsum(vcat(0.0, values))
-    half_window = window ÷ 2
-
-    return map(eachindex(values)) do i
-        lo = max(firstindex(values), i - half_window)
-        hi = min(lastindex(values), lo + window - 1)
-        lo = max(firstindex(values), hi - window + 1)
-        (prefix[hi + 1] - prefix[lo]) / (hi - lo + 1)
-    end
-end
-
-function _plot_divergences!(ax, A)
-    for ch in axes(A, 2)
-        draws = findall(!iszero, A[:, ch])
-        isempty(draws) && continue
-        Makie.scatter!(
-            ax, draws, fill(ch, length(draws)); color = (:red, 0.8), markersize = 4)
-    end
-
-    Makie.ylims!(ax, 0.5, size(A, 2) + 0.5)
-    ax.ylabel = "chain"
-    return nothing
-end
-
-function _plot_traces!(ax, A, sym::Symbol; colors, smooth_window::Int, draw_stride::Int)
-    stride = clamp(draw_stride, 1, size(A, 1))
-    plot_min, plot_max = Inf, -Inf
-
-    for ch in axes(A, 2)
-        x = collect(axes(A, 1))
-        y = Float64.(A[:, ch])
-
-        if sym == :step_size
-            keep = y .> 0
-            x, y = x[keep], y[keep]
-            isempty(y) && continue
-            plot_min = min(plot_min, minimum(y))
-            plot_max = max(plot_max, maximum(y))
-        end
-
-        color = colors[mod1(ch, length(colors))]
-        sym == :step_size || Makie.lines!(ax, x[1:stride:end], y[1:stride:end];
-            color = Makie.RGBAf(color, 0.25), linewidth = 0.8)
-        Makie.lines!(ax, x, _moving_average(y, smooth_window);
-            color = Makie.RGBAf(color, 1.0), linewidth = 2, label = "chain $(ch)")
-    end
-
-    size(A, 2) > 1 && axislegend(ax; position = :rb, framevisible = false)
-
-    if sym == :step_size && isfinite(plot_min) && isfinite(plot_max)
-        lo = max(plot_min / sqrt(10), floatmin(Float64))
-        hi = max(plot_max * sqrt(10), lo * 10)
-        Makie.ylims!(ax, lo, hi)
-        ax.yscale = log10
-    end
-
-    return nothing
-end
-
-function plot_sampler_diagnostics(
-        chain::FlexiChain;
-        cfg::PlotConfig = PLOT_CONFIG,
-        stats_syms = [:step_size, :acceptance_rate, :tree_depth, :numerical_error],
-        figsize = (1000, 800))
-    cols = 2
-    fig = Figure(; size = figsize)
-    colors = cfg.palette
-
-    for (i, sym) in enumerate(stats_syms)
-        ax = Axis(fig[cld(i, cols), mod1(i, cols)]; title = string(sym), xlabel = "draw")
-        A = _ensure_internal_array(chain, sym)
-        if A === nothing
-            Makie.text!(ax, 0.5, 0.5, "missing", align = (:center, :center))
-        elseif sym in (:diverging, :numerical_error)
-            _plot_divergences!(ax, A)
-        else
-            _plot_traces!(ax, A, sym;
-                colors, smooth_window = cfg.smooth_window, draw_stride = cfg.draw_stride)
-        end
-    end
-
-    return fig
-end
-
-begin
-    fig = plot_sampler_diagnostics(chain)
-    save_figure(fig, "sampler_diagnostics")
-    fig
-end
-
-# %%
-begin
-    energy_key = Extra(:hamiltonian_energy)
-    if energy_key in keys(chain)
-        fig = FlexiChains.mtraceplot(
-            chain, energy_key; color = chain_colors(PLOT_CONFIG, size(chain, 2)))
-        save_figure(fig, "energyplot")
-        fig
-    else
-        @info "skipping energyplot: $(energy_key) not present in chain"
-        nothing
-    end
 end
 
 # %% [markdown]
@@ -284,16 +204,18 @@ begin
                     strokewidth = PLOT_CONFIG.strokewidth
                 )
             );
-            pool_chains = true
+            pool_chains = true,
+            labels = PARAM_LABELS
         )
     else
-        Makie.density(chain;
+        fap = Makie.density(chain;
             pool_chains = true,
             legend_position = :none,
             color = (PLOT_CONFIG.primary_color, PLOT_CONFIG.alpha),
             strokecolor = PLOT_CONFIG.primary_color,
             strokewidth = PLOT_CONFIG.strokewidth
         )
+        relabel_axes!(fap, PARAM_LABELS)
     end
     save_figure(fig, length(chain_params) >= 2 ? "pairplot" : "posterior_density")
     fig
