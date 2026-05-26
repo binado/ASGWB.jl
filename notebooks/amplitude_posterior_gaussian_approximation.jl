@@ -34,8 +34,7 @@ begin
     Pkg.activate(@__DIR__)
     Pkg.instantiate()
 
-    include(joinpath(@__DIR__, "plotting", "Plotting.jl"))
-    using .Plotting
+    using NotebookSupport
 
     using CairoMakie
     using Distributions

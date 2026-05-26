@@ -1,4 +1,4 @@
-module Plotting
+module NotebookSupport
 
 using CairoMakie
 using FlexiChains

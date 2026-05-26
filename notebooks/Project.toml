@@ -1,3 +1,7 @@
+name = "NotebookSupport"
+uuid = "712e5b67-f2a6-4ad3-9012-d896aa0ccef2"
+version = "0.1.0"
+
 [deps]
 ASGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 ASGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
