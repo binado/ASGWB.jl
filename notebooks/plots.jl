@@ -158,43 +158,9 @@ function margin_quantile_latex_formatter(low, mid, high)
     end
 end
 
-function _param_from_axis_label(lbl, labels::Dict{Symbol, LaTeXString})
-    for (sym, latex) in labels
-        lbl == latex && return sym
-    end
-    return nothing
-end
-
-function _marginal_quantile_values(dat, quantiles)
-    values = collect(skipmissing(vec(dat)))
-    isempty(values) && return nothing
-    qs = quantile(values, quantiles)
-    mid = qs[2]
-    return (; low = mid - qs[1], mid, high = qs[3] - mid)
-end
-
-"""Set diagonal marginal quantile titles to LaTeX after `pairplot` (PairPlots `MarginQuantileText` uses `Makie.rich`, not LaTeX)."""
-function apply_latex_marginal_quantile_titles!(
-        fap,
-        chain,
-        params;
-        formatter = margin_quantile_latex_formatter,
-        quantiles = (0.16, 0.5, 0.84),
-        labels = PARAM_LABELS,
-)
-    fig = fap isa Makie.Figure ? fap : fap.figure
-    for ax in fig.content
-        ax isa Makie.Axis || continue
-        ax.xlabel[] == ax.ylabel[] || continue
-        sym = _param_from_axis_label(ax.xlabel[], labels)
-        sym === nothing && continue
-        sym in params || continue
-        vals = _marginal_quantile_values(chain[sym], quantiles)
-        vals === nothing && continue
-        ax.title[] = formatter(vals.low, vals.mid, vals.high)
-        ax.subtitlevisible[] = false
-    end
-    return fap
+# PairPlots passes LaTeX formatters through `Makie.rich`, which only accepts String/RichText.
+function Makie.rich(prev, title::LaTeXString; kwargs...)
+    return title
 end
 
 function relabel_axes!(fap, lookup::Dict{Symbol, LaTeXString})
@@ -330,9 +296,9 @@ begin
                 strokecolor = PLOT_CONFIG.primary_color,
                 strokewidth = PLOT_CONFIG.strokewidth
             ),
+            PairPlots.MarginQuantileText(margin_quantile_latex_formatter; color = :black),
         )
         fig = pairplot(chn => viz, truths; labels = PARAM_LABELS)
-        apply_latex_marginal_quantile_titles!(fig, chn, chain_params)
     else
         fap = Makie.density(chn;
             pool_chains = true,
