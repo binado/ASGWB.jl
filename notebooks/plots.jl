@@ -26,7 +26,6 @@ begin
     using JLD2
     using LaTeXStrings
     using PairPlots
-    using Printf
     using Statistics
     using Turing
     using FlexiChains
@@ -112,51 +111,29 @@ const PARAM_LABELS = Dict{Symbol, LaTeXString}(
 
 param_label(sym::Symbol) = get(PARAM_LABELS, sym, LaTeXString(string(sym)))
 
-_latex_asymmetric(digits::Integer, mid, low, high) =
-    latexstring(@sprintf("%.*f_{-%.*f}^{+%.*f}", digits, mid, digits, low, digits, high))
+function richtext_to_latex(x::AbstractString)
+    x == " ± " && return " \\pm "
+    x == "( " && return "("
+    x == ") × 10" && return ") \\times 10"
+    occursin('×', x) && return replace(x, "×" => "\\times")
+    return x
+end
 
-"""LaTeX marginal quantile title; mirrors `PairPlots.margin_confidence_default_formatter`."""
-function margin_quantile_latex_formatter(low, mid, high)
-    largest_error = max(abs(high), abs(low))
-    if largest_error == 0
-        digits_after_dot = mid == 0 ? 0 : max(0, 1 - round(Int, log10(abs(mid))))
-        return latexstring(@sprintf("%.*f", digits_after_dot, mid))
-    end
-
-    digits_after_dot = max(0, 1 - round(Int, log10(largest_error)))
-    use_scientific = digits_after_dot > 4
-    exp_label = digits_after_dot - 1
-
-    if use_scientific
-        scale = 10^(exp_label)
-        mid_s = mid * scale
-        low_s = low * scale
-        high_s = high * scale
-        exp_str = @sprintf("%d", -exp_label)
-        if round(low, digits = digits_after_dot) == round(high, digits = digits_after_dot)
-            return latexstring(@sprintf("(%.1f \\pm %.1f) \\times 10^{%s}",
-                mid_s,
-                high_s,
-                exp_str,))
-        else
-            return latexstring(@sprintf("(%.1f_{-%.1f}^{+%.1f}) \\times 10^{%s}",
-                mid_s,
-                low_s,
-                high_s,
-                exp_str,))
-        end
-    end
-
-    if round(low, digits = digits_after_dot) == round(high, digits = digits_after_dot)
-        return latexstring(@sprintf("%.*f \\pm %.*f",
-            digits_after_dot,
-            mid,
-            digits_after_dot,
-            high,))
+function richtext_to_latex(rt::Makie.RichText)
+    if rt.type === :leftsubsup
+        low, high = rt.children
+        return "_{$(low)}^{$(high)}"
+    elseif rt.type === :sup
+        return "^{$(only(rt.children))}"
     else
-        return _latex_asymmetric(digits_after_dot, mid, low, high)
+        return join(richtext_to_latex(c) for c in rt.children)
     end
 end
+
+richtext_to_latex(x) = string(x)
+
+margin_quantile_latex_formatter(low, mid, high) =
+    latexstring(richtext_to_latex(PairPlots.margin_confidence_default_formatter(low, mid, high)))
 
 # PairPlots passes LaTeX formatters through `Makie.rich`, which only accepts String/RichText.
 function Makie.rich(prev, title::LaTeXString; kwargs...)
