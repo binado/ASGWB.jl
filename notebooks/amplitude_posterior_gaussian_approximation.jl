@@ -16,13 +16,17 @@
 # %% [markdown]
 # # Posterior vs. Fisher-Gaussian approximation
 #
-# Overlays `Normal(μ_fid, 1/√SNR)` on the empirical 1D posterior density.
+# Overlays `Normal(μ_fid, 1/SNR)` on the empirical 1D posterior density.
 # Requires a **single-parameter chain** (e.g. produced with `sample_only = (:H0,)`)
 # and the importance-sampling **cache HDF5** that the run was built from.
 #
 # - `μ_fid` — fiducial value of the parameter (read from the cache via `fiducial_hyperparameters`)
 # - `SNR` — matched-filter SNR of the fiducial spectral density against the network PSD
-# - `σ_Fisher = 1/√SNR` — the Cramér-Rao lower bound for a linear amplitude parameter
+# - `σ_Fisher = 1/SNR` — the Cramér-Rao lower bound for a linear amplitude parameter
+#
+# This is intentionally an amplitude/SNR approximation with all other parameters fixed. It does
+# not compute the local curvature for the sampled hyperparameter or apply parameter Jacobians such
+# as `A = 1 / H0`.
 
 # %%
 begin
@@ -87,7 +91,7 @@ end
 
 # %%
 begin
-    @info "loading importance cache" path = cache_path detectors = join(
+    @info "loading importance cache" path=cache_path detectors=join(
         (d.name for d in detectors), ",")
     problem = load_cache(cache_path, detectors)
 
@@ -99,13 +103,13 @@ begin
     μ_fid = fid_params[param_sym]
 
     sd_fid = problem.observation.fiducial_spectral_density
-    m      = problem.observation.in_band_mask
-    psd    = problem.observation.effective_psd
-    T      = problem.observation.observation_time_sec
-    df     = frequency_bin_width(problem.observation.frequencies)
+    m = problem.observation.in_band_mask
+    psd = problem.observation.effective_psd
+    T = problem.observation.observation_time_sec
+    df = frequency_bin_width(problem.observation.frequencies)
 
-    snr      = spectral_snr(sd_fid[m], psd[m], T, df)
-    σ_fisher = 1 / sqrt(snr)
+    snr = spectral_snr(sd_fid[m], psd[m], T, df)
+    σ_fisher = 1 / snr
 
     @info "Fisher-Gaussian parameters" μ_fid snr σ_fisher
 end
@@ -116,22 +120,22 @@ end
 # %%
 begin
     samples = vec(Array(chain[Parameter(param_name)]))
-    lo, hi  = extrema(samples)
-    pad     = 0.05 * (hi - lo)
-    xs      = range(
+    lo, hi = extrema(samples)
+    pad = 0.05 * (hi - lo)
+    xs = range(
         min(lo - pad, μ_fid - 4σ_fisher),
         max(hi + pad, μ_fid + 4σ_fisher);
         length = 400
     )
 
     fig = Figure(size = (800, 500))
-    ax  = Axis(fig[1, 1]; xlabel = string(param_name), ylabel = "density")
+    ax = Axis(fig[1, 1]; xlabel = string(param_name), ylabel = "density")
 
     Makie.density!(ax, chain, Parameter(param_name);
         pool_chains = true, label = "posterior")
     Makie.lines!(ax, collect(xs), pdf.(Normal(μ_fid, σ_fisher), xs);
         color = :black, linewidth = 2,
-        label = "Normal(μ_fid, 1/√SNR)")
+        label = "Normal(μ_fid, 1/SNR)")
     Makie.vlines!(ax, [μ_fid];
         color = (:black, 0.5), linestyle = :dash, label = "fiducial")
 
