@@ -86,7 +86,8 @@ end
     @test fiducial_cosmology(w0_fid) isa W0CDM
     @test fiducial_cosmology(cpl_fid) isa W0WaCDM
     @test ASGWB._fiducial_cosmology_nt(lcdm_fid) == (H0 = base.H0, Ωm = base.Ωm)
-    @test ASGWB._fiducial_cosmology_nt(w0_fid) == (; (H0 = base.H0, Ωm = base.Ωm)..., w0 = -0.9)
+    @test ASGWB._fiducial_cosmology_nt(w0_fid) ==
+          (; (H0 = base.H0, Ωm = base.Ωm)..., w0 = -0.9)
     @test ASGWB._fiducial_cosmology_nt(cpl_fid) ==
           (; (H0 = base.H0, Ωm = base.Ωm)..., w0 = -0.9, wa = 0.2)
 end

@@ -24,7 +24,8 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         model = build_turing_model(cache, priors; model = PARITY_MODEL, track = false)
         @test Turing.logjoint(model, theta0) ≈
               logposterior(theta0, cache, priors; model = PARITY_MODEL) rtol = 1e-6
-        @test condition_turing_model(model, theta0, priors, nothing; model = PARITY_MODEL) ===
+        @test condition_turing_model(
+            model, theta0, priors, nothing; model = PARITY_MODEL) ===
               model
         @test_throws ArgumentError condition_turing_model(
             model, theta0, priors, (); model = PARITY_MODEL)
@@ -45,7 +46,8 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         @test returned_nt.spectral_snr^2 ≈ returned_nt.spectral_snr_squared
 
         # Verify manual NUTS sampling flow
-        sampled_model = condition_turing_model(model, theta0, priors, nothing; model = PARITY_MODEL)
+        sampled_model = condition_turing_model(
+            model, theta0, priors, nothing; model = PARITY_MODEL)
         chain = sample(
             sampled_model,
             Turing.NUTS(3, 0.8),
@@ -60,7 +62,8 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         @test sort(collect(Symbol.(FlexiChains.parameters(chain)))) ==
               sort(collect(keys(theta0)))
 
-        cond_h0 = condition_turing_model(model, theta0, priors, (:H0,); model = PARITY_MODEL)
+        cond_h0 = condition_turing_model(
+            model, theta0, priors, (:H0,); model = PARITY_MODEL)
         chain_h0 = sample(
             cond_h0,
             Turing.NUTS(3, 0.8),
