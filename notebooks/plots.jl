@@ -26,6 +26,7 @@ begin
     using JLD2
     using LaTeXStrings
     using PairPlots
+    using Printf
     using Statistics
     using Turing
     using FlexiChains
@@ -110,6 +111,91 @@ const PARAM_LABELS = Dict{Symbol, LaTeXString}(
 )
 
 param_label(sym::Symbol) = get(PARAM_LABELS, sym, LaTeXString(string(sym)))
+
+_latex_asymmetric(digits::Integer, mid, low, high) =
+    latexstring(@sprintf("%.*f_{-%.*f}^{+%.*f}", digits, mid, digits, low, digits, high))
+
+"""LaTeX marginal quantile title; mirrors `PairPlots.margin_confidence_default_formatter`."""
+function margin_quantile_latex_formatter(low, mid, high)
+    largest_error = max(abs(high), abs(low))
+    if largest_error == 0
+        digits_after_dot = mid == 0 ? 0 : max(0, 1 - round(Int, log10(abs(mid))))
+        return latexstring(@sprintf("%.*f", digits_after_dot, mid))
+    end
+
+    digits_after_dot = max(0, 1 - round(Int, log10(largest_error)))
+    use_scientific = digits_after_dot > 4
+    exp_label = digits_after_dot - 1
+
+    if use_scientific
+        scale = 10^(exp_label)
+        mid_s = mid * scale
+        low_s = low * scale
+        high_s = high * scale
+        exp_str = @sprintf("%d", -exp_label)
+        if round(low, digits = digits_after_dot) == round(high, digits = digits_after_dot)
+            return latexstring(@sprintf("(%.1f \\pm %.1f) \\times 10^{%s}",
+                mid_s,
+                high_s,
+                exp_str,))
+        else
+            return latexstring(@sprintf("(%.1f_{-%.1f}^{+%.1f}) \\times 10^{%s}",
+                mid_s,
+                low_s,
+                high_s,
+                exp_str,))
+        end
+    end
+
+    if round(low, digits = digits_after_dot) == round(high, digits = digits_after_dot)
+        return latexstring(@sprintf("%.*f \\pm %.*f",
+            digits_after_dot,
+            mid,
+            digits_after_dot,
+            high,))
+    else
+        return _latex_asymmetric(digits_after_dot, mid, low, high)
+    end
+end
+
+function _param_from_axis_label(lbl, labels::Dict{Symbol, LaTeXString})
+    for (sym, latex) in labels
+        lbl == latex && return sym
+    end
+    return nothing
+end
+
+function _marginal_quantile_values(dat, quantiles)
+    values = collect(skipmissing(vec(dat)))
+    isempty(values) && return nothing
+    qs = quantile(values, quantiles)
+    mid = qs[2]
+    return (; low = mid - qs[1], mid, high = qs[3] - mid)
+end
+
+"""Set diagonal marginal quantile titles to LaTeX after `pairplot` (PairPlots `MarginQuantileText` uses `Makie.rich`, not LaTeX)."""
+function apply_latex_marginal_quantile_titles!(
+        fap,
+        chain,
+        params;
+        formatter = margin_quantile_latex_formatter,
+        quantiles = (0.16, 0.5, 0.84),
+        labels = PARAM_LABELS,
+)
+    fig = fap isa Makie.Figure ? fap : fap.figure
+    for ax in fig.content
+        ax isa Makie.Axis || continue
+        ax.xlabel[] == ax.ylabel[] || continue
+        sym = _param_from_axis_label(ax.xlabel[], labels)
+        sym === nothing && continue
+        sym in params || continue
+        vals = _marginal_quantile_values(chain[sym], quantiles)
+        vals === nothing && continue
+        ax.title[] = formatter(vals.low, vals.mid, vals.high)
+        ax.subtitlevisible[] = false
+    end
+    return fap
+end
 
 function relabel_axes!(fap, lookup::Dict{Symbol, LaTeXString})
     fig = fap isa Makie.Figure ? fap : fap.figure
@@ -244,9 +330,9 @@ begin
                 strokecolor = PLOT_CONFIG.primary_color,
                 strokewidth = PLOT_CONFIG.strokewidth
             ),
-            PairPlots.MarginQuantileText(color = :black)
         )
-        pairplot(chn => viz, truths; labels = PARAM_LABELS)
+        fig = pairplot(chn => viz, truths; labels = PARAM_LABELS)
+        apply_latex_marginal_quantile_titles!(fig, chn, chain_params)
     else
         fap = Makie.density(chn;
             pool_chains = true,
