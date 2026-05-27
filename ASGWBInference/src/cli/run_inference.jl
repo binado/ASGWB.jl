@@ -233,8 +233,9 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     mkpath(output_dir)
 
     timestamp = format(now(), "yyyymmdd-HHMMSS")
+    det_suffix = join((d.name for d in detectors), ",")
     params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
-    base = "$(output_prefix)-$(params_suffix)-seed$(seed)-$(timestamp)"
+    base = "$(output_prefix)-$(params_suffix)-det=$(det_suffix)-seed$(seed)-$(timestamp)"
     output_jld2 = joinpath(output_dir, "$base.jld2")
 
     selected_priors = select_priors(PRIORS, model_params)
