@@ -40,14 +40,14 @@ julia --project=ASGWBInference -e 'using Pkg; Pkg.test()'
 
 Inference is driven by a TOML configuration file. Paths in the TOML that are not absolute are resolved relative to **that TOML file’s directory** (not necessarily the repo root).
 
-*Note: the package currently does not support waveform generation, so we expect an input cache file containing intrinsic parameter samples and their waveforms. See [scripts/generate_waveforms.py](./scripts/generate_waveforms.py) for a standalone python script that does this.*
+*Note: the package currently does not support waveform generation in Julia, so we expect a **waveform bundle** (`bundle.h5`) plus a matching **fiducial snapshot** (`cosmology.toml`). The bundle stores per-sample intrinsic parameters and per-frequency fluxes; the TOML records cosmology, population, and observation metadata. A SHA-256 fingerprint in the bundle must match the TOML file on disk. See [scripts/generate_waveforms.py](./scripts/generate_waveforms.py) for a standalone Python waveform accumulator (legacy layout; production bundles should follow `ASGWB.save_bundle` / `ASGWB.load_problem`).*
 
 ### Configuration
 
 1. Copy or edit a config under [`config/`](config/), e.g. [`config/run_inference.toml`](config/run_inference.toml).
-2. Set `cache_path` to an HDF5 importance cache (see `ASGWB.load_cache` in the package docs).
+2. Set `bundle_path` and `cosmology_path` (see [`ASGWB.load_problem`](ASGWB/src/io.jl) in the package docs).
 3. Adjust `detectors`, `sample_only`, `[init]`, and `[sampler]` (`n_samples`, `num_chains`, `checkpoint_every`, etc.).
-4. Optional `[model]` / `output_dir` / `output_prefix` for cosmology model and chain output location.
+4. Optional `[model].cosmology` / `output_dir` / `output_prefix` for inference cosmology type and chain output location.
 
 For a short smoke run (few samples, `H0` only), use [`config/run_inference_smoke_h0.toml`](config/run_inference_smoke_h0.toml).
 

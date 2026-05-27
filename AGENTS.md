@@ -23,7 +23,7 @@ Use existing Unicode scientific identifiers, including `Ωm`, `Ξ₀`, `Ξₙ`, 
 
 ## Testing Guidelines
 
-Tests use Julia's standard `Test` framework and are orchestrated by `ASGWB/test/runtests.jl`. Add new test files to `runtests.jl`; otherwise they will not run in CI or `Pkg.test()`. Prefer focused numerical tests with explicit tolerances for cosmology, redshift integrals, likelihoods, and interpolation behavior. Minimal importance caches for tests are written on demand via `parity_cache_path` (see `ASGWB/test/parity_test_cache.jl`); shared smoke-test hyperparameters live in `ASGWB/test/parity_fixtures.jl`. Production inference (`run_inference.jl`) always loads real cache files from `cache_path` in TOML.
+Tests use Julia's standard `Test` framework and are orchestrated by `ASGWB/test/runtests.jl`. Add new test files to `runtests.jl`; otherwise they will not run in CI or `Pkg.test()`. Prefer focused numerical tests with explicit tolerances for cosmology, redshift integrals, likelihoods, and interpolation behavior. Minimal bundle fixtures for tests are written on demand via `parity_bundle_dir` (see `ASGWB/test/parity_test_cache.jl`); shared smoke-test hyperparameters live in `ASGWB/test/parity_fixtures.jl`. Production inference (`run_inference.jl`) loads `bundle_path` and `cosmology_path` from TOML via `ASGWB.load_problem`.
 
 Run `just test` before opening a pull request. For narrow changes, also run the closest individual test file during development with `julia --project=ASGWB ASGWB/test/test_<area>.jl`.
 
@@ -35,4 +35,4 @@ Pull requests should include a short summary, testing performed, and links to re
 
 ## Architecture Notes
 
-The main inference flow is cache loading, redshift bundle construction, importance weighting, spectral-density evaluation, and posterior sampling. Respect matrix layout conventions: cached spectral flux arrays are `(n_freq, n_samples)` in memory, and intrinsic proposal vectors are `(n_samples, n_intrinsic)`.
+The main inference flow is bundle + cosmology loading (`load_problem`), redshift grid caching, importance weighting, spectral-density evaluation, and posterior sampling. Respect matrix layout conventions: cached spectral flux arrays are `(n_freq, n_samples)` in memory, and intrinsic proposal vectors are `(n_samples, n_intrinsic)`.

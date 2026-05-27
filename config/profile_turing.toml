@@ -1,4 +1,5 @@
-cache_path = "parity:posterior"
+bundle_path = "parity:posterior"
+cosmology_path = "parity:posterior"
 detectors = ["H1", "L1"]
 seed = 1
 

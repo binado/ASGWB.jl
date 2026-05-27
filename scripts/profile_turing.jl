@@ -10,7 +10,7 @@
 # Sites under investigation:
 #   - CBCDistributions/src/cosmology.jl   quadgk inside comoving_distance
 #   - ASGWB/src/redshift.jl               differential_comoving_volume on z_grid
-#   - ASGWB/src/cache.jl, importance.jl   luminosity_distance per proposal sample
+#   - ASGWB/src/reconstruction.jl, importance.jl   luminosity_distance per proposal sample
 #   - ASGWBInference/src/turing_model.jl  DynamicPPL model being profiled
 #
 # This script is *measurement only*: it does not edit any ASGWB/src/ files.
@@ -28,7 +28,7 @@ using ASGWBInference.InferenceImpl:
                                     ad_logdensity,
                                     unconstrained_initial_point
 using ASGWB:
-             load_cache,
+             load_problem,
              cosmology_and_redshift_prior,
              compute_importance_weights,
              merger_rate_per_sec,
@@ -76,6 +76,27 @@ function _require_string_array(settings::Dict, key::AbstractString)
     all(x -> x isa AbstractString, v) ||
         throw(ArgumentError("TOML key $(repr(key)) must be an array of strings"))
     return Vector{String}(v)
+end
+
+function _resolve_problem_paths(
+        bundle_path::String,
+        cosmology_path::String,
+        base::AbstractString,
+)
+    if startswith(bundle_path, "parity:")
+        isdefined(@__MODULE__, :resolve_parity_bundle_dir) ||
+            include(_PARITY_TEST_CACHE)
+        dir = resolve_parity_bundle_dir(bundle_path)
+        dir === nothing && throw(
+            ArgumentError("unknown parity bundle alias $(repr(bundle_path))"),
+        )
+        return joinpath(dir, "bundle.h5"), joinpath(dir, "cosmology.toml")
+    end
+    resolved_bundle = isabspath(bundle_path) ? bundle_path : normpath(joinpath(base, bundle_path))
+    resolved_cosmo = isabspath(cosmology_path) ?
+                     cosmology_path :
+                     normpath(joinpath(base, cosmology_path))
+    return resolved_bundle, resolved_cosmo
 end
 
 function _load_observed_spectral_density(path::AbstractString, expected_len::Int)
@@ -218,7 +239,8 @@ end
 # ---------------------------------------------------------------------------
 
 function _run(;
-        cache_path::String,
+        bundle_path::String,
+        cosmology_path::String,
         detectors::Vector{Detector},
         priors,
         θ0::NamedTuple,
@@ -231,14 +253,14 @@ function _run(;
 )
     t0 = time()
 
-    @info "loading importance cache" path=cache_path detectors=join(
+    @info "loading bundle" bundle_path cosmology_path detectors=join(
         (d.name
         for d in detectors), ",")
-    problem = load_cache(cache_path, detectors)
-    @info "cache loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    problem = load_problem(bundle_path, cosmology_path, detectors)
+    @info "bundle loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing
-        @info "using fiducial in-band spectrum from cache as observed data"
+        @info "using fiducial in-band spectrum from bundle as observed data"
         problem.observation.fiducial_spectral_density
     else
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
@@ -348,7 +370,7 @@ function _run(;
     )
     suite["stage"]["prior"] = @benchmarkable logpdf($priors, $h)
     # Bare luminosity_distance broadcast — isolates per-sample distance work in
-    # cache reconstruction and importance weighting (see ASGWB/src/cache.jl).
+    # bundle reconstruction and importance weighting (see ASGWB/src/reconstruction.jl).
     c0 = cosmology(INFERENCE_MODEL, h)
     suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $c0)
 
@@ -534,15 +556,11 @@ function profile_turing(;
 )
     @info "loading config" path = config_file
     cfg = TOML.parsefile(config_file)
+    settings_dir = dirname(abspath(config_file))
 
-    raw_cache = _require(cfg, "cache_path")::String
-    cache_path = if startswith(raw_cache, "parity:")
-        isdefined(@__MODULE__, :resolve_parity_cache_path) ||
-            include(_PARITY_TEST_CACHE)
-        resolve_parity_cache_path(raw_cache)
-    else
-        raw_cache
-    end
+    raw_bundle = _require(cfg, "bundle_path")::String
+    raw_cosmo = _require(cfg, "cosmology_path")::String
+    bundle_path, cosmology_path = _resolve_problem_paths(raw_bundle, raw_cosmo, settings_dir)
     detectors = [Detector(n) for n in _require_string_array(cfg, "detectors")]
     seed = get(cfg, "seed", nothing)
     observed_csv = get(cfg, "observed_spectral_density_csv", nothing)
@@ -556,10 +574,12 @@ function profile_turing(;
     _validate_init_in_priors(priors, init_tbl)
     θ0 = _theta0_from_toml(init_tbl)
 
-    @info "effective settings" cache=cache_path detectors=join((d.name for d in detectors), ",") seed=seed
+    @info "effective settings" bundle_path cosmology_path detectors=join(
+        (d.name for d in detectors), ",") seed=seed
 
     return _run(;
-        cache_path,
+        bundle_path,
+        cosmology_path,
         detectors,
         priors,
         θ0,

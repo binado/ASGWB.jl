@@ -16,7 +16,7 @@
 # %% [markdown]
 # # MCMC
 #
-# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
+# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with the Turing `product_distribution` prior. On-disk TOML for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_problem`** (`bundle.h5` + `cosmology.toml`), it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_model_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
 #
 # On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
 #
@@ -38,7 +38,7 @@ begin
     using ASGWB
     using ASGWBInference: build_turing_model, condition_turing_model
     using ASGWB:
-                 load_cache,
+                 load_problem,
                  evaluate_model_terms,
                  Ωgw,
                  canonical_hyperparameters,
@@ -95,7 +95,13 @@ begin
     # --- edit everything below (same role as the JSON used by `scripts/run_turing.jl`) ---
 
     inference_model = MadauDickinsonModifiedPropagation()
-    cache = "analysis_numpyro_julia_cache.h5"
+    # Default: parity test bundle (see ASGWB/test/parity_test_cache.jl). For production,
+    # set bundle_path and cosmology_path to your on-disk artifacts (same keys as config/run_inference.toml).
+    const _REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
+    include(joinpath(_REPO_ROOT, "ASGWB", "test", "parity_test_cache.jl"))
+    const _PARITY_DIR = parity_bundle_dir(:posterior)
+    const bundle_path = joinpath(_PARITY_DIR, "bundle.h5")
+    const cosmology_path = joinpath(_PARITY_DIR, "cosmology.toml")
     detectors = [Detector("S1"), Detector("R1")]
     sample_only = (:H0,)
 
@@ -158,13 +164,13 @@ begin
         return InitFromParams((; (s => theta0[s] for s in sample_only)...))
     end
 
-    @info "loading importance cache" path=cache detectors=join((d.name for d in detectors), ",")
-    t_cache = time()
-    problem = load_cache(cache, detectors)
-    @info "cache loaded" seconds=round(time()-t_cache; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    @info "loading bundle" bundle_path cosmology_path detectors=join((d.name for d in detectors), ",")
+    t_load = time()
+    problem = load_problem(bundle_path, cosmology_path, detectors)
+    @info "bundle loaded" seconds=round(time()-t_load; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing
-        @info "using fiducial in-band spectrum from cache as observed data"
+        @info "using fiducial in-band spectrum from bundle as observed data"
         problem.observation.fiducial_spectral_density
     else
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
