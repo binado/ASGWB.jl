@@ -9,7 +9,9 @@ using .InferenceImpl:
                       finite_difference_logdensity_and_gradient,
                       sample_with_advancedhmc,
                       build_turing_model,
-                      condition_turing_model
+                      condition_turing_model,
+                      logposterior,
+                      validate_hyperprior
 
 export ASGWBLogDensity,
        unconstrained_initial_point,
@@ -19,6 +21,8 @@ export ASGWBLogDensity,
        sample_with_advancedhmc,
        build_turing_model,
        condition_turing_model,
+       logposterior,
+       validate_hyperprior,
        run_inference,
        run_inference_from_env,
        julia_main

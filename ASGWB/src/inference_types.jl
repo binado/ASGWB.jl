@@ -31,7 +31,6 @@ live [`RedshiftPrior`](@ref) each likelihood call.
 struct RedshiftGridCache
     redshift_grid::Vector{Float64}
     sample_interpolant::SampleInterpolant
-    cached_intrinsic_log_prob::Vector{Float64}
 end
 
 """
@@ -46,15 +45,21 @@ construction.
 hyperparameter-independent full-BNS intrinsic terms (mass, spins, tidal deformability);
 redshift terms are evaluated from the live prior each step.
 """
-struct ImportanceSamplingProblem{M <: AbstractASGWBModel}
+struct ImportanceSamplingProblem{M <: PhysicalModel}
     proposal::ProposalData
     observation::ObservationConfig
     model::M
     fiducial_hyperparameters::NamedTuple
-    redshift_prior_spec::RedshiftPriorSpec
+    redshift_grid_spec::RedshiftPriorSpec
+    redshift_grid::Vector{Float64}
     redshift_cache::RedshiftGridCache
     local_merger_rate::Float64
     strategy::FullBNS
+end
+
+function Base.getproperty(problem::ImportanceSamplingProblem, name::Symbol)
+    name === :redshift_prior_spec && return getfield(problem, :redshift_grid_spec)
+    return getfield(problem, name)
 end
 
 redshift(s::NamedTuple) = s.redshift
@@ -74,12 +79,9 @@ function build_redshift_grid_cache(
 )
     strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
     _validate_strategy_bundle(strategy, proposal)
-    prior = intrinsic_prior_factory(strategy)
-    validate_batch(prior, proposal.samples)
-    cached_log_prob = logpdf(prior, proposal.samples)
     z_grid = redshift_grid(redshift_prior_spec)
     interp = SampleInterpolant(proposal.samples.redshift, z_grid)
-    return RedshiftGridCache(z_grid, interp, cached_log_prob)
+    return RedshiftGridCache(z_grid, interp)
 end
 
 """
@@ -98,7 +100,8 @@ function importance_sampling_problem(
         redshift_prior_spec::RedshiftPriorSpec,
         local_merger_rate::Real;
         intrinsic_prior_factory = intrinsic_prior
-) where {M <: AbstractASGWBModel}
+) where {M <: PhysicalModel}
+    require_redshift_population(model)
     strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
     redshift_cache = build_redshift_grid_cache(
         proposal,
@@ -111,6 +114,7 @@ function importance_sampling_problem(
         model,
         fiducial_hyperparameters,
         redshift_prior_spec,
+        redshift_cache.redshift_grid,
         redshift_cache,
         Float64(local_merger_rate),
         strategy

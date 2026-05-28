@@ -4,21 +4,18 @@ using ASGWB
 using ASGWB:
              ImportanceSamplingProblem,
              AbstractASGWBModel,
-             MadauDickinsonModifiedPropagation,
              AbstractCosmology,
              LambdaCDM,
              W0CDM,
              W0WaCDM,
              cosmology_type,
-             cosmology_parameters,
              SUPPORTED_COSMOLOGIES,
+             loglikelihood,
              evaluate_model_terms,
              canonical_hyperparameters,
              hyperparameters,
              validate_hyperparameters,
-             validate_prior,
              validate_subset,
-             logposterior,
              normalized_ess,
              spectral_snr_squared,
              frequency_bin_width
@@ -42,6 +39,7 @@ export ASGWBLogDensity,
        finite_difference_logdensity_and_gradient,
        sample_with_advancedhmc,
        build_turing_model,
-       condition_turing_model
+       condition_turing_model,
+       validate_hyperprior
 
 end

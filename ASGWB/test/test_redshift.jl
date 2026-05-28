@@ -4,7 +4,7 @@ using ASGWB
 
 @testset "sample interpolation helpers" begin
     theta = canonical_hyperparameters(
-        MadauDickinsonModifiedPropagation(),
+        madau_dickinson_physical_model(),
         (;
             H0 = 67.0,
             Ωm = 0.315,
@@ -19,7 +19,7 @@ using ASGWB
     z_grid = redshift_grid(spec)
     cosmology_cache,
     redshift_prior = cosmology_and_redshift_prior(
-        cosmology(MadauDickinsonModifiedPropagation(), theta), theta, spec, z_grid
+        cosmology(madau_dickinson_physical_model(), theta), theta, spec, z_grid
     )
     samples = [0.0, 0.137, 0.9, 2.0]
     interp = SampleInterpolant(samples, z_grid)

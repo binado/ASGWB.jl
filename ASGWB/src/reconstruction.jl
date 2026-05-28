@@ -6,12 +6,12 @@ and propagation, from source-frame redshifts `z`.
 """
 function reconstruct_dgw_fid_sq(
         z::AbstractVector{<:Real},
-        model::AbstractASGWBModel,
+        model::PhysicalModel,
         Λ::NamedTuple
 )::Vector{Float64}
     c = cosmology(model, Λ)
     d_l = luminosity_distance.(z, c)
-    d_gw = gravitational_wave_distance.(model, z, d_l, Ref(Λ))
+    d_gw = _dgw_from_cached_dl.(z, d_l, Ref(c))
     return Float64.(d_gw .^ 2)
 end
 
@@ -25,14 +25,14 @@ friendly; each proposal sample is a contiguous column).
 function reconstruct_cached_flux_over_dgw2(
         cached_flux::AbstractMatrix{<:Real},
         z::AbstractVector{<:Real},
-        model::AbstractASGWBModel,
+        model::PhysicalModel,
         Λ::NamedTuple
 )::Matrix{Float64}
     size(cached_flux, 2) == length(z) ||
         throw(ArgumentError("cached_flux column count must match redshift sample count"))
     c = cosmology(model, Λ)
     d_l = luminosity_distance.(z, c)
-    d_gw = gravitational_wave_distance.(model, z, d_l, Ref(Λ))
+    d_gw = _dgw_from_cached_dl.(z, d_l, Ref(c))
     scale_row = reshape(Float64.((d_l ./ d_gw) .^ 2), 1, :)
     return Matrix{Float64}(cached_flux) .* scale_row
 end
@@ -46,10 +46,9 @@ uniform factors on [`FullBNSSamplesSoA`](@ref).
 function reconstruct_proposal_log_prob(
         samples::FullBNSSamplesSoA,
         spec::RedshiftPriorSpec,
-        model::AbstractASGWBModel,
+        model::PhysicalModel,
         Λ::NamedTuple
 )::Vector{Float64}
-    redshift_prior = build_redshift_prior(Λ, spec, cosmology(model, Λ))
-    cached_log_prob = logpdf(intrinsic_prior(FullBNS()), samples)
-    return cached_log_prob .+ redshift_log_prob_samples(redshift_prior, samples.redshift)
+    prior = population_prior(model, Λ; z_grid = redshift_grid(spec))
+    return batched_logpdf(prior, samples)
 end

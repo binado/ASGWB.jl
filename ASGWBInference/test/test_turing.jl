@@ -4,7 +4,7 @@ using Turing.DynamicPPL: VarInfo, getsym
 using FlexiChains
 using ASGWB
 using ASGWB: AbstractCosmology
-using ASGWBInference: build_turing_model, condition_turing_model
+using ASGWBInference: build_turing_model, condition_turing_model, logposterior
 using Distributions: product_distribution, Uniform
 
 _varinfo_symbols(vi) = Set(getsym(vn) for vn in keys(vi))
@@ -126,11 +126,11 @@ end
     )
 
     cases = (
-        (MadauDickinsonModifiedPropagation{LambdaCDM}(),
+        (madau_dickinson_physical_model(ModifiedPropagation{LambdaCDM}),
             (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)),
-        (MadauDickinsonModifiedPropagation{W0CDM}(),
+        (madau_dickinson_physical_model(ModifiedPropagation{W0CDM}),
             (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)),
-        (MadauDickinsonModifiedPropagation{W0WaCDM}(),
+        (madau_dickinson_physical_model(ModifiedPropagation{W0WaCDM}),
             (:H0, :Ωm, :w0, :wa, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak))
     )
 
@@ -155,7 +155,7 @@ end
         [Detector("H1"), Detector("L1")];
         parity_observation_kwargs(:posterior)...
     )
-    m = MadauDickinsonModifiedPropagation{W0CDM}()
+    m = madau_dickinson_physical_model(ModifiedPropagation{W0CDM})
     priors = _prior_for(m)
     theta0 = canonical_hyperparameters(
         m,

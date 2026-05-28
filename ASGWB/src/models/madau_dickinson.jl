@@ -1,61 +1,29 @@
-using CBCDistributions: AbstractCosmology
+using Distributions: Uniform
 
-"""
-Madau-Dickinson population with modified gravitational-wave propagation.
-
-Type parameter `C <: AbstractCosmology` selects the cosmology model.
-`MadauDickinsonModifiedPropagation()` defaults to `LambdaCDM`.
-"""
-struct MadauDickinsonModifiedPropagation{C <: AbstractCosmology} <: AbstractASGWBModel end
-
-MadauDickinsonModifiedPropagation() = MadauDickinsonModifiedPropagation{LambdaCDM}()
-
-"""
-    model_parameters(::Type{<:MadauDickinsonModifiedPropagation}) -> Tuple{Vararg{Symbol}}
-
-Hyperparameter symbols owned by the Madau–Dickinson modified-propagation forward model
-(excluding cosmology parameters).
-"""
-model_parameters(::Type{<:MadauDickinsonModifiedPropagation}) = (:Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
-
-"""
-    cosmology_type(model::MadauDickinsonModifiedPropagation{C}) -> Type{C}
-
-Return the cosmology subtype baked into the forward model's type parameter.
-"""
-cosmology_type(::MadauDickinsonModifiedPropagation{C}) where {C <: AbstractCosmology} = C
-
-function external_model_parameter_names(::MadauDickinsonModifiedPropagation)
-    return (
-        Ξ₀ = "Xi_0",
-        Ξₙ = "Xi_n",
-        γ = "gamma",
-        κ = "kappa",
-        zpeak = "z_peak"
-    )
+function madau_dickinson_physical_model(
+        ::Type{C} = ModifiedPropagation{LambdaCDM}
+) where {C <: AbstractCosmology}
+    return PhysicalModel(C, _full_bns_population(MadauDickinsonSourceFrameModel()))
 end
 
-function model_section_dict(model::MadauDickinsonModifiedPropagation{C}) where {C <:
-                                                                                AbstractCosmology}
-    return Dict{String, Any}(
-        "name" => MADAU_DICKINSON_MODIFIED_PROPAGATION_CONFIG_NAME,
-        "cosmology" => cosmology_config_name(C)
-    )
+function _full_bns_population(redshift_component)
+    spin = AlignedSpinChiSimple()
+    return PopulationModel((
+        mass = OrderedUniformSourceMassPair(),
+        redshift = redshift_component,
+        χ₁ = spin,
+        χ₂ = spin,
+        Λ₁ = Uniform(0.0, BNS_LAMBDA_HIGH),
+        Λ₂ = Uniform(0.0, BNS_LAMBDA_HIGH)
+    ))
 end
 
-redshift_prior_family(::MadauDickinsonModifiedPropagation) = MadauDickinson
+function model_section_dict(model::PhysicalModel)
+    Dict{String, Any}("cosmology" => cosmology_config_name(model.cosmology_type))
+end
 
-"""
-    gravitational_wave_distance(m::MadauDickinsonModifiedPropagation, z, d_l, Λ)
-
-Modified GW luminosity distance: destructures `Λ.Ξ₀`/`Λ.Ξₙ` and delegates to the
-scalar CBCDistributions hook.
-"""
-function gravitational_wave_distance(
-        ::MadauDickinsonModifiedPropagation,
-        z::Real,
-        d_l::Real,
-        Λ::NamedTuple
-)
-    return gravitational_wave_distance(z, d_l, Λ.Ξ₀, Λ.Ξₙ)
+function redshift_prior_spec_from_population(model::PhysicalModel, redshift_component)
+    redshift_component isa MadauDickinsonSourceFrameModel ||
+        throw(ArgumentError("unsupported redshift population component $(typeof(redshift_component))"))
+    return MadauDickinson
 end

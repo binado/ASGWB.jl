@@ -3,7 +3,7 @@ using ASGWB
 using Distributions: product_distribution, Normal, ProductNamedTupleDistribution
 
 @testset "Hyperparameter Validation" begin
-    model = MadauDickinsonModifiedPropagation()
+    model = madau_dickinson_physical_model()
     expected_order = (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 
     # 1. ProductNamedTupleDistribution setup
@@ -54,9 +54,9 @@ using Distributions: product_distribution, Normal, ProductNamedTupleDistribution
     end
 
     @testset "hyperparameters W0CDM / W0WaCDM" begin
-        @test hyperparameters(MadauDickinsonModifiedPropagation{W0CDM}()) ==
+        @test hyperparameters(madau_dickinson_physical_model(ModifiedPropagation{W0CDM})) ==
               (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
-        @test hyperparameters(MadauDickinsonModifiedPropagation{W0WaCDM}()) ==
+        @test hyperparameters(madau_dickinson_physical_model(ModifiedPropagation{W0WaCDM})) ==
               (:H0, :Ωm, :w0, :wa, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
     end
 end
@@ -64,20 +64,20 @@ end
 @testset "model cosmology and external parameter mappings" begin
     base = (H0 = 67.0, Ωm = 0.3, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 5.7, zpeak = 2.0)
 
-    model_lcdm = MadauDickinsonModifiedPropagation()
+    model_lcdm = madau_dickinson_physical_model()
     Λ_lcdm = (; H0 = base.H0, Ωm = base.Ωm, Ξ₀ = base.Ξ₀, Ξₙ = base.Ξₙ,
         γ = base.γ, κ = base.κ, zpeak = base.zpeak)
-    @test cosmology(model_lcdm, Λ_lcdm) isa LambdaCDM
+    @test cosmology(model_lcdm, Λ_lcdm) isa ModifiedPropagation{<:LambdaCDM}
 
-    model_w0 = MadauDickinsonModifiedPropagation{W0CDM}()
+    model_w0 = madau_dickinson_physical_model(ModifiedPropagation{W0CDM})
     Λ_w0 = (; H0 = base.H0, Ωm = base.Ωm, w0 = -0.9, Ξ₀ = base.Ξ₀, Ξₙ = base.Ξₙ,
         γ = base.γ, κ = base.κ, zpeak = base.zpeak)
-    @test cosmology(model_w0, Λ_w0) isa W0CDM
+    @test cosmology(model_w0, Λ_w0) isa ModifiedPropagation{<:W0CDM}
 
-    model_cpl = MadauDickinsonModifiedPropagation{W0WaCDM}()
+    model_cpl = madau_dickinson_physical_model(ModifiedPropagation{W0WaCDM})
     Λ_cpl = (; H0 = base.H0, Ωm = base.Ωm, w0 = -0.9, wa = 0.2, Ξ₀ = base.Ξ₀,
         Ξₙ = base.Ξₙ, γ = base.γ, κ = base.κ, zpeak = base.zpeak)
-    @test cosmology(model_cpl, Λ_cpl) isa W0WaCDM
+    @test cosmology(model_cpl, Λ_cpl) isa ModifiedPropagation{<:W0WaCDM}
 
     @test external_parameter_names(model_lcdm) ==
           (H0 = "H0", Ωm = "Omega_m", Ξ₀ = "Xi_0", Ξₙ = "Xi_n",

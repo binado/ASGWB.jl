@@ -315,6 +315,7 @@ end
 
 Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.prior.dN_dz.x)
 Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.prior.dN_dz.x)
+Base.eltype(d::RedshiftInterpolatedDistribution) = redshift_logpdf_eltype(d.prior)
 
 function Distributions.insupport(d::RedshiftInterpolatedDistribution, value::Real)
     return minimum(d) <= value <= maximum(d)

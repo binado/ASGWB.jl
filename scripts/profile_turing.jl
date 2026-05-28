@@ -26,20 +26,20 @@ using ASGWBInference.InferenceImpl:
                                     build_turing_model,
                                     ASGWBLogDensity,
                                     ad_logdensity,
-                                    unconstrained_initial_point
+                                    unconstrained_initial_point,
+                                    logposterior,
+                                    validate_hyperprior
 using ASGWB:
              load_problem,
-             cosmology_and_redshift_prior,
              compute_importance_weights,
              merger_rate_per_sec,
              spectral_density,
-             logposterior,
-             luminosity_distance,
+             population_prior,
+             CosmologyCache,
              redshift,
              canonical_hyperparameters,
-             MadauDickinsonModifiedPropagation,
+             madau_dickinson_physical_model,
              cosmology,
-             validate_prior,
              Detector
 using BenchmarkTools
 using DelimitedFiles
@@ -53,7 +53,7 @@ using Statistics: mean
 using TOML
 using Turing: DynamicPPL
 
-const INFERENCE_MODEL = MadauDickinsonModifiedPropagation()
+const INFERENCE_MODEL = madau_dickinson_physical_model()
 
 # ---------------------------------------------------------------------------
 # TOML config helpers
@@ -289,7 +289,7 @@ function _run(;
     # ------------------------------------------------------------------
 
     # Native (ASGWBLogDensity) path — pure Julia, no DynamicPPL
-    validate_prior(INFERENCE_MODEL, priors)
+    validate_hyperprior(INFERENCE_MODEL, priors)
     ld = ASGWBLogDensity(problem, priors; model = INFERENCE_MODEL)
     z0 = unconstrained_initial_point(ld, θ0)
     ad_ld = ad_logdensity(ld)
@@ -307,11 +307,10 @@ function _run(;
 
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
-    spec = problem.redshift_prior_spec
-    cosmology_cache0,
-    redshift_prior0 = cosmology_and_redshift_prior(
-        cosmology(INFERENCE_MODEL, h), h, spec, problem.redshift_cache.redshift_grid)
-    iw0 = compute_importance_weights(problem, h, cosmology_cache0, redshift_prior0)
+    cosmology_cache0 = CosmologyCache(cosmology(INFERENCE_MODEL, h), problem.redshift_grid)
+    prior0 = population_prior(INFERENCE_MODEL, h; z_grid = problem.redshift_grid)
+    redshift_prior0 = prior0.dists.redshift.prior
+    iw0 = compute_importance_weights(problem, h, cosmology_cache0, prior0)
     rate0 = merger_rate_per_sec(
         redshift_prior0,
         problem.local_merger_rate,
@@ -362,10 +361,10 @@ function _run(;
         gcsample = true)
 
     suite["stage"] = BenchmarkGroup()
-    suite["stage"]["redshift"] = @benchmarkable cosmology_and_redshift_prior(
-        cosmology($INFERENCE_MODEL, $h), $h, $spec, $(problem.redshift_cache.redshift_grid))
+    suite["stage"]["redshift"] = @benchmarkable population_prior(
+        $INFERENCE_MODEL, $h; z_grid = $(problem.redshift_grid))
     suite["stage"]["weights"] = @benchmarkable compute_importance_weights(
-        $problem, $h, $cosmology_cache0, $redshift_prior0)
+        $problem, $h, $cosmology_cache0, $prior0)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
         $redshift_prior0,
         $(problem.local_merger_rate),

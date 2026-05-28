@@ -48,7 +48,7 @@ using ASGWBInference
 end
 
 @testset "sample_only config parsing" begin
-    model = MadauDickinsonModifiedPropagation()
+    model = madau_dickinson_physical_model()
     @test RunInferenceCLI.parse_sample_only(Dict{String, Any}(), model) === nothing
     @test RunInferenceCLI.parse_sample_only(Dict{String, Any}("sample_only" => nothing), model) ===
           nothing

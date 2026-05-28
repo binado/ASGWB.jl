@@ -50,6 +50,7 @@ function load_problem(
     )
 
     model = config.model
+    require_redshift_population(model)
     Λ = config.fiducial_hyperparameters
     spec = config.redshift_prior_spec
     cache_C = cosmology_type(model)
@@ -121,6 +122,7 @@ function load_problem(
         model,
         Λ,
         spec,
+        redshift_cache.redshift_grid,
         redshift_cache,
         local_rate,
         strategy
@@ -151,6 +153,7 @@ function load_problem(
         model,
         Λ,
         spec,
+        redshift_cache.redshift_grid,
         redshift_cache,
         local_rate,
         strategy

@@ -1,44 +1,12 @@
-using Distributions: logpdf, ProductNamedTupleDistribution
-
-function target_log_prob_samples(
+function evaluate_model_terms(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem
 )
-    model = problem.model
-    c = cosmology(model, Λ)
-    redshift_prior = build_redshift_prior(
-        Λ,
-        problem.redshift_prior_spec,
-        c,
-        problem.redshift_cache.redshift_grid
-    )
-    target_log_prob = problem.redshift_cache.cached_intrinsic_log_prob .+
-                      redshift_log_prob_samples(
-        redshift_prior,
-        problem.proposal.samples.redshift
-    )
-    return target_log_prob, redshift_prior
-end
-
-"""
-    evaluate_model_terms(model, Λ, problem, z_grid) -> NamedTuple
-
-Evaluate the deterministic likelihood terms for a model hyperparameter state.
-"""
-function evaluate_model_terms(
-        model::AbstractASGWBModel,
-        Λ::NamedTuple,
-        problem::ImportanceSamplingProblem,
-        z_grid::AbstractVector{<:Real}
-)
-    cosmology_cache,
-    redshift_prior = cosmology_and_redshift_prior(
-        cosmology(model, Λ),
-        Λ,
-        problem.redshift_prior_spec,
-        z_grid
-    )
-    iw = compute_importance_weights(problem, Λ, cosmology_cache, redshift_prior)
+    c = cosmology(problem.model, Λ)
+    cosmology_cache = CosmologyCache(c, problem.redshift_grid)
+    prior = population_prior(problem.model, Λ; z_grid = problem.redshift_grid)
+    iw = compute_importance_weights(problem, Λ, cosmology_cache, prior)
+    redshift_prior = _redshift_prior_distribution(prior).prior
     rate = merger_rate_per_sec(
         redshift_prior,
         problem.local_merger_rate,
@@ -55,26 +23,6 @@ function evaluate_model_terms(
         ))
 end
 
-"""
-    evaluate_model_terms(model, Λ, problem) -> NamedTuple
-
-Evaluate deterministic likelihood terms using the problem's redshift grid.
-"""
-function evaluate_model_terms(
-        model::AbstractASGWBModel,
-        Λ::NamedTuple,
-        problem::ImportanceSamplingProblem
-)
-    return evaluate_model_terms(model, Λ, problem, problem.redshift_cache.redshift_grid)
-end
-
-function evaluate_model_terms(
-        Λ::NamedTuple,
-        problem::ImportanceSamplingProblem
-)
-    return evaluate_model_terms(problem.model, Λ, problem)
-end
-
 function loglikelihood(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem;
@@ -89,67 +37,28 @@ function loglikelihood(
     )
 end
 
-function logposterior(
-        Λ::NamedTuple,
-        problem::ImportanceSamplingProblem,
-        prior::ProductNamedTupleDistribution;
-        observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
-)
-    return logpdf(prior, Λ) +
-           loglikelihood(
-        Λ,
-        problem;
-        observed_spectral_density = observed_spectral_density
-    )
-end
-
-"""
-    fiducial_hyperparameters(problem::ImportanceSamplingProblem) -> NamedTuple
-
-Return the canonical fiducial hyperparameter state stored on `problem`.
-"""
 function fiducial_hyperparameters(problem::ImportanceSamplingProblem)
     problem.fiducial_hyperparameters
 end
 
-"""
-    fiducial_spectral_density(problem::ImportanceSamplingProblem) -> Vector{Float64}
-
-Strain spectral density ``S_h(f)`` at [`fiducial_hyperparameters`](@ref), from
-[`evaluate_model_terms`](@ref) (cached flux, importance weights, and merger rate). Same
-units as the vector returned by [`spectral_density`](@ref) on the importance-weighted fluxes.
-
-For the dimensionless energy density ``\\Omega_{\\mathrm{GW}}(f)``, use [`Ωgw`](@ref) with
-this vector and the corresponding frequency bins from `problem.observation.frequencies`.
-"""
 function fiducial_spectral_density(problem::ImportanceSamplingProblem)
-    Λ = fiducial_hyperparameters(problem)
-    return evaluate_model_terms(Λ, problem).spectral_density
+    return evaluate_model_terms(fiducial_hyperparameters(problem), problem).spectral_density
 end
 
-"""
-    fiducial_redshift_integral(model::AbstractASGWBModel, Λ, spec) -> Float64
+function fiducial_redshift_integral(problem::ImportanceSamplingProblem)
+    prior = population_prior(
+        problem.model,
+        problem.fiducial_hyperparameters;
+        z_grid = redshift_grid(problem.redshift_grid_spec)
+    )
+    return Float64(redshift_integral(_redshift_prior_distribution(prior).prior))
+end
 
-[`cosmology_and_redshift_prior`](@ref) norm at the given hyperparameter state.
-"""
 function fiducial_redshift_integral(
-        model::AbstractASGWBModel,
+        model::PhysicalModel,
         Λ::NamedTuple,
         spec::RedshiftPriorSpec
-)::Float64
-    redshift_prior = build_redshift_prior(Λ, spec, cosmology(model, Λ))
-    return Float64(redshift_integral(redshift_prior))
-end
-
-"""
-    fiducial_redshift_integral(problem::ImportanceSamplingProblem) -> Float64
-
-[`cosmology_and_redshift_prior`](@ref) norm at [`fiducial_hyperparameters`](@ref).
-"""
-function fiducial_redshift_integral(problem::ImportanceSamplingProblem)
-    return fiducial_redshift_integral(
-        problem.model,
-        problem.fiducial_hyperparameters,
-        problem.redshift_prior_spec
-    )
+)
+    prior = population_prior(model, Λ; z_grid = redshift_grid(spec))
+    return Float64(redshift_integral(_redshift_prior_distribution(prior).prior))
 end

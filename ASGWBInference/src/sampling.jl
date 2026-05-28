@@ -1,6 +1,6 @@
 using AdvancedHMC
 using Bijectors
-using Distributions: ProductNamedTupleDistribution
+using Distributions: ProductNamedTupleDistribution, logpdf
 using FiniteDiff
 using ForwardDiff
 using LogDensityProblems
@@ -23,12 +23,30 @@ struct ASGWBLogDensity{
     model::M
 end
 
+function validate_hyperprior(model::AbstractASGWBModel, prior::ProductNamedTupleDistribution)
+    order = hyperparameters(model)
+    keys(prior.dists) == order || throw(
+        ArgumentError("hyperprior must match $(typeof(model)); expected $(order), got $(keys(prior.dists))"),
+    )
+    return nothing
+end
+
+function logposterior(
+        Λ::NamedTuple,
+        problem::ImportanceSamplingProblem,
+        prior::ProductNamedTupleDistribution;
+        observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
+)
+    return logpdf(prior, Λ) +
+           loglikelihood(Λ, problem; observed_spectral_density = observed_spectral_density)
+end
+
 function ASGWBLogDensity(
         problem::ImportanceSamplingProblem,
         prior::ProductNamedTupleDistribution;
         model::AbstractASGWBModel
 )
-    validate_prior(model, prior)
+    validate_hyperprior(model, prior)
     return ASGWBLogDensity(problem, prior, bijector(prior), model)
 end
 

@@ -9,8 +9,7 @@ function _parity_model_toml_content(; H0 = 67.0, Omega_m = 0.315, Xi_0 = 1.0, Xi
         z_min = 0.001, z_max = 20.0, num_interp = 64)
     return """
 [model]
-name = "madau_dickinson_modified_propagation"
-cosmology = "LambdaCDM"
+cosmology = "ModifiedPropagation{LambdaCDM}"
 
 [parameters]
 H0 = $H0
@@ -21,7 +20,8 @@ gamma = $gamma
 kappa = $kappa
 z_peak = $z_peak
 
-[redshift]
+[population.redshift]
+model = "madau_dickinson_source_frame"
 z_min = $z_min
 z_max = $z_max
 num_interp = $num_interp
@@ -35,8 +35,7 @@ function _parity_model_toml_content_w0(; H0 = 67.0, Omega_m = 0.315, w0 = -0.9,
         z_min = 0.001, z_max = 20.0, num_interp = 64)
     return """
 [model]
-name = "madau_dickinson_modified_propagation"
-cosmology = "W0CDM"
+cosmology = "ModifiedPropagation{W0CDM}"
 
 [parameters]
 H0 = $H0
@@ -48,7 +47,8 @@ gamma = $gamma
 kappa = $kappa
 z_peak = $z_peak
 
-[redshift]
+[population.redshift]
+model = "madau_dickinson_source_frame"
 z_min = $z_min
 z_max = $z_max
 num_interp = $num_interp

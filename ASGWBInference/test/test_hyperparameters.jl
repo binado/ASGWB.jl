@@ -2,16 +2,17 @@ using Test
 using Bijectors
 using Distributions: product_distribution, Uniform
 using ASGWB:
-             MadauDickinsonModifiedPropagation,
+             madau_dickinson_physical_model,
+             ModifiedPropagation,
              W0CDM,
              W0WaCDM,
              canonical_hyperparameters,
              hyperparameters,
-             validate_hyperparameters,
-             validate_prior
+             validate_hyperparameters
+using ASGWBInference: validate_hyperprior
 
 @testset "Madau-Dickinson modified-propagation model contract" begin
-    model = MadauDickinsonModifiedPropagation()
+    model = madau_dickinson_physical_model()
     @test hyperparameters(model) == (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 
     prior_a = product_distribution((
@@ -33,8 +34,8 @@ using ASGWB:
         H0 = Uniform(20.0, 140.0)
     ))
 
-    @test validate_prior(model, prior_a) === nothing
-    @test_throws ArgumentError validate_prior(model, prior_b)
+    @test validate_hyperprior(model, prior_a) === nothing
+    @test_throws ArgumentError validate_hyperprior(model, prior_b)
 
     θ = canonical_hyperparameters(
         model,
@@ -58,15 +59,15 @@ using ASGWB:
         H0 = θ.H0
     )
 
-    @test validate_hyperparameters(model, θ_unordered) === nothing
+    @test_throws ArgumentError validate_hyperparameters(model, θ_unordered)
     @test canonical_hyperparameters(model, θ_unordered) == θ
     @test canonical_hyperparameters(model, θ_unordered; eltype = BigFloat).H0 isa BigFloat
     @test_throws ArgumentError validate_hyperparameters(model, (; H0 = 70.0, Ωm = 0.3))
     @test_throws ArgumentError validate_hyperparameters(model, merge(θ, (; extra = 1.0)))
     @test collect(Bijectors.link(prior_a, θ)) isa Vector
 
-    @test hyperparameters(MadauDickinsonModifiedPropagation{W0CDM}()) ==
+    @test hyperparameters(madau_dickinson_physical_model(ModifiedPropagation{W0CDM})) ==
           (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
-    @test hyperparameters(MadauDickinsonModifiedPropagation{W0WaCDM}()) ==
+    @test hyperparameters(madau_dickinson_physical_model(ModifiedPropagation{W0WaCDM})) ==
           (:H0, :Ωm, :w0, :wa, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 end

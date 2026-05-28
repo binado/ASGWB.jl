@@ -60,21 +60,21 @@ end
 @testset "save_model_config/load_model_config round-trip" begin
     cases = (
         (
-            MadauDickinsonModifiedPropagation(),
+            madau_dickinson_physical_model(),
             (H0 = 67.4, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5),
-            "LambdaCDM"
+            "ModifiedPropagation{LambdaCDM}"
         ),
         (
-            MadauDickinsonModifiedPropagation{W0CDM}(),
+            madau_dickinson_physical_model(ModifiedPropagation{W0CDM}),
             (H0 = 67.4, Ωm = 0.315, w0 = -0.9, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0,
                 zpeak = 2.5),
-            "W0CDM"
+            "ModifiedPropagation{W0CDM}"
         ),
         (
-            MadauDickinsonModifiedPropagation{W0WaCDM}(),
+            madau_dickinson_physical_model(ModifiedPropagation{W0WaCDM}),
             (H0 = 67.4, Ωm = 0.315, w0 = -0.9, wa = 0.1, Ξ₀ = 1.0, Ξₙ = 0.0,
                 γ = 2.7, κ = 3.0, zpeak = 2.5),
-            "W0WaCDM"
+            "ModifiedPropagation{W0WaCDM}"
         )
     )
 
@@ -85,7 +85,7 @@ end
         save_model_config(path, config)
         loaded = load_model_config(path)
         @testset "$tag" begin
-            @test typeof(loaded.model) == typeof(model)
+            @test loaded.model.cosmology_type === model.cosmology_type
             @test loaded.fiducial_hyperparameters == config.fiducial_hyperparameters
             @test loaded.redshift_prior_spec.family == spec.family
             @test loaded.redshift_prior_spec.z_min == spec.z_min
@@ -101,10 +101,10 @@ end
     write(path,
         """
         [model]
-        name = "madau_dickinson_modified_propagation"
-        cosmology = "LambdaCDM"
+        cosmology = "ModifiedPropagation{LambdaCDM}"
 
-        [redshift]
+        [population.redshift]
+        model = "madau_dickinson_source_frame"
         z_min = 0.001
         z_max = 20.0
         num_interp = 64
@@ -227,7 +227,7 @@ end
           ev.spectral_density_in_band
 
     Λ = fiducial_hyperparameters(problem)
-    @test problem.model isa MadauDickinsonModifiedPropagation{LambdaCDM}
+    @test problem.model.cosmology_type === ModifiedPropagation{LambdaCDM}
     @test Λ.H0 == 67.0
     @test Λ.Ωm == 0.315
     @test Λ.Ξ₀ == 1.0
@@ -248,16 +248,27 @@ end
 
 @testset "fiducial_spectral_density uses W0CDM bundle" begin
     p = _load_variant(:w0cdm)
-    @test p.model isa MadauDickinsonModifiedPropagation{W0CDM}
+    @test p.model.cosmology_type === ModifiedPropagation{W0CDM}
     Λ = fiducial_hyperparameters(p)
     ev = evaluate_model_terms(Λ, p)
     @test fiducial_spectral_density(p) ≈ ev.spectral_density
 
     h_lcdm = canonical_hyperparameters(
-        MadauDickinsonModifiedPropagation(),
-        (; (k => Λ[k] for k in hyperparameters(MadauDickinsonModifiedPropagation()))...)
+        madau_dickinson_physical_model(),
+        (; (k => Λ[k] for k in hyperparameters(madau_dickinson_physical_model()))...)
     )
-    ev_lcdm = evaluate_model_terms(MadauDickinsonModifiedPropagation(), h_lcdm, p)
+    p_lcdm = ASGWB.ImportanceSamplingProblem(
+        p.proposal,
+        p.observation,
+        madau_dickinson_physical_model(),
+        h_lcdm,
+        p.redshift_grid_spec,
+        p.redshift_grid,
+        p.redshift_cache,
+        p.local_merger_rate,
+        p.strategy
+    )
+    ev_lcdm = evaluate_model_terms(h_lcdm, p_lcdm)
     @test !(fiducial_spectral_density(p) ≈ ev_lcdm.spectral_density)
 end
 
@@ -269,8 +280,7 @@ end
     write(bad_toml,
         """
         [model]
-        name = "madau_dickinson_modified_propagation"
-        cosmology = "LambdaCDM"
+        cosmology = "ModifiedPropagation{LambdaCDM}"
 
         [parameters]
         H0 = 99.0
@@ -281,7 +291,8 @@ end
         kappa = 3.0
         z_peak = 2.5
 
-        [redshift]
+        [population.redshift]
+        model = "madau_dickinson_source_frame"
         z_min = 0.001
         z_max = 20.0
         num_interp = 64
@@ -296,7 +307,7 @@ end
 end
 
 @testset "importance_sampling_problem builds redshift cache" begin
-    model = MadauDickinsonModifiedPropagation()
+    model = madau_dickinson_physical_model()
     Λ = canonical_hyperparameters(
         model,
         (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
@@ -332,8 +343,8 @@ end
     @test fiducial_redshift_integral(p) ≈ fiducial_redshift_integral(model, Λ, spec) rtol = 1e-10
 end
 
-@testset "importance_sampling_problem accepts custom intrinsic prior factory" begin
-    model = MadauDickinsonModifiedPropagation()
+@testset "importance_sampling_problem realizes population prior per call" begin
+    model = madau_dickinson_physical_model()
     Λ = canonical_hyperparameters(
         model,
         (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
@@ -365,22 +376,14 @@ end
         1.0,
         1.0
     )
-    factory = strategy -> begin
-        @test strategy isa FullBNS
-        IntrinsicPrior((χ₁ = Uniform(-1.0, 1.0), Λ₁ = Uniform(0.0, 500.0)))
-    end
-
     p = importance_sampling_problem(
         proposal,
         observation,
         model,
         Λ,
         spec,
-        1.0;
-        intrinsic_prior_factory = factory
+        1.0
     )
-    expected = [logpdf(Uniform(-1.0, 1.0), samples.χ₁[i]) +
-                logpdf(Uniform(0.0, 500.0), samples.Λ₁[i])
-                for i in eachindex(samples.χ₁)]
-    @test p.redshift_cache.cached_intrinsic_log_prob ≈ expected
+    prior = population_prior(model, Λ; z_grid = redshift_grid(spec))
+    @test compute_importance_weights(p, Λ).target_log_prob ≈ batched_logpdf(prior, samples)
 end

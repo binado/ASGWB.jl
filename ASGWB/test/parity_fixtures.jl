@@ -2,10 +2,10 @@
 # Bundle fixtures (model.toml + bundle.h5) are materialized on demand via `parity_bundle_dir` (see `parity_test_cache.jl`).
 # Included from test files that need `PARITY_THETA` (not from `runtests.jl`).
 
-using ASGWB: canonical_hyperparameters, MadauDickinsonModifiedPropagation
+using ASGWB: canonical_hyperparameters, madau_dickinson_physical_model
 using Distributions: product_distribution, Uniform
 
-const PARITY_MODEL = MadauDickinsonModifiedPropagation()
+const PARITY_MODEL = madau_dickinson_physical_model()
 
 const PARITY_THETA = canonical_hyperparameters(
     PARITY_MODEL,

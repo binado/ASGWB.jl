@@ -9,10 +9,9 @@ using ASGWB:
              external_parameter_names,
              hyperparameters,
              validate_hyperparameters,
-             validate_prior,
              validate_subset
 using ..ChainIO: atomic_save_chain
-using ..InferenceImpl: build_turing_model, condition_turing_model
+using ..InferenceImpl: build_turing_model, condition_turing_model, validate_hyperprior
 
 using Turing
 using AdvancedHMC
@@ -260,7 +259,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     selected_priors = select_priors(PRIORS, model_params)
     validate_init_against_priors(selected_priors, init)
     priors_turing = product_distribution(selected_priors)
-    validate_prior(inference_model, priors_turing)
+    validate_hyperprior(inference_model, priors_turing)
     validate_hyperparameters(inference_model, init; context = "init hyperparameters")
     if sample_only !== nothing
         isempty(sample_only) && throw(
