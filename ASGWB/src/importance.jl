@@ -39,7 +39,7 @@ end
         z,
         sample_index
     )
-    dgw_theta = gravitational_wave_distance(z[sample_index], d_l, h.Ξ₀, h.Ξₙ)
+    dgw_theta = gravitational_wave_distance(problem.model, z[sample_index], d_l, h)
     dgw_theta_sq = dgw_theta^2
     weight = exp(log_ratio) * problem.proposal.dgw_fid_sq[sample_index] / dgw_theta_sq
     return target_log_prob, log_ratio, dgw_theta_sq, weight

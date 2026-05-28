@@ -23,11 +23,11 @@ canonical fiducial hyperparameters directly.
 module ASGWB
 
 using CBCDistributions
-import CBCDistributions: cosmology, cosmology_type
+import CBCDistributions: cosmology, cosmology_type, gravitational_wave_distance
 
 include("types.jl")
-include("hyperparameters.jl")
-include("fiducial.jl")
+include("models/base.jl")
+include("models/madau_dickinson.jl")
 include("bundle.jl")
 include("inference_types.jl")
 include("detector/psd.jl")

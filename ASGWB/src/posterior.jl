@@ -26,7 +26,7 @@ end
 Evaluate the deterministic likelihood terms for a model hyperparameter state.
 """
 function evaluate_model_terms(
-        model::MadauDickinsonModifiedPropagation,
+        model::AbstractASGWBModel,
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem,
         z_grid::AbstractVector{<:Real}
@@ -125,6 +125,20 @@ this vector and the corresponding frequency bins from `problem.observation.frequ
 function fiducial_spectral_density(problem::ImportanceSamplingProblem)
     Λ = fiducial_hyperparameters(problem)
     return evaluate_model_terms(Λ, problem).spectral_density
+end
+
+"""
+    fiducial_redshift_integral(model::AbstractASGWBModel, Λ, spec) -> Float64
+
+[`cosmology_and_redshift_prior`](@ref) norm at the given hyperparameter state.
+"""
+function fiducial_redshift_integral(
+        model::AbstractASGWBModel,
+        Λ::NamedTuple,
+        spec::RedshiftPriorSpec
+)::Float64
+    redshift_prior = build_redshift_prior(Λ, spec, cosmology(model, Λ))
+    return Float64(redshift_integral(redshift_prior))
 end
 
 """
