@@ -40,7 +40,7 @@ julia --project=ASGWBInference -e 'using Pkg; Pkg.test()'
 
 Inference is driven by a TOML configuration file. Paths in the TOML that are not absolute are resolved relative to **that TOML file’s directory** (not necessarily the repo root).
 
-*Note: the package currently does not support waveform generation in Julia, so we expect a **waveform bundle** (`bundle.h5`) plus a matching **model snapshot** (`model.toml`). The bundle stores per-sample intrinsic parameters and per-frequency fluxes; the TOML records model, cosmology, population, and redshift-grid settings. Observation settings live in the run config. A SHA-256 fingerprint in the bundle must match the model TOML file on disk. See [scripts/generate_waveforms.py](./scripts/generate_waveforms.py) for a standalone Python waveform accumulator (legacy layout; production bundles should follow `ASGWB.save_bundle` / `ASGWB.load_problem`).*
+*Note: the package currently does not support waveform generation in Julia, so we expect a **waveform bundle** (`bundle.h5`) plus a matching **model snapshot** (`model.toml`). The bundle stores per-sample intrinsic parameters and per-frequency fluxes; the TOML records `[model]`, `[parameters]`, and `[redshift]` settings. Observation settings live in the run config. A SHA-256 fingerprint in the bundle must match the model TOML file on disk. See [scripts/generate_waveforms.py](./scripts/generate_waveforms.py) for a standalone Python waveform accumulator (legacy layout; production bundles should follow `ASGWB.save_bundle` / `ASGWB.load_problem`).*
 
 ### Configuration
 

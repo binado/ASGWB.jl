@@ -6,8 +6,8 @@ sampling, redshift grids, and likelihoods. MCMC via Turing/AdvancedHMC lives in 
 `ASGWBInference` package (see the `ASGWBInference/` directory in the repository).
 
 The inference input artifacts are two files:
-- **`model.toml`** — structural model name, cosmology type + parameters,
-  modified-gravity Ξ₀/Ξₙ, merger-rate population, and redshift grid settings.
+- **`model.toml`** — `[model]` (name and cosmology type), `[parameters]` (flat
+  hyperparameters), and `[redshift]` (grid settings).
 - **`bundle.h5`** ([`WaveformCatalog`](@ref)) — per-sample intrinsic parameters with
   precomputed luminosity distances, and a `(n_freq, n_samples)` per-sample flux matrix
   `|h_+|² + |h_×|²` (before the fiducial `(D_L/D_gw)²` factor).
@@ -27,8 +27,8 @@ import CBCDistributions: cosmology, cosmology_type, gravitational_wave_distance
 
 include("types.jl")
 include("models/base.jl")
-include("models/config.jl")
 include("models/madau_dickinson.jl")
+include("models/config.jl")
 include("bundle.jl")
 include("inference_types.jl")
 include("detector/psd.jl")

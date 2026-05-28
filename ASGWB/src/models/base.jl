@@ -21,25 +21,18 @@ Maps Julia model parameter symbols to their external string names in `model.toml
 function external_model_parameter_names end
 
 """
-    model_hyperparameters(data, model::AbstractASGWBModel) -> NamedTuple
+    model_section_dict(model::AbstractASGWBModel) -> Dict{String, Any}
 
-Build the canonical fiducial hyperparameter state for `model` from parsed `model.toml` data.
+Serialize the `[model]` table (structural name and cosmology type string).
 """
-function model_hyperparameters end
-
-"""
-    redshift_prior_spec(data, model::AbstractASGWBModel) -> RedshiftPriorSpec
-
-Build the redshift prior spec for `model` from parsed `model.toml` data.
-"""
-function redshift_prior_spec end
+function model_section_dict end
 
 """
-    model_config_dict(config::ModelConfig) -> Dict
+    redshift_prior_family(model::AbstractASGWBModel) -> RedshiftPriorFamily
 
-Serialize `config` to a nested dict matching the `model.toml` schema.
+Redshift population family used when parsing `[redshift]` from `model.toml`.
 """
-function model_config_dict end
+function redshift_prior_family end
 
 # --- Generic combinators ---
 

@@ -64,8 +64,8 @@ function _external_values(table::AbstractDict, mapping::NamedTuple, table_name::
     for (k, external) in pairs(mapping))...)
 end
 
-function _cosmology_config_dict(model::AbstractASGWBModel, Λ::NamedTuple)
-    mapping = external_parameter_names(cosmology_type(model))
+function _parameters_config_dict(model::AbstractASGWBModel, Λ::NamedTuple)
+    mapping = external_parameter_names(model)
     dict = Dict{String, Any}()
     for (k, external) in pairs(mapping)
         dict[external] = Λ[k]
@@ -73,15 +73,61 @@ function _cosmology_config_dict(model::AbstractASGWBModel, Λ::NamedTuple)
     return dict
 end
 
-function _model_parameter_config_dict(mapping::NamedTuple, Λ::NamedTuple)
-    dict = Dict{String, Any}()
-    for (k, external) in pairs(mapping)
-        dict[external] = Λ[k]
-    end
-    return dict
+function _redshift_config_dict(spec::RedshiftPriorSpec)
+    return Dict{String, Any}(
+        "z_min" => spec.z_min,
+        "z_max" => spec.z_max,
+        "num_interp" => spec.num_interp,
+        "time_delay_model" => spec.time_delay_model === nothing ? "none" :
+                              spec.time_delay_model
+    )
 end
 
-# --- Generic orchestration ---
+# --- Generic TOML I/O ---
+
+"""
+    model_hyperparameters(data, model::AbstractASGWBModel) -> NamedTuple
+
+Build the canonical fiducial hyperparameter state for `model` from parsed `model.toml` data.
+"""
+function model_hyperparameters(data::AbstractDict, model::AbstractASGWBModel)
+    table = _require_table(data, "parameters")
+    raw = _external_values(table, external_parameter_names(model), "parameters")
+    return canonical_hyperparameters(model, raw; context = "fiducial hyperparameters")
+end
+
+"""
+    redshift_prior_spec(data, model::AbstractASGWBModel) -> RedshiftPriorSpec
+
+Build the redshift prior spec for `model` from parsed `model.toml` data.
+"""
+function redshift_prior_spec(data::AbstractDict, model::AbstractASGWBModel)
+    redshift_table = _require_table(data, "redshift")
+    tdm = _parse_time_delay_model(get(redshift_table, "time_delay_model", "none"))
+    return RedshiftPriorSpec(
+        redshift_prior_family(model),
+        _require_real(redshift_table, "z_min", "redshift"),
+        _require_real(redshift_table, "z_max", "redshift"),
+        Int(redshift_table["num_interp"]),
+        tdm
+    )
+end
+
+"""
+    model_config_dict(config::ModelConfig) -> Dict
+
+Serialize `config` to a nested dict matching the `model.toml` schema.
+"""
+function model_config_dict(config::ModelConfig{M}) where {M <: AbstractASGWBModel}
+    model = config.model
+    return Dict{String, Any}(
+        "model" => model_section_dict(model),
+        "parameters" => _parameters_config_dict(model, config.fiducial_hyperparameters),
+        "redshift" => _redshift_config_dict(config.redshift_prior_spec)
+    )
+end
+
+# --- Model parsing and file I/O ---
 
 function _parse_model(table::AbstractDict)
     name = _require_string(table, "name", "model")

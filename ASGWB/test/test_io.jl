@@ -96,6 +96,23 @@ end
     end
 end
 
+@testset "load_model_config requires [parameters]" begin
+    path = joinpath(mktempdir(), "model.toml")
+    write(path,
+        """
+        [model]
+        name = "madau_dickinson_modified_propagation"
+        cosmology = "LambdaCDM"
+
+        [redshift]
+        z_min = 0.001
+        z_max = 20.0
+        num_interp = 64
+        time_delay_model = "none"
+        """)
+    @test_throws ArgumentError load_model_config(path)
+end
+
 @testset "load_problem reconstructs derived fields" begin
     problem = _load_variant(:importance_context)
     z = problem.proposal.samples.redshift
@@ -255,15 +272,11 @@ end
         name = "madau_dickinson_modified_propagation"
         cosmology = "LambdaCDM"
 
-        [cosmology]
+        [parameters]
         H0 = 99.0
         Omega_m = 0.5
-
-        [modified_gravity]
         Xi_0 = 1.0
         Xi_n = 0.0
-
-        [population]
         gamma = 2.7
         kappa = 3.0
         z_peak = 2.5

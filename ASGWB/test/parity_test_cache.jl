@@ -12,15 +12,11 @@ function _parity_model_toml_content(; H0 = 67.0, Omega_m = 0.315, Xi_0 = 1.0, Xi
 name = "madau_dickinson_modified_propagation"
 cosmology = "LambdaCDM"
 
-[cosmology]
+[parameters]
 H0 = $H0
 Omega_m = $Omega_m
-
-[modified_gravity]
 Xi_0 = $Xi_0
 Xi_n = $Xi_n
-
-[population]
 gamma = $gamma
 kappa = $kappa
 z_peak = $z_peak
@@ -42,16 +38,12 @@ function _parity_model_toml_content_w0(; H0 = 67.0, Omega_m = 0.315, w0 = -0.9,
 name = "madau_dickinson_modified_propagation"
 cosmology = "W0CDM"
 
-[cosmology]
+[parameters]
 H0 = $H0
 Omega_m = $Omega_m
 w0 = $w0
-
-[modified_gravity]
 Xi_0 = $Xi_0
 Xi_n = $Xi_n
-
-[population]
 gamma = $gamma
 kappa = $kappa
 z_peak = $z_peak
