@@ -1,9 +1,12 @@
+using DataInterpolations: LinearInterpolation
+
 """
 Tabulated power spectral density S(f) loaded from a two-column text file (Hz, PSD or ASD).
 """
 struct PowerSpectralDensity
     frequency::Vector{Float64}
     psd::Vector{Float64}
+    itp::LinearInterpolation
 end
 
 function _read_psd_table(path::AbstractString)
@@ -24,6 +27,11 @@ function _read_psd_table(path::AbstractString)
     return f, v
 end
 
+function PowerSpectralDensity(f::Vector{Float64}, psd::Vector{Float64})
+    itp = LinearInterpolation(psd, f)
+    return PowerSpectralDensity(f, psd, itp)
+end
+
 """
     PowerSpectralDensity(path; curve_type=:psd)
 
@@ -37,10 +45,10 @@ function PowerSpectralDensity(path::AbstractString; curve_type::Symbol = :psd)
     return PowerSpectralDensity(f, psd)
 end
 
-function _linear_extrapolate_inf(
-        xq::AbstractVector{<:Real},
+function _psd_values(
+        itp::LinearInterpolation,
         x::AbstractVector{Float64},
-        y::AbstractVector{Float64}
+        xq::AbstractVector{<:Real}
 )
     n = length(xq)
     out = Vector{Float64}(undef, n)
@@ -49,25 +57,15 @@ function _linear_extrapolate_inf(
         q = Float64(xq[i])
         if q < x_min || q > x_max
             out[i] = Inf
-            continue
-        end
-        k = searchsortedlast(x, q)
-        if k <= 0
-            out[i] = Inf
-        elseif k >= length(x)
-            out[i] = y[end]
         else
-            x0, x1 = x[k], x[k + 1]
-            y0, y1 = y[k], y[k + 1]
-            t = (q - x0) / (x1 - x0)
-            out[i] = y0 + t * (y1 - y0)
+            out[i] = itp(q)
         end
     end
     return out
 end
 
 function (p::PowerSpectralDensity)(frequencies::AbstractVector{<:Real})
-    return _linear_extrapolate_inf(frequencies, p.frequency, p.psd)
+    return _psd_values(p.itp, p.frequency, frequencies)
 end
 
 function (p::PowerSpectralDensity)(f::Real)

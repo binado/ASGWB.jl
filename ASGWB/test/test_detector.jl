@@ -45,10 +45,17 @@ end
 
 @testset "PowerSpectralDensity file load" begin
     noise = joinpath(default_detector_data_dir(), "noise_curves", "AplusDesign_psd.txt")
-    psd = PowerSpectralDensity(noise; curve_type = :psd)
-    v = psd([20.0, 100.0, 1e6])
+    psd_obj = PowerSpectralDensity(noise; curve_type = :psd)
+    x_min = first(psd_obj.frequency)
+    x_max = last(psd_obj.frequency)
+    ε = 1.0e-6 * (x_max - x_min)
+    v = psd_obj([20.0, 100.0, 1e6])
     @test isfinite(v[1]) && isfinite(v[2])
     @test v[3] == Inf
+    @test psd_obj(x_min) == psd_obj.psd[1]
+    @test psd_obj(x_max) == psd_obj.psd[end]
+    @test psd_obj(x_min - ε) == Inf
+    @test psd_obj(x_max + ε) == Inf
 end
 
 @testset "Detector from vendored TOML" begin
