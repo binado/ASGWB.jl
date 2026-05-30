@@ -204,6 +204,127 @@ function parse_sample_only(settings::Dict)
     return Tuple(Symbol(s) for s in raw)
 end
 
+function _string_key_dict(pairs_iter)
+    return Dict(string(k) => _metadata_value(v) for (k, v) in pairs_iter)
+end
+
+function _metadata_value(x)
+    x === nothing && return nothing
+    x isa AbstractString && return String(x)
+    x isa Symbol && return String(x)
+    x isa Number && return x
+    x isa Bool && return x
+    x isa AbstractVector && return [_metadata_value(v) for v in x]
+    x isa Dict && return _string_key_dict(x)
+    return string(x)
+end
+
+function _struct_field_dict(x)
+    return Dict(string(name) => _metadata_value(getfield(x, name))
+    for name in fieldnames(typeof(x)))
+end
+
+function _git_metadata()
+    root = try
+        repo_root()
+    catch err
+        return Dict{String, Any}(
+            "revision" => nothing,
+            "branch" => nothing,
+            "dirty" => nothing,
+            "error" => sprint(showerror, err)
+        )
+    end
+
+    try
+        revision = readchomp(`git -C $root rev-parse HEAD`)
+        branch = readchomp(`git -C $root branch --show-current`)
+        status = readchomp(`git -C $root status --porcelain`)
+        return Dict{String, Any}(
+            "revision" => revision,
+            "branch" => isempty(branch) ? nothing : branch,
+            "dirty" => !isempty(status)
+        )
+    catch err
+        return Dict{String, Any}(
+            "revision" => nothing,
+            "branch" => nothing,
+            "dirty" => nothing,
+            "error" => sprint(showerror, err)
+        )
+    end
+end
+
+function _package_versions(names::AbstractVector{<:AbstractString})
+    versions = Dict{String, Any}("julia" => string(VERSION))
+    project = Pkg.project()
+    deps = Pkg.dependencies()
+    for name in names
+        version = nothing
+        if project.name == name
+            version = project.version === nothing ? nothing : string(project.version)
+        else
+            for pkg in values(deps)
+                if pkg.name == name
+                    version = pkg.version === nothing ? nothing : string(pkg.version)
+                    break
+                end
+            end
+        end
+        versions[name] = version
+    end
+    return versions
+end
+
+function build_run_metadata(
+        settings::Dict,
+        cache::AbstractString,
+        detectors,
+        inference_model,
+        problem,
+        selected_priors,
+        n_samples::Int,
+        n_adapts::Int,
+        num_chains::Int,
+        target_acceptance::Float64,
+        seed::Int
+)
+    model_settings = get(settings, "model", Dict())
+    direct_version_names = [
+        "ASGWB",
+        "ASGWBInference",
+        "Turing",
+        "AdvancedHMC",
+        "FlexiChains",
+        "JLD2",
+        "ADTypes",
+        "ForwardDiff"
+    ]
+
+    return Dict{String, Any}(
+        "schema_version" => 1,
+        "artifact_type" => "run_inference",
+        "cache_path" => String(cache),
+        "detectors" => [String(d.name) for d in detectors],
+        "model" => Dict{String, Any}(
+            "cosmology" => get(model_settings, "cosmology", "LambdaCDM"),
+            "type" => string(typeof(inference_model))
+        ),
+        "init" => _string_key_dict(settings["init"]),
+        "fiducial_parameters" => _struct_field_dict(problem.fiducial_parameters),
+        "priors" => Dict(string(k) => repr(v) for (k, v) in pairs(selected_priors)),
+        "sampler" => Dict{String, Any}(
+            "n_samples" => n_samples,
+            "n_adapts" => n_adapts,
+            "num_chains" => num_chains,
+            "target_acceptance" => target_acceptance
+        ),
+        "seed" => seed,
+        "git" => _git_metadata(),
+        "versions" => _package_versions(direct_version_names)
+    )
+end
+
 function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = false)
     cache = resolve_path(settings["cache_path"]::String, settings_dir)
     detectors = [Detector(n) for n in settings["detectors"]]
@@ -329,7 +450,26 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     @info "NUTS finished" chain_size=size(chain)
 
     @info "writing chain to JLD2" path=output_jld2
-    atomic_save_chain(output_jld2, chain)
+    try
+        metadata = build_run_metadata(
+            settings,
+            cache,
+            detectors,
+            inference_model,
+            problem,
+            selected_priors,
+            n_samples,
+            n_adapts,
+            num_chains,
+            target_acceptance,
+            seed
+        )
+        atomic_save_chain(output_jld2, chain; metadata)
+    catch err
+        @warn "metadata build/save failed; retrying chain-only artifact" path=output_jld2 exception=(
+            err, catch_backtrace())
+        atomic_save_chain(output_jld2, chain)
+    end
 
     if callback !== nothing
         paths = filter(isfile, checkpoint_paths(callback, num_chains))
