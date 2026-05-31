@@ -52,11 +52,9 @@ function save_catalog(path::AbstractString, file::WaveformCatalogFile)
         a["approximant"] = m.approximant
         a[CATALOG_SOURCE_TYPE_ATTR] = String(m.source_type)
         g = m.grid
-        a["grid_duration"] = g.duration
-        a["grid_sampling_frequency"] = g.sampling_frequency
-        a["grid_reference_frequency"] = g.reference_frequency
-        a["grid_minimum_frequency"] = g.minimum_frequency
-        a["grid_maximum_frequency"] = g.maximum_frequency
+        for f in fieldnames(FrequencyGrid)
+            a["grid_$f"] = getfield(g, f)
+        end
         a["model_sha256"] = m.model_sha256
         a["git_revision"] = m.git_revision
         a["command"] = m.command
@@ -81,13 +79,10 @@ function load_catalog(path::AbstractString)::WaveformCatalogFile
         a = attributes(f)
         approx = String(_read_catalog_attr(a, "approximant"))
         src_type = Symbol(String(_read_catalog_attr(a, CATALOG_SOURCE_TYPE_ATTR)))
-        grid = FrequencyGrid(
-            Float64(_read_catalog_attr(a, "grid_duration")),
-            Float64(_read_catalog_attr(a, "grid_sampling_frequency")),
-            Float64(_read_catalog_attr(a, "grid_reference_frequency")),
-            Float64(_read_catalog_attr(a, "grid_minimum_frequency")),
-            Float64(_read_catalog_attr(a, "grid_maximum_frequency"))
-        )
+        grid = FrequencyGrid(Dict(
+            string(f) => Float64(_read_catalog_attr(a, "grid_$f"))
+        for f in fieldnames(FrequencyGrid)
+        ))
         model_sha = String(_read_catalog_attr(a, "model_sha256"))
         git_rev = String(_read_catalog_attr(a, "git_revision"))
         cmd = String(_read_catalog_attr(a, "command"))

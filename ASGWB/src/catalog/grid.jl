@@ -59,41 +59,29 @@ function _validate_frequency_grid(
     return nothing
 end
 
-const _FREQUENCY_GRID_FIELDS = (
-    "duration",
-    "sampling_frequency",
-    "reference_frequency",
-    "minimum_frequency",
-    "maximum_frequency"
-)
+const _FREQUENCY_GRID_FIELDNAMES = fieldnames(FrequencyGrid)
+const _FREQUENCY_GRID_STRING_KEYS = Tuple(string.(_FREQUENCY_GRID_FIELDNAMES))
 
 """
     FrequencyGrid(data::AbstractDict)
 
-Construct a [`FrequencyGrid`](@ref) from unprefixed string keys:
-`duration`, `sampling_frequency`, `reference_frequency`, `minimum_frequency`, and
-`maximum_frequency`.
+Construct a [`FrequencyGrid`](@ref) from unprefixed string keys matching
+`fieldnames(FrequencyGrid)`.
 """
 function FrequencyGrid(data::AbstractDict)
     all(k -> k isa String, keys(data)) ||
         throw(ArgumentError("FrequencyGrid dictionary keys must be strings"))
-    extra = setdiff(collect(keys(data)), collect(_FREQUENCY_GRID_FIELDS))
+    extra = setdiff(collect(keys(data)), collect(_FREQUENCY_GRID_STRING_KEYS))
     isempty(extra) ||
         throw(ArgumentError("unexpected FrequencyGrid keys: $(join(extra, ", "))"))
-    missing = setdiff(collect(_FREQUENCY_GRID_FIELDS), collect(keys(data)))
+    missing = setdiff(collect(_FREQUENCY_GRID_STRING_KEYS), collect(keys(data)))
     isempty(missing) ||
         throw(ArgumentError("missing FrequencyGrid keys: $(join(missing, ", "))"))
-    return FrequencyGrid((data[k] for k in _FREQUENCY_GRID_FIELDS)...)
+    return FrequencyGrid((data[k] for k in _FREQUENCY_GRID_STRING_KEYS)...)
 end
 
 function Base.Dict(g::FrequencyGrid)::Dict{String, Float64}
-    return Dict{String, Float64}(
-        "duration" => g.duration,
-        "sampling_frequency" => g.sampling_frequency,
-        "reference_frequency" => g.reference_frequency,
-        "minimum_frequency" => g.minimum_frequency,
-        "maximum_frequency" => g.maximum_frequency
-    )
+    return Dict{String, Float64}(string(f) => getfield(g, f) for f in fieldnames(typeof(g)))
 end
 
 """
