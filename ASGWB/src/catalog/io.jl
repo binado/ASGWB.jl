@@ -62,9 +62,9 @@ function save_catalog(path::AbstractString, file::WaveformCatalogFile)
     return nothing
 end
 
-function _read_catalog_attr(attrs, name::AbstractString)
+function _read_catalog_attr(attrs, name::AbstractString, catalog_label::AbstractString)
     haskey(attrs, name) ||
-        throw(ArgumentError("catalog.h5 missing required attribute: $(name)"))
+        throw(ArgumentError("$(catalog_label) missing required attribute: $(name)"))
     return read(attrs[name])
 end
 
@@ -75,27 +75,30 @@ Read a catalog HDF5 file into a [`WaveformCatalogFile`](@ref). The sample column
 returned in the order they appear in the HDF5 `/samples` group.
 """
 function load_catalog(path::AbstractString)::WaveformCatalogFile
+    catalog_label = basename(path)
     h5open(path, "r") do f
         a = attributes(f)
-        approx = String(_read_catalog_attr(a, "approximant"))
-        src_type = Symbol(String(_read_catalog_attr(a, CATALOG_SOURCE_TYPE_ATTR)))
+        approx = String(_read_catalog_attr(a, "approximant", catalog_label))
+        src_type = Symbol(String(_read_catalog_attr(a, CATALOG_SOURCE_TYPE_ATTR, catalog_label)))
         grid = FrequencyGrid((
-            Float64(_read_catalog_attr(a, "grid_$f"))
+            Float64(_read_catalog_attr(a, "grid_$f", catalog_label))
         for f in fieldnames(FrequencyGrid)
         )...)
-        model_sha = String(_read_catalog_attr(a, "model_sha256"))
-        git_rev = String(_read_catalog_attr(a, "git_revision"))
-        cmd = String(_read_catalog_attr(a, "command"))
+        model_sha = String(_read_catalog_attr(a, "model_sha256", catalog_label))
+        git_rev = String(_read_catalog_attr(a, "git_revision", catalog_label))
+        cmd = String(_read_catalog_attr(a, "command", catalog_label))
         metadata = WaveformCatalogMetadata(approx, src_type, grid, model_sha, git_rev, cmd)
 
-        haskey(f, "samples") || throw(ArgumentError("catalog.h5 missing /samples group"))
+        haskey(f, "samples") ||
+            throw(ArgumentError("$(catalog_label) missing /samples group"))
         sg = f["samples"]
         raw_keys = keys(sg)
         sample_keys = Tuple(Symbol(k) for k in raw_keys)
         sample_vecs = Tuple(Vector{Float64}(read(sg[k])) for k in raw_keys)
         samples = NamedTuple{sample_keys}(sample_vecs)
 
-        haskey(f, "fluxes") || throw(ArgumentError("catalog.h5 missing /fluxes dataset"))
+        haskey(f, "fluxes") ||
+            throw(ArgumentError("$(catalog_label) missing /fluxes dataset"))
         fluxes = Matrix{Float64}(read(f["fluxes"]))
 
         return WaveformCatalogFile(WaveformCatalog(samples, fluxes), metadata)
