@@ -1,4 +1,11 @@
+using HDF5
 using SHA: sha256
+
+"""HDF5 `proposal_samples` group attribute naming the compact-object proposal class."""
+const PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR = "source_type"
+
+"""`proposal_samples` / [`PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR`](@ref) value for BNS importance samples."""
+const PROPOSAL_SAMPLES_SOURCE_TYPE_BNS = "BNS"
 
 """
     FrequencyGrid

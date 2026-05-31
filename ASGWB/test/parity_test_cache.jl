@@ -175,25 +175,52 @@ function parity_observation_kwargs(variant::Symbol)
 end
 
 """
-    parity_load_problem(variant, detectors; registry=PARITY_REGISTRY)
+    parity_bns_samples_from_catalog(catalog_samples) -> NamedTuple
 
-Load the parity bundle for `variant` through `load_problem`, resolving the
-`[model].population` name via `registry`.  Inference tests pass the production
-`POPULATION_REGISTRY` so the Turing codegen dispatch matches.
+Test-side mirror of the caller's BNS sample restructuring: stack source masses and rename
+the ASCII spin/tidal columns to their Unicode prior keys.
 """
-function parity_load_problem(
+function parity_bns_samples_from_catalog(catalog_samples::NamedTuple)
+    return (
+        mass = stack_source_masses(
+            catalog_samples.mass_1_source, catalog_samples.mass_2_source),
+        redshift = copy(catalog_samples.redshift),
+        χ₁ = copy(catalog_samples.chi_1),
+        χ₂ = copy(catalog_samples.chi_2),
+        Λ₁ = copy(catalog_samples.lambda_1),
+        Λ₂ = copy(catalog_samples.lambda_2)
+    )
+end
+
+"""
+    parity_problem_context(variant, detectors; registry=PARITY_REGISTRY) -> (; problem, cosmology_type, ctx)
+
+Load the parity bundle for `variant`, restructure its samples, build the pure
+[`ImportanceSamplingProblem`](@ref), and build its [`ModelContext`](@ref). Inference tests
+pass the production `POPULATION_REGISTRY` so the Turing codegen dispatch matches.
+"""
+function parity_problem_context(
         variant::Symbol,
         detectors;
         registry::AbstractDict = PARITY_REGISTRY
 )
     dir = parity_bundle_dir(variant)
-    return load_problem(
-        joinpath(dir, "bundle.h5"),
-        joinpath(dir, "model.toml"),
+    catalog = load_bundle(joinpath(dir, "bundle.h5"))
+    model_path = joinpath(dir, "model.toml")
+    verify_model_fingerprint(catalog, model_path)
+    C, pop, Λ = load_model_toml(model_path, registry)
+    samples = parity_bns_samples_from_catalog(catalog.samples)
+    problem = ImportanceSamplingProblem(pop, catalog.fluxes, samples, Λ)
+    kw = parity_observation_kwargs(variant)
+    ctx = build_model_context(
+        problem,
+        C,
+        catalog.metadata.grid,
         detectors,
-        registry;
-        parity_observation_kwargs(variant)...
+        kw.observation_time_yr,
+        kw.local_merger_rate
     )
+    return (; problem = problem, cosmology_type = C, ctx = ctx)
 end
 
 """

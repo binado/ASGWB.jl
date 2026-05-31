@@ -1,109 +1,63 @@
 abstract type ProposalSampleBundle end
 
 """
-    ProposalData
+    ImportanceSamplingProblem{M <: PopulationModel}
 
-Proposal-sample bundle for the importance-sampling problem.
+Pure importance-sampling specification: the minimal raw inputs needed to define the
+forward model, with no derived arrays, no cosmology, and no detector state.
 
-Matrix layouts:
-- `intrinsic_vector` is `(n_samples, n_intrinsic)` (rows = samples, columns = intrinsic sites).
-- `cached_flux_over_dgw2` is `(n_freq, n_samples)` (column-major friendly: each proposal
-  sample is a contiguous column; `fluxes * weights` contracts to a per-frequency vector).
+Fields:
+- `population_model::M` — the [`PopulationModel`](@ref) whose `single_event_prior` is the
+  importance-sampling target / proposal density.
+- `fluxes::Matrix{Float64}` — raw per-sample fluxes `|h₊|² + |h×|²` from the waveform
+  catalog, *before* the fiducial `(D_L/D_gw)²` scaling, `(n_freq, n_samples)`.
+- `samples::NamedTuple` — restructured per-event parameters (struct-of-arrays). Keys must
+  match `keys(single_event_prior(...).dists)` so `batched_logpdf` lines up (e.g. `mass`,
+  `redshift`, `χ₁`, `χ₂`, `Λ₁`, `Λ₂`).
+- `fiducial_hyperparameters::NamedTuple` — canonical fiducial hyperparameters; the
+  cosmology + propagation + population state at which the proposal caches are built.
+
+All derived/`Λ`-independent caches (rescaled fluxes, proposal log-prob, redshift
+interpolant, detector PSDs, fiducial spectral density) live in [`ModelContext`](@ref),
+built by [`build_model_context`](@ref). The cosmology family `C` is passed as a call
+argument, never stored here.
 """
-struct ProposalData
-    intrinsic_site_order::Vector{String}
-    samples::FullBNSSamplesSoA
-    log_prob::Vector{Float64}
-    intrinsic_vector::Matrix{Float64}
-    cached_flux_over_dgw2::Matrix{Float64}
-    dgw_fid_sq::Vector{Float64}
-end
-
-"""
-    RedshiftGridCache
-
-Precomputed redshift-grid state attached to an [`ImportanceSamplingProblem`](@ref):
-the fixed redshift grid and interpolation metadata for proposal redshifts on that grid.
-Redshift log-probability is evaluated from the live [`RedshiftPrior`](@ref) each
-likelihood call.
-"""
-struct RedshiftGridCache
-    redshift_grid::Vector{Float64}
-    sample_interpolant::SampleInterpolant
-end
-
-"""
-    ImportanceSamplingProblem{C,M}
-
-In-memory importance-sampling context parameterised by cosmology type `C` and
-population model `M`.  Build via [`importance_sampling_problem`](@ref) or
-[`load_problem`](@ref).
-
-The redshift grid is fixed to [`DEFAULT_Z_GRID`](@ref) for all evaluations;
-[`single_event_prior`](@ref) is called with the live cosmology and hyperparameters
-each step.
-"""
-struct ImportanceSamplingProblem{C <: AbstractCosmology, M <: PopulationModel}
-    proposal::ProposalData
-    observation::ObservationConfig
-    cosmology_type::Type{C}
-    population::M
+struct ImportanceSamplingProblem{M <: PopulationModel}
+    population_model::M
+    fluxes::Matrix{Float64}
+    samples::NamedTuple
     fiducial_hyperparameters::NamedTuple
-    redshift_grid::Vector{Float64}
-    redshift_cache::RedshiftGridCache
-    local_merger_rate::Float64
-    strategy::FullBNS
 end
 
 redshift(s::NamedTuple) = s.redshift
 
-redshift(problem::ImportanceSamplingProblem) = redshift(problem.proposal.samples)
-
-function _validate_strategy_bundle(strategy::FullBNS, proposal::ProposalData)
-    proposal.samples isa FullBNSSamplesSoA ||
-        throw(ArgumentError("proposal samples must match the FullBNSSamplesSoA layout"))
-    return nothing
-end
-
-function build_redshift_grid_cache(
-        proposal::ProposalData,
-        z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
-)
-    strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
-    _validate_strategy_bundle(strategy, proposal)
-    interp = SampleInterpolant(proposal.samples.redshift, z_grid)
-    return RedshiftGridCache(collect(Float64, z_grid), interp)
-end
+redshift(problem::ImportanceSamplingProblem) = redshift(problem.samples)
 
 """
-    importance_sampling_problem(
-        proposal, observation, cosmology_type, population, fiducial_hyperparameters,
-        local_merger_rate; z_grid,
-    ) -> ImportanceSamplingProblem
+    ModelContext
 
-Construct an importance-sampling problem from in-memory objects.  The redshift
-grid defaults to [`DEFAULT_Z_GRID`](@ref) and may be overridden via `z_grid`.
+Flat bundle of all `Λ`-independent derived state for an [`ImportanceSamplingProblem`](@ref),
+built once by [`build_model_context`](@ref) and reused by every likelihood/model call:
+
+- proposal caches at the fiducial point: `proposal_log_prob`, `dgw_fid_sq`,
+  `cached_flux_over_dgw2` (`(n_freq, n_samples)`),
+- redshift state: `redshift_grid` and the proposal `sample_interpolant`,
+- detector/observation state grouped in [`ObservationContext`](@ref),
+- `local_merger_rate` (events Gpc⁻³ yr⁻¹), and
+- `fiducial_spectral_density`, the default observed data of this context.
+
+A `ModelContext` is built for a specific cosmology family `C`; calling cached atomics with
+a different `C` would silently mix mismatched caches. Coherence is guaranteed by
+construction: `build_model_context` and the model that uses it close over a single literal
+`C`.
 """
-function importance_sampling_problem(
-        proposal::ProposalData,
-        observation::ObservationConfig,
-        cosmology_type::Type{C},
-        population::M,
-        fiducial_hyperparameters::NamedTuple,
-        local_merger_rate::Real;
-        z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
-) where {C <: AbstractCosmology, M <: PopulationModel}
-    strategy = resolve_intrinsic_strategy(proposal.intrinsic_site_order)
-    redshift_cache = build_redshift_grid_cache(proposal, z_grid)
-    return ImportanceSamplingProblem(
-        proposal,
-        observation,
-        C,
-        population,
-        fiducial_hyperparameters,
-        redshift_cache.redshift_grid,
-        redshift_cache,
-        Float64(local_merger_rate),
-        strategy
-    )
+struct ModelContext
+    proposal_log_prob::Vector{Float64}
+    dgw_fid_sq::Vector{Float64}
+    cached_flux_over_dgw2::Matrix{Float64}
+    redshift_grid::Vector{Float64}
+    sample_interpolant::SampleInterpolant
+    observation::ObservationContext
+    local_merger_rate::Float64
+    fiducial_spectral_density::Vector{Float64}
 end

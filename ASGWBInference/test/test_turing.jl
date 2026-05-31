@@ -16,15 +16,16 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
 @testset "Turing model smoke test" begin
     for variant in (:posterior, :full_intrinsic)
-        cache = parity_load_problem(
+        loaded = parity_problem_context(
             variant, [Detector("H1"), Detector("L1")]; registry = POPULATION_REGISTRY)
+        cache, C, ctx = loaded.problem, loaded.cosmology_type, loaded.ctx
         theta0 = PARITY_THETA
         priors = PARITY_PRIORS
         order = _PARITY_ORDER
 
-        model = build_turing_model(cache, priors; track = false)
+        model = build_turing_model(cache, C, ctx, priors; track = false)
         @test Turing.logjoint(model, theta0) ≈
-              logposterior(theta0, cache, priors) rtol = 1e-6
+              logposterior(theta0, cache, C, ctx, priors) rtol = 1e-6
         @test condition_turing_model(
             model, theta0, priors, nothing; order = order) ===
               model
@@ -33,7 +34,7 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         @test_throws ArgumentError condition_turing_model(
             model, theta0, priors, (:unknown,); order = order)
 
-        model_track = build_turing_model(cache, priors; track = true)
+        model_track = build_turing_model(cache, C, ctx, priors; track = true)
         returned_nt = Turing.returned(model_track, theta0)
         @test haskey(returned_nt, :effective_sample_size)
         @test isfinite(returned_nt.effective_sample_size)
@@ -95,11 +96,12 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 end
 
 @testset "submodel boundary lifts VarNames to parent (flat)" begin
-    cache = parity_load_problem(
+    loaded = parity_problem_context(
         :posterior, [Detector("H1"), Detector("L1")]; registry = POPULATION_REGISTRY)
+    cache, C, ctx = loaded.problem, loaded.cosmology_type, loaded.ctx
     priors = PARITY_PRIORS
 
-    turing_model = build_turing_model(cache, priors)
+    turing_model = build_turing_model(cache, C, ctx, priors)
     vi = VarInfo(turing_model)
     present = _varinfo_symbols(vi)
     for n in (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
@@ -110,13 +112,14 @@ end
 end
 
 @testset "condition_turing_model across submodel boundary" begin
-    cache = parity_load_problem(
+    loaded = parity_problem_context(
         :posterior, [Detector("H1"), Detector("L1")]; registry = POPULATION_REGISTRY)
+    cache, C, ctx = loaded.problem, loaded.cosmology_type, loaded.ctx
     priors = PARITY_PRIORS
     order = _PARITY_ORDER
     theta0 = PARITY_THETA
 
-    turing_model = build_turing_model(cache, priors)
+    turing_model = build_turing_model(cache, C, ctx, priors)
     @test condition_turing_model(turing_model, theta0, priors, nothing; order = order) ===
           turing_model
 

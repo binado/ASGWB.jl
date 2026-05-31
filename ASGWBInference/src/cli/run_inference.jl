@@ -2,8 +2,6 @@ module RunInferenceCLI
 
 using ASGWB
 using ASGWB:
-             load_problem,
-             load_model_toml,
              Detector,
              canonical_hyperparameters,
              validate_hyperparameters,
@@ -13,7 +11,7 @@ using ASGWB:
              hyperparameters
 using ..ChainIO: atomic_save_chain
 using ..InferenceImpl: build_turing_model, condition_turing_model, validate_hyperprior,
-                       POPULATION_REGISTRY
+                       load_problem_context, POPULATION_REGISTRY
 
 using Turing
 using AdvancedHMC
@@ -212,7 +210,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     mkpath(output_dir)
 
     @info "loading bundle" bundle_path model_path
-    problem = load_problem(
+    loaded = load_problem_context(
         bundle_path,
         model_path,
         detectors,
@@ -220,10 +218,12 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
         local_merger_rate = local_merger_rate,
         observation_time_yr = observation_time_yr
     )
-    @info "bundle loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    problem = loaded.problem
+    C = loaded.cosmology_type
+    ctx = loaded.ctx
+    @info "bundle loaded" n_frequency_bins=length(ctx.observation.frequencies) n_proposal_samples=length(problem.samples.redshift)
 
-    C = problem.cosmology_type
-    pop = problem.population
+    pop = problem.population_model
     order = full_hyperparameters(C, pop)
     hyperprior = full_hyperprior(C, pop)
 
@@ -272,7 +272,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     Pkg.status()
 
     @info "using fiducial in-band spectrum from cache as observed data"
-    observed = problem.observation.fiducial_spectral_density
+    observed = ctx.fiducial_spectral_density
 
     @info "seeding RNG" rng_seed=seed
     Random.seed!(seed)
@@ -283,9 +283,11 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     @info "starting NUTS" n_adapts n_samples target_acceptance ad_backend=ad_backend_name sample_only checkpoint_every
     turing_model = build_turing_model(
         problem,
+        C,
+        ctx,
         hyperprior;
         track = true,
-        observed_spectral_density = observed
+        observed = observed
     )
     conditioned = condition_turing_model(
         turing_model,

@@ -1,57 +1,82 @@
-function evaluate_model_terms(
+"""
+    merger_rate(problem, C, Λ, ctx::ModelContext) -> Float64
+
+Detector-frame merger rate in events/sec at hyperparameters `Λ` (cosmology family `C`),
+reading the local rate and observation times from `ctx`.
+"""
+function merger_rate(
+        problem::ImportanceSamplingProblem,
+        ::Type{C},
         Λ::NamedTuple,
-        problem::ImportanceSamplingProblem
-)
-    c = cosmology(problem.cosmology_type, Λ)
-    cosmology_cache = CosmologyCache(c, problem.redshift_grid)
-    prior = single_event_prior(problem.population, c, Λ)
-    iw = compute_importance_weights(problem, Λ, cosmology_cache, prior)
-    redshift_prior_dist = _redshift_prior_distribution(prior).prior
-    rate = merger_rate_per_sec(
-        redshift_prior_dist,
-        problem.local_merger_rate,
-        problem.observation.observation_time_yr,
-        problem.observation.observation_time_sec
+        ctx::ModelContext
+) where {C <: AbstractCosmology}
+    return merger_rate(
+        problem,
+        C,
+        Λ,
+        ctx.local_merger_rate,
+        ctx.observation.observation_time_yr,
+        ctx.observation.observation_time_sec
     )
-    sd = spectral_density(problem.proposal.cached_flux_over_dgw2, rate; weights = iw.weights)
-    return merge(iw,
-        (
-            redshift_integral = redshift_integral(redshift_prior_dist),
-            expected_number_of_sources = rate * problem.observation.observation_time_sec,
-            spectral_density = sd,
-            spectral_density_in_band = sd[problem.observation.in_band_mask]
-        ))
 end
 
+"""
+    merger_rate(problem, C, Λ, local_merger_rate, observation_time_yr, observation_time_sec) -> Float64
+
+Detector-frame merger rate in events/sec from explicit observation arguments (no
+`ModelContext` required). Doubles as the ctx-free oracle for the cached method above.
+"""
+function merger_rate(
+        problem::ImportanceSamplingProblem,
+        ::Type{C},
+        Λ::NamedTuple,
+        local_merger_rate::Real,
+        observation_time_yr::Real,
+        observation_time_sec::Real
+) where {C <: AbstractCosmology}
+    c = cosmology(C, Λ)
+    prior = single_event_prior(problem.population_model, c, Λ)
+    return merger_rate_per_sec(
+        prior.dists.redshift.prior,
+        local_merger_rate,
+        observation_time_yr,
+        observation_time_sec
+    )
+end
+
+"""
+    loglikelihood(Λ, problem, C, ctx; observed = ctx.fiducial_spectral_density)
+
+Gaussian in-band log-likelihood of the SGWB spectral density at `Λ`. Inlines the
+`weights → rate → Sₕ` sequence using the cached atomics and `ctx` masks/scales.
+"""
 function loglikelihood(
         Λ::NamedTuple,
-        problem::ImportanceSamplingProblem;
-        observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
-)
-    evaluation = evaluate_model_terms(Λ, problem)
-    observed_in_band = observed_spectral_density[problem.observation.in_band_mask]
-    residual = observed_in_band .- evaluation.spectral_density_in_band
-    return -0.5 * sum(
-        (residual ./ problem.observation.sgwb_scale_in_band) .^ 2 .+
-        log.(2π .* (problem.observation.sgwb_scale_in_band .^ 2)),
-    )
+        problem::ImportanceSamplingProblem,
+        ::Type{C},
+        ctx::ModelContext;
+        observed::AbstractVector{<:Real} = ctx.fiducial_spectral_density
+) where {C <: AbstractCosmology}
+    weights = compute_importance_weights(problem, C, Λ, ctx)
+    rate = merger_rate(problem, C, Λ, ctx)
+    Sh = spectral_density(ctx.cached_flux_over_dgw2, rate; weights = weights)
+
+    obs = ctx.observation
+    mask = obs.in_band_mask
+    σ = obs.sgwb_scale_in_band
+    residual = observed[mask] .- Sh[mask]
+    return -0.5 * sum((residual ./ σ) .^ 2 .+ log.(2π .* (σ .^ 2)))
 end
 
 function fiducial_hyperparameters(problem::ImportanceSamplingProblem)
     problem.fiducial_hyperparameters
 end
 
-function fiducial_spectral_density(problem::ImportanceSamplingProblem)
-    return evaluate_model_terms(fiducial_hyperparameters(problem), problem).spectral_density
-end
+"""
+    fiducial_redshift_integral(C, population, Λ) -> Float64
 
-function fiducial_redshift_integral(problem::ImportanceSamplingProblem)
-    Λ = problem.fiducial_hyperparameters
-    c = cosmology(problem.cosmology_type, Λ)
-    prior = single_event_prior(problem.population, c, Λ)
-    return Float64(redshift_integral(_redshift_prior_distribution(prior).prior))
-end
-
+Redshift-integrated detector-frame merger-rate density at hyperparameters `Λ`.
+"""
 function fiducial_redshift_integral(
         ::Type{C},
         population::M,
@@ -59,5 +84,17 @@ function fiducial_redshift_integral(
 ) where {C <: AbstractCosmology, M <: PopulationModel}
     c = cosmology(C, Λ)
     prior = single_event_prior(population, c, Λ)
-    return Float64(redshift_integral(_redshift_prior_distribution(prior).prior))
+    return Float64(redshift_integral(prior.dists.redshift.prior))
+end
+
+"""
+    fiducial_redshift_integral(problem, C) -> Float64
+
+Redshift integral at `problem.fiducial_hyperparameters` for cosmology family `C`.
+"""
+function fiducial_redshift_integral(
+        problem::ImportanceSamplingProblem,
+        ::Type{C}
+) where {C <: AbstractCosmology}
+    return fiducial_redshift_integral(C, problem.population_model, problem.fiducial_hyperparameters)
 end

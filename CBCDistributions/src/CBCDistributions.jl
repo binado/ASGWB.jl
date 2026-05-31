@@ -13,8 +13,7 @@ export PopulationModel, single_event_prior,
        batched_logpdf
 export CumulativeIntegral1D, interpolate, cdf, normalizer
 export IntrinsicPriorStrategy, FullBNS,
-       FullBNSSamplesSoA, stack_source_masses,
-       FULL_BNS_INTRINSIC_ORDER, resolve_intrinsic_strategy,
+       stack_source_masses, FULL_BNS_INTRINSIC_ORDER,
        IntrinsicPrior, validate_batch, intrinsic_prior
 export MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior, DEFAULT_Z_GRID
 

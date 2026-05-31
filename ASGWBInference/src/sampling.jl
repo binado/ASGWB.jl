@@ -7,21 +7,25 @@ using LogDensityProblems
 using LogDensityProblemsAD
 
 """
-    ASGWBLogDensity(problem, prior; order)
+    ASGWBLogDensity(problem, C, ctx, prior; observed)
 
 A struct representing the log-density of the ASGWB importance sampling model,
 conforming to the `LogDensityProblems.jl` interface. It handles the
 transformation between unconstrained parameters (where the sampler operates)
 and constrained physical parameters.
 
-`order` is the full hyperparameter order tuple from `full_hyperparameters(C, pop)`.
+The cosmology family `C` is carried as a type parameter (a compile-time constant for the
+hot path); `ctx` holds the `Λ`-independent caches and the default observed data.
 """
 struct ASGWBLogDensity{
-    C <: ImportanceSamplingProblem, P <: ProductNamedTupleDistribution, B}
-    problem::C
+    C, M <: PopulationModel, P <: ProductNamedTupleDistribution, B}
+    problem::ImportanceSamplingProblem{M}
+    cosmology_type::Type{C}
+    ctx::ModelContext
     prior::P
     transform::B
     order::Tuple{Vararg{Symbol}}
+    observed::Vector{Float64}
 end
 
 function validate_hyperprior(order::Tuple{Vararg{Symbol}}, prior::ProductNamedTupleDistribution)
@@ -34,20 +38,26 @@ end
 function logposterior(
         Λ::NamedTuple,
         problem::ImportanceSamplingProblem,
+        ::Type{C},
+        ctx::ModelContext,
         prior::ProductNamedTupleDistribution;
-        observed_spectral_density::AbstractVector{<:Real} = problem.observation.fiducial_spectral_density
-)
+        observed::AbstractVector{<:Real} = ctx.fiducial_spectral_density
+) where {C <: AbstractCosmology}
     return logpdf(prior, Λ) +
-           loglikelihood(Λ, problem; observed_spectral_density = observed_spectral_density)
+           loglikelihood(Λ, problem, C, ctx; observed = observed)
 end
 
 function ASGWBLogDensity(
-        problem::ImportanceSamplingProblem{C, M},
-        prior::ProductNamedTupleDistribution
-) where {C, M}
-    order = full_hyperparameters(C, problem.population)
+        problem::ImportanceSamplingProblem,
+        ::Type{C},
+        ctx::ModelContext,
+        prior::ProductNamedTupleDistribution;
+        observed::AbstractVector{<:Real} = ctx.fiducial_spectral_density
+) where {C <: AbstractCosmology}
+    order = full_hyperparameters(C, problem.population_model)
     validate_hyperprior(order, prior)
-    return ASGWBLogDensity(problem, prior, bijector(prior), order)
+    return ASGWBLogDensity(
+        problem, C, ctx, prior, bijector(prior), order, collect(Float64, observed))
 end
 
 """
@@ -81,7 +91,9 @@ end
 
 function LogDensityProblems.logdensity(ld::ASGWBLogDensity, z::AbstractVector{<:Real})
     Λ, logabsdet = constrained_parameters(ld, z)
-    return logposterior(Λ, ld.problem, ld.prior) + logabsdet
+    return logposterior(
+        Λ, ld.problem, ld.cosmology_type, ld.ctx, ld.prior; observed = ld.observed) +
+           logabsdet
 end
 
 """
@@ -115,19 +127,21 @@ function finite_difference_logdensity_and_gradient(
 end
 
 """
-    sample_with_advancedhmc(problem, prior, theta0; kwargs...) -> (samples, stats, ld)
+    sample_with_advancedhmc(problem, C, ctx, prior, theta0; kwargs...) -> (samples, stats, ld)
 
 Sample from the ASGWB posterior using `AdvancedHMC.jl` directly (without Turing).
 """
 function sample_with_advancedhmc(
         problem::ImportanceSamplingProblem,
+        ::Type{C},
+        ctx::ModelContext,
         prior::ProductNamedTupleDistribution,
         theta0::NamedTuple;
         n_adapts::Int = 25,
         n_samples::Int = 25,
         target_acceptance::Float64 = 0.8
-)
-    ld = ASGWBLogDensity(problem, prior)
+) where {C <: AbstractCosmology}
+    ld = ASGWBLogDensity(problem, C, ctx, prior)
     z0 = unconstrained_initial_point(ld, theta0)
     ad_problem = ad_logdensity(ld)
 

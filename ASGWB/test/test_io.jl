@@ -10,7 +10,7 @@ end
 const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
 
 function _load_variant(variant::Symbol)
-    return parity_load_problem(variant, _TEST_LOAD_DETS)
+    return parity_problem_context(variant, _TEST_LOAD_DETS)
 end
 
 @testset "save_bundle/load_bundle round-trip" begin
@@ -114,166 +114,83 @@ end
     @test_throws ArgumentError load_model_toml(path, PARITY_REGISTRY)
 end
 
-@testset "load_problem reconstructs derived fields" begin
-    problem = _load_variant(:importance_context)
-    z = problem.proposal.samples.redshift
+@testset "ImportanceSamplingProblem is a pure spec" begin
+    loaded = _load_variant(:importance_context)
+    problem = loaded.problem
+
+    @test problem isa ImportanceSamplingProblem
+    @test problem.population_model isa ParityBNSPopulation
+    @test redshift(problem) ≈ [0.1, 0.2]
+    @test Vector(problem.samples.mass[1, :]) ≈ [1.4, 1.4]
+    @test Vector(problem.samples.mass[2, :]) ≈ [1.2, 1.2]
+    @test problem.samples.χ₁ ≈ [0.0, 0.0]
+    @test problem.samples.Λ₁ ≈ [100.0, 100.0]
+    @test problem.fluxes ≈ Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+
     Λ = fiducial_hyperparameters(problem)
-    C = problem.cosmology_type
-    pop = problem.population
-
-    expected_dgw_sq = reconstruct_dgw_fid_sq(z, C, Λ)
-    expected_lp = reconstruct_proposal_log_prob(problem.proposal.samples, C, pop, Λ)
-    expected_ri = fiducial_redshift_integral(C, pop, Λ)
-
-    @test problem.proposal.dgw_fid_sq ≈ expected_dgw_sq
-    @test problem.proposal.log_prob ≈ expected_lp
-    @test fiducial_redshift_integral(problem) ≈ expected_ri rtol = 1e-6
-    @test fiducial_spectral_density(problem) ≈ problem.observation.fiducial_spectral_density
-end
-
-@testset "importance_sampling_problem matches load_problem fixture" begin
-    from_file = _load_variant(:importance_context)
-    C = from_file.cosmology_type
-    pop = from_file.population
-    Λ = from_file.fiducial_hyperparameters
-    samples = (
-        mass = stack_source_masses([1.4, 1.4], [1.2, 1.2]),
-        redshift = [0.1, 0.2],
-        χ₁ = [0.0, 0.0],
-        χ₂ = [0.0, 0.0],
-        Λ₁ = [100.0, 100.0],
-        Λ₂ = [100.0, 100.0]
-    )
-    lp = reconstruct_proposal_log_prob(samples, C, pop, Λ)
-    intrinsic_mat = Float64[1.4 1.2 0.1 0.0 0.0 100.0 100.0
-                            1.4 1.2 0.2 0.0 0.0 100.0 100.0]
-    dgw_sq = reconstruct_dgw_fid_sq(samples.redshift, C, Λ)
-    proposal = ProposalData(
-        FULL_BNS_INTRINSIC_ORDER,
-        samples,
-        lp,
-        intrinsic_mat,
-        from_file.proposal.cached_flux_over_dgw2,
-        dgw_sq
-    )
-    from_memory = importance_sampling_problem(
-        proposal,
-        from_file.observation,
-        C,
-        pop,
-        Λ,
-        from_file.local_merger_rate
-    )
-
-    @test from_memory.proposal.intrinsic_site_order ==
-          from_file.proposal.intrinsic_site_order
-    @test from_memory.proposal.samples.redshift == from_file.proposal.samples.redshift
-    @test from_memory.proposal.log_prob ≈ from_file.proposal.log_prob
-    @test from_memory.proposal.intrinsic_vector ≈ from_file.proposal.intrinsic_vector
-    @test from_memory.proposal.cached_flux_over_dgw2 ≈
-          from_file.proposal.cached_flux_over_dgw2
-    @test from_memory.proposal.dgw_fid_sq ≈ from_file.proposal.dgw_fid_sq
-    @test from_memory.observation.frequencies ≈ from_file.observation.frequencies
-    @test from_memory.observation.effective_psd ≈ from_file.observation.effective_psd
-    @test from_memory.observation.sgwb_scale ≈ from_file.observation.sgwb_scale
-    @test from_memory.observation.in_band_mask == from_file.observation.in_band_mask
-    @test from_memory.observation.fiducial_spectral_density ≈
-          from_file.observation.fiducial_spectral_density
-    @test length(from_memory.redshift_grid) == length(from_file.redshift_grid)
-    @test from_memory.fiducial_hyperparameters == from_file.fiducial_hyperparameters
-    @test from_memory.local_merger_rate == from_file.local_merger_rate
-    @test typeof(from_memory.strategy) == typeof(from_file.strategy)
-end
-
-@testset "load_problem" begin
-    problem = _load_variant(:importance_context)
-
-    @test problem.proposal.intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER
-    s = problem.proposal.samples
-    @test s.redshift ≈ [0.1, 0.2]
-    @test Vector(s.mass[1, :]) ≈ [1.4, 1.4]
-    @test Vector(s.mass[2, :]) ≈ [1.2, 1.2]
-    @test s.χ₁ ≈ [0.0, 0.0]
-    @test s.χ₂ ≈ [0.0, 0.0]
-    @test s.Λ₁ ≈ [100.0, 100.0]
-    @test s.Λ₂ ≈ [100.0, 100.0]
-
-    C = problem.cosmology_type
-    pop = problem.population
-    Λ = fiducial_hyperparameters(problem)
-
-    expected_lp = reconstruct_proposal_log_prob(problem.proposal.samples, C, pop, Λ)
-    @test problem.proposal.log_prob ≈ expected_lp rtol = 1e-6
-    @test problem.proposal.intrinsic_vector ≈ Float64[1.4 1.2 0.1 0.0 0.0 100.0 100.0
-                  1.4 1.2 0.2 0.0 0.0 100.0 100.0]
-    @test problem.proposal.cached_flux_over_dgw2 ≈ Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
-    @test problem.proposal.dgw_fid_sq ≈ reconstruct_dgw_fid_sq(
-        problem.proposal.samples.redshift, C, Λ
-    )
-
-    @test problem.observation.frequencies ≈ [0.0, 20.0, 40.0]
-    @test length(problem.observation.effective_psd) ==
-          length(problem.observation.frequencies)
-    @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
-    @test problem.observation.in_band_mask == BitVector([false, true, true])
-
-    ev = evaluate_model_terms(fiducial_hyperparameters(problem), problem)
-    @test problem.observation.fiducial_spectral_density ≈ ev.spectral_density
-    @test problem.observation.sgwb_scale_in_band ≈
-          problem.observation.sgwb_scale[problem.observation.in_band_mask]
-    @test problem.observation.fiducial_spectral_density_in_band ≈
-          ev.spectral_density_in_band
-
-    @test C === ModifiedPropagation{LambdaCDM}
     @test Λ.H0 == 67.0
     @test Λ.Ωm == 0.315
     @test Λ.Ξ₀ == 1.0
-    @test Λ.Ξₙ == 0.0
     @test Λ.γ == 2.7
-    @test Λ.κ == 3.0
-    @test Λ.zpeak == 2.5
-    @test problem.local_merger_rate == 161.0
-    @test problem.observation.observation_time_yr == 1.0
-    @test problem.observation.observation_time_sec ≈ 365.25 * 24 * 3600
-    @test fiducial_redshift_integral(problem) ≈
+end
+
+@testset "build_model_context reconstructs derived caches" begin
+    loaded = _load_variant(:importance_context)
+    problem = loaded.problem
+    C = loaded.cosmology_type
+    ctx = loaded.ctx
+    pop = problem.population_model
+    Λ = fiducial_hyperparameters(problem)
+    z = problem.samples.redshift
+
+    @test ctx.dgw_fid_sq ≈ ASGWB._reconstruct_dgw_fid_sq(z, C, Λ)
+    @test ctx.proposal_log_prob ≈
+          ASGWB._reconstruct_proposal_log_prob(problem.samples, C, pop, Λ)
+    # Ξ₀ = 1, Ξₙ = 0 ⇒ D_gw = D_L ⇒ no rescaling of the raw fluxes.
+    @test ctx.cached_flux_over_dgw2 ≈ problem.fluxes
+    @test ctx.cached_flux_over_dgw2 ≈
+          ASGWB._reconstruct_cached_flux_over_dgw2(problem.fluxes, z, C, Λ)
+
+    @test length(ctx.redshift_grid) == length(DEFAULT_Z_GRID)
+    @test ctx.observation.frequencies ≈ [0.0, 20.0, 40.0]
+    @test ctx.observation.in_band_mask == BitVector([false, true, true])
+    @test length(ctx.observation.effective_psd) == length(ctx.observation.frequencies)
+    @test ctx.observation.sgwb_scale_in_band ≈
+          ctx.observation.sgwb_scale[ctx.observation.in_band_mask]
+    @test ctx.observation.observation_time_yr == 1.0
+    @test ctx.observation.observation_time_sec ≈ 365.25 * 24 * 3600
+    @test ctx.local_merger_rate == 161.0
+
+    @test all(isfinite, ctx.fiducial_spectral_density)
+    @test length(ctx.fiducial_spectral_density) == length(ctx.observation.frequencies)
+    @test fiducial_redshift_integral(problem, C) ≈
           fiducial_redshift_integral(C, pop, Λ) rtol = 1e-6
-    @test problem.strategy isa FullBNS
-    @test redshift(problem) ≈ [0.1, 0.2]
-    @test length(problem.redshift_grid) == length(DEFAULT_Z_GRID)
 end
 
-@testset "fiducial_spectral_density uses W0CDM bundle" begin
-    p = _load_variant(:w0cdm)
-    @test p.cosmology_type === ModifiedPropagation{W0CDM}
-    Λ = fiducial_hyperparameters(p)
-    ev = evaluate_model_terms(Λ, p)
-    @test fiducial_spectral_density(p) ≈ ev.spectral_density
+@testset "fiducial spectral density differs across cosmologies" begin
+    loaded_w0 = _load_variant(:w0cdm)
+    @test loaded_w0.cosmology_type === ModifiedPropagation{W0CDM}
+    fs_w0 = loaded_w0.ctx.fiducial_spectral_density
+    @test all(isfinite, fs_w0)
 
+    # Build a LambdaCDM context from the same raw inputs and confirm the fiducial spectrum
+    # is not identical (the cosmology genuinely feeds through the caches).
+    p_w0 = loaded_w0.problem
+    Λ = fiducial_hyperparameters(p_w0)
     C_lcdm = ModifiedPropagation{LambdaCDM}
-    pop = ParityBNSPopulation()
-    order_lcdm = full_hyperparameters(C_lcdm, pop)
-    h_lcdm = canonical_hyperparameters(
-        order_lcdm,
-        (; (k => Λ[k] for k in order_lcdm)...)
-    )
-    p_lcdm = ASGWB.ImportanceSamplingProblem(
-        p.proposal,
-        p.observation,
-        C_lcdm,
-        pop,
-        h_lcdm,
-        p.redshift_grid,
-        p.redshift_cache,
-        p.local_merger_rate,
-        p.strategy
-    )
-    ev_lcdm = evaluate_model_terms(h_lcdm, p_lcdm)
-    @test !(fiducial_spectral_density(p) ≈ ev_lcdm.spectral_density)
+    order_lcdm = full_hyperparameters(C_lcdm, p_w0.population_model)
+    Λ_lcdm = canonical_hyperparameters(order_lcdm, (; (k => Λ[k] for k in order_lcdm)...))
+    p_lcdm = ImportanceSamplingProblem(
+        p_w0.population_model, p_w0.fluxes, p_w0.samples, Λ_lcdm)
+    grid = FrequencyGrid(0.05, 80.0, 20.0, 15.0, 45.0)
+    ctx_lcdm = build_model_context(
+        p_lcdm, C_lcdm, grid, _TEST_LOAD_DETS, 1.0, 161.0)
+    @test !(fs_w0 ≈ ctx_lcdm.fiducial_spectral_density)
 end
 
-@testset "load_problem throws on model fingerprint mismatch" begin
+@testset "verify_model_fingerprint throws on mismatch" begin
     dir = parity_bundle_dir(:importance_context)
-    bundle_path = joinpath(dir, "bundle.h5")
+    catalog = load_bundle(joinpath(dir, "bundle.h5"))
     tmp_dir = mktempdir()
     bad_toml = joinpath(tmp_dir, "model.toml")
     write(bad_toml,
@@ -290,89 +207,5 @@ end
         "κ" = 3.0
         zpeak = 2.5
         """)
-    @test_throws ArgumentError load_problem(
-        bundle_path,
-        bad_toml,
-        _TEST_LOAD_DETS,
-        PARITY_REGISTRY;
-        parity_observation_kwargs(:importance_context)...
-    )
-end
-
-@testset "importance_sampling_problem builds redshift cache" begin
-    C = ModifiedPropagation{LambdaCDM}
-    pop = ParityBNSPopulation()
-    order = full_hyperparameters(C, pop)
-    Λ = canonical_hyperparameters(
-        order,
-        (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
-    )
-    samples = (
-        mass = stack_source_masses([1.4], [1.2]),
-        redshift = [0.1],
-        χ₁ = [0.0],
-        χ₂ = [0.0],
-        Λ₁ = [100.0],
-        Λ₂ = [100.0]
-    )
-    lp = reconstruct_proposal_log_prob(samples, C, pop, Λ)
-    proposal = ProposalData(
-        FULL_BNS_INTRINSIC_ORDER,
-        samples,
-        lp,
-        reshape([1.4, 1.2, 0.1, 0.0, 0.0, 100.0, 100.0], 1, :),
-        fill(1.0, 1, 2),
-        [1.0]
-    )
-    observation = ObservationConfig(
-        [1.0, 2.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
-        BitVector([true, true]),
-        [0.0, 0.0],
-        1.0,
-        1.0
-    )
-    p = importance_sampling_problem(proposal, observation, C, pop, Λ, 1.0)
-    @test fiducial_redshift_integral(p) ≈ fiducial_redshift_integral(C, pop, Λ) rtol = 1e-10
-end
-
-@testset "importance_sampling_problem realizes population prior per call" begin
-    C = ModifiedPropagation{LambdaCDM}
-    pop = ParityBNSPopulation()
-    order = full_hyperparameters(C, pop)
-    Λ = canonical_hyperparameters(
-        order,
-        (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
-    )
-    samples = (
-        mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
-        redshift = [0.1, 0.2],
-        χ₁ = [0.0, 0.1],
-        χ₂ = [0.0, -0.2],
-        Λ₁ = [100.0, 200.0],
-        Λ₂ = [150.0, 250.0]
-    )
-    proposal = ProposalData(
-        FULL_BNS_INTRINSIC_ORDER,
-        samples,
-        zeros(2),
-        Float64[1.4 1.2 0.1 0.0 0.0 100.0 150.0
-                1.5 1.3 0.2 0.1 -0.2 200.0 250.0],
-        ones(2, 2),
-        ones(2)
-    )
-    observation = ObservationConfig(
-        [1.0, 2.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
-        BitVector([true, true]),
-        [0.0, 0.0],
-        1.0,
-        1.0
-    )
-    p = importance_sampling_problem(proposal, observation, C, pop, Λ, 1.0)
-    c = cosmology(C, Λ)
-    prior = single_event_prior(pop, c, Λ)
-    @test compute_importance_weights(p, Λ).target_log_prob ≈ batched_logpdf(prior, samples)
+    @test_throws ArgumentError verify_model_fingerprint(catalog, bad_toml)
 end

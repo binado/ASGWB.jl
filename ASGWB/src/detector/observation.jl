@@ -52,27 +52,25 @@ function _sgwb_scale_vector(
 end
 
 """
-    build_observation_config(frequencies, detectors, in_band_mask, fiducial_spectral_density, observation_time_sec, observation_time_yr)
+    build_observation_context(frequencies, detectors, in_band_mask, observation_time_sec, observation_time_yr)
 
-Reconstruct [`ObservationConfig`](@ref) from a detector network and tabulated PSDs
+Build an [`ObservationContext`](@ref) from a detector network and tabulated PSDs
 (isotropic ORF network [`effective_psd`](@ref) and per-bin Gaussian scales).
 """
-function build_observation_config(
+function build_observation_context(
         frequencies::Vector{Float64},
         detectors::AbstractVector{Detector},
         in_band_mask::BitVector,
-        fiducial_spectral_density::Vector{Float64},
         observation_time_sec::Float64,
         observation_time_yr::Float64
 )
     eff = effective_psd(frequencies, detectors)
     sgwb = _sgwb_scale_vector(eff, frequencies, observation_time_sec)
-    return ObservationConfig(
+    return ObservationContext(
         frequencies,
         eff,
         sgwb,
         in_band_mask,
-        fiducial_spectral_density,
         observation_time_sec,
         observation_time_yr
     )

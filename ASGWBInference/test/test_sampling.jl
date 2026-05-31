@@ -16,7 +16,8 @@ end
 include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 
 @testset "AdvancedHMC initial point follows model order" begin
-    cache = parity_load_problem(:posterior, [Detector("H1"), Detector("L1")])
+    loaded = parity_problem_context(:posterior, [Detector("H1"), Detector("L1")])
+    cache, C, ctx = loaded.problem, loaded.cosmology_type, loaded.ctx
     theta0 = PARITY_THETA
     order = _PARITY_ORDER
 
@@ -30,9 +31,9 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
         H0 = Uniform(20.0, 140.0)
     ))
 
-    @test_throws ArgumentError ASGWBLogDensity(cache, reordered_priors)
+    @test_throws ArgumentError ASGWBLogDensity(cache, C, ctx, reordered_priors)
 
-    problem = ASGWBLogDensity(cache, PARITY_PRIORS)
+    problem = ASGWBLogDensity(cache, C, ctx, PARITY_PRIORS)
     ordered_theta0 = (; (k => theta0[k] for k in order)...)
 
     @test unconstrained_initial_point(problem, theta0) ==
@@ -41,11 +42,12 @@ end
 
 @testset "AdvancedHMC smoke test" begin
     for variant in (:posterior, :full_intrinsic)
-        cache = parity_load_problem(variant, [Detector("H1"), Detector("L1")])
+        loaded = parity_problem_context(variant, [Detector("H1"), Detector("L1")])
+        cache, C, ctx = loaded.problem, loaded.cosmology_type, loaded.ctx
         theta0 = PARITY_THETA
         priors = PARITY_PRIORS
 
-        problem = ASGWBLogDensity(cache, priors)
+        problem = ASGWBLogDensity(cache, C, ctx, priors)
         z0 = unconstrained_initial_point(problem, theta0)
         ad_problem = ad_logdensity(problem)
         logdensity,
@@ -62,7 +64,7 @@ end
 
         samples, stats,
         sampling_problem = sample_with_advancedhmc(
-            cache, priors, theta0; n_adapts = 3, n_samples = 3)
+            cache, C, ctx, priors, theta0; n_adapts = 3, n_samples = 3)
 
         @test sampling_problem isa ASGWBLogDensity
         @test length(samples) == 3

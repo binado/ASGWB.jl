@@ -29,10 +29,11 @@ using ASGWBInference.InferenceImpl:
                                     unconstrained_initial_point,
                                     logposterior,
                                     validate_hyperprior,
+                                    load_problem_context,
                                     POPULATION_REGISTRY
 using ASGWB:
-             load_problem,
              compute_importance_weights,
+             merger_rate,
              merger_rate_per_sec,
              spectral_density,
              single_event_prior,
@@ -259,7 +260,7 @@ function _run(;
     @info "loading bundle" bundle_path model_path detectors=join(
         (d.name
         for d in detectors), ",")
-    problem = load_problem(
+    loaded = load_problem_context(
         bundle_path,
         model_path,
         detectors,
@@ -267,16 +268,19 @@ function _run(;
         local_merger_rate = local_merger_rate,
         observation_time_yr = observation_time_yr
     )
-    @info "bundle loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    problem = loaded.problem
+    C = loaded.cosmology_type
+    ctx = loaded.ctx
+    @info "bundle loaded" n_frequency_bins=length(ctx.observation.frequencies) n_proposal_samples=length(problem.samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing
         @info "using fiducial in-band spectrum from bundle as observed data"
-        problem.observation.fiducial_spectral_density
+        ctx.fiducial_spectral_density
     else
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
         _load_observed_spectral_density(
             observed_spectral_density_csv,
-            length(problem.observation.fiducial_spectral_density)
+            length(ctx.fiducial_spectral_density)
         )
     end
 
@@ -289,39 +293,34 @@ function _run(;
     # Build callables
     # ------------------------------------------------------------------
 
-    order = full_hyperparameters(problem.cosmology_type, problem.population)
+    order = full_hyperparameters(C, problem.population_model)
     validate_hyperprior(order, priors)
     θ0 = _theta0_from_toml(init_tbl, order)
 
     # Native (ASGWBLogDensity) path — pure Julia, no DynamicPPL
-    ld = ASGWBLogDensity(problem, priors)
+    ld = ASGWBLogDensity(problem, C, ctx, priors; observed = observed)
     z0 = unconstrained_initial_point(ld, θ0)
     ad_ld = ad_logdensity(ld)
 
     # Turing / DynamicPPL path
     model = build_turing_model(
         problem,
+        C,
+        ctx,
         priors;
         track = false,
-        observed_spectral_density = observed
+        observed = observed
     )
     lf, z0_turing = _build_turing_logdensity(model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)
 
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
-    c0 = cosmology(problem.cosmology_type, h)
-    cosmology_cache0 = CosmologyCache(c0, problem.redshift_grid)
-    prior0 = single_event_prior(problem.population, c0, h)
+    c0 = cosmology(C, h)
+    prior0 = single_event_prior(problem.population_model, c0, h)
     redshift_prior0 = prior0.dists.redshift.prior
-    iw0 = compute_importance_weights(problem, h, cosmology_cache0, prior0)
-    rate0 = merger_rate_per_sec(
-        redshift_prior0,
-        problem.local_merger_rate,
-        problem.observation.observation_time_yr,
-        problem.observation.observation_time_sec
-    )
-    weights0 = iw0.weights
+    weights0 = compute_importance_weights(problem, C, h, ctx)
+    rate0 = merger_rate(problem, C, h, ctx)
     z_samples = redshift(problem)
 
     # ------------------------------------------------------------------
@@ -332,7 +331,7 @@ function _run(;
     LogDensityProblems.logdensity_and_gradient(ad_ld, z0)
     LogDensityProblems.logdensity(lf, z0_turing)
     LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
-    logposterior(h, problem, priors; observed_spectral_density = observed)
+    logposterior(h, problem, C, ctx, priors; observed = observed)
 
     # ------------------------------------------------------------------
     # BenchmarkTools suite
@@ -350,8 +349,10 @@ function _run(;
     suite["primal"]["logposterior"] = @benchmarkable logposterior(
         $h,
         $problem,
+        $C,
+        $ctx,
         $priors;
-        observed_spectral_density = $observed
+        observed = $observed
     )
 
     suite["gradient"] = BenchmarkGroup()
@@ -364,17 +365,17 @@ function _run(;
 
     suite["stage"] = BenchmarkGroup()
     suite["stage"]["redshift"] = @benchmarkable single_event_prior(
-        $(problem.population), $c0, $h)
+        $(problem.population_model), $c0, $h)
     suite["stage"]["weights"] = @benchmarkable compute_importance_weights(
-        $problem, $h, $cosmology_cache0, $prior0)
+        $problem, $C, $h, $ctx)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
         $redshift_prior0,
-        $(problem.local_merger_rate),
-        $(problem.observation.observation_time_yr),
-        $(problem.observation.observation_time_sec)
+        $(ctx.local_merger_rate),
+        $(ctx.observation.observation_time_yr),
+        $(ctx.observation.observation_time_sec)
     )
     suite["stage"]["spectral"] = @benchmarkable spectral_density(
-        $(problem.proposal.cached_flux_over_dgw2),
+        $(ctx.cached_flux_over_dgw2),
         $rate0;
         weights = $weights0
     )

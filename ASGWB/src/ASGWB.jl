@@ -12,13 +12,16 @@ The inference input artifacts are two files:
   precomputed luminosity distances, and a `(n_freq, n_samples)` per-sample flux matrix
   `|h_+|² + |h_×|²` (before the fiducial `(D_L/D_gw)²` factor).
 
-Use [`load_problem`](@ref) to load both files and build an in-memory
-[`ImportanceSamplingProblem`](@ref). Use [`importance_sampling_problem`](@ref) to build
-problems directly from in-memory objects (primarily for tests).
+Load the bundle with [`load_bundle`](@ref) and the model with [`load_model_toml`](@ref),
+restructure the catalog samples into the proposal layout, and construct a pure
+[`ImportanceSamplingProblem`](@ref). Derived/`Λ`-independent caches (rescaled fluxes,
+proposal log-prob, redshift interpolant, detector PSDs, fiducial spectral density) are
+built into a [`ModelContext`](@ref) by [`build_model_context`](@ref); orchestration of
+these load-time steps lives in the caller (`ASGWBInference`).
 
 Inference state is a flat hyperparameter `NamedTuple` validated against the
-[`PopulationModel`](@ref) contract; the problem carries the cosmology type and
-population model, plus canonical fiducial hyperparameters.
+[`PopulationModel`](@ref) contract; the cosmology family `C` is threaded through atomic
+calls rather than stored on the problem.
 """
 module ASGWB
 
@@ -36,19 +39,18 @@ include("detector/detector.jl")
 include("detector/overlap.jl")
 include("detector/effective_psd.jl")
 include("detector/observation.jl")
-include("reconstruction.jl")
 include("importance.jl")
 include("spectral_density.jl")
 include("snr.jl")
 include("diagnostics.jl")
+include("context.jl")
 include("posterior.jl")
-include("io.jl")
 
 # Types
 export ImportanceSamplingProblem,
-       importance_sampling_problem,
-       ProposalData,
-       ObservationConfig,
+       ModelContext,
+       build_model_context,
+       ObservationContext,
        PopulationModel,
        hyperparameters,
        hyperprior,
@@ -59,7 +61,6 @@ export ImportanceSamplingProblem,
        validate_hyperparameters,
        validate_subset,
        ProposalSampleBundle,
-       FullBNSSamplesSoA,
        stack_source_masses,
        FULL_BNS_INTRINSIC_ORDER,
        PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR,
@@ -79,9 +80,7 @@ export load_model_toml,
        read_parameters,
        population_name,
        dump_parameters,
-       dump_model,
-       reconstruct_proposal_log_prob,
-       reconstruct_dgw_fid_sq
+       dump_model
 
 # Bundle I/O
 export FrequencyGrid,
@@ -91,12 +90,9 @@ export FrequencyGrid,
        WaveformCatalog,
        load_bundle,
        save_bundle,
-       verify_model_fingerprint,
-       load_problem,
-       BUNDLE_COMMAND_ATTR,
-       BUNDLE_GIT_REVISION_ATTR
+       verify_model_fingerprint
 
-# Detector network (ORF / PSD effective strain PSD; used by `load_problem`)
+# Detector network (ORF / PSD effective strain PSD; used by `build_model_context`)
 export Detector,
        PowerSpectralDensity,
        default_detector_data_dir,
@@ -106,7 +102,7 @@ export Detector,
        gaussian_bin_scale,
        gaussian_bin_variance,
        frequency_bin_width,
-       build_observation_config
+       build_observation_context
 
 # Cosmology
 export E,
@@ -162,16 +158,15 @@ export importance_weights,
        inner_product,
        spectral_snr_squared,
        spectral_snr,
-       Ωgw,
-       evaluate_model_terms
+       Ωgw
 
 # Diagnostics
 export normalized_ess, max_normalized_weight, log_ratio_variance
 
 # Posterior
 export loglikelihood,
+       merger_rate,
        fiducial_hyperparameters,
-       fiducial_spectral_density,
        fiducial_redshift_integral
 
 end

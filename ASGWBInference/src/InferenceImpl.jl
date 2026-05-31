@@ -3,6 +3,8 @@ module InferenceImpl
 using ASGWB
 using ASGWB:
              ImportanceSamplingProblem,
+             ModelContext,
+             build_model_context,
              PopulationModel,
              AbstractCosmology,
              LambdaCDM,
@@ -11,7 +13,9 @@ using ASGWB:
              cosmology_type,
              SUPPORTED_COSMOLOGIES,
              loglikelihood,
-             evaluate_model_terms,
+             merger_rate,
+             compute_importance_weights,
+             spectral_density,
              canonical_hyperparameters,
              validate_hyperparameters,
              full_hyperparameters,
@@ -21,6 +25,10 @@ using ASGWB:
              redshift_prior,
              MadauDickinsonSourceFrame,
              BNS_LAMBDA_HIGH,
+             stack_source_masses,
+             load_bundle,
+             load_model_toml,
+             verify_model_fingerprint,
              validate_subset,
              normalized_ess,
              spectral_snr_squared,
@@ -37,6 +45,7 @@ using LogDensityProblemsAD
 using Turing
 
 include("populations.jl")
+include("load.jl")
 include("sampling.jl")
 include("turing_model.jl")
 
@@ -51,6 +60,8 @@ export ASGWBLogDensity,
        validate_hyperprior,
        BNSPopulationModel,
        POPULATION_REGISTRY,
-       register_sample_hyperparameters
+       register_sample_hyperparameters,
+       bns_samples_from_catalog,
+       load_problem_context
 
 end
