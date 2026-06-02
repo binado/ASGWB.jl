@@ -5,14 +5,12 @@ using .InferenceImpl:
                       build_turing_model,
                       condition_turing_model,
                       logposterior,
-                      validate_hyperprior,
-                      register_sample_hyperparameters
+                      validate_hyperprior
 
 export build_turing_model,
        condition_turing_model,
        logposterior,
        validate_hyperprior,
-       register_sample_hyperparameters,
        atomic_save_chain
 
 include("chain_io.jl")

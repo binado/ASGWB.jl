@@ -26,7 +26,6 @@ include("turing_model.jl")
 export build_turing_model,
        condition_turing_model,
        logposterior,
-       validate_hyperprior,
-       register_sample_hyperparameters
+       validate_hyperprior
 
 end

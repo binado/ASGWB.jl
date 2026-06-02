@@ -43,16 +43,6 @@ function condition_turing_model(
     return turing_model | (; (s => ordered_theta0[s] for s in fixed)...)
 end
 
-"""
-    register_sample_hyperparameters(pop::PopulationModel)
-
-Compatibility no-op. `build_turing_model` now samples caller-defined model parameters
-through a generic `NamedDist` submodel, so no per-population registration is required.
-"""
-function register_sample_hyperparameters(pop::PopulationModel)
-    return nothing
-end
-
 @model function sample_hyperparameters(order::Tuple{Vararg{Symbol}}, dists)
     values = map(order) do sym
         x ~ DynamicPPL.NamedDist(dists[sym], sym)

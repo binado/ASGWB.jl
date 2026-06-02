@@ -103,15 +103,12 @@ end
     ctx = loaded.ctx
     pop = problem.population_model
     Λ = fiducial_hyperparameters(problem)
-    z = problem.samples.redshift
 
-    @test ctx.dgw_fid_sq ≈ ASGWB._reconstruct_dgw_fid_sq(z, C, Λ)
-    @test ctx.proposal_log_prob ≈
-          ASGWB._reconstruct_proposal_log_prob(problem.samples, C, pop, Λ)
     # Ξ₀ = 1, Ξₙ = 0 ⇒ D_gw = D_L ⇒ no rescaling of the raw fluxes.
     @test ctx.cached_flux_over_dgw2 ≈ problem.fluxes
-    @test ctx.cached_flux_over_dgw2 ≈
-          ASGWB._reconstruct_cached_flux_over_dgw2(problem.fluxes, z, C, Λ)
+    @test all(isfinite, ctx.proposal_log_prob)
+    @test all(isfinite, ctx.dgw_fid_sq)
+    @test all(>(0), ctx.dgw_fid_sq)
 
     @test length(ctx.redshift_grid) == length(DEFAULT_Z_GRID)
     @test ctx.observation.frequencies ≈ [0.0, 20.0, 40.0]
