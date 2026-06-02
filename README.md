@@ -46,7 +46,7 @@ Inference is driven by a TOML configuration file. Paths in the TOML that are not
 
 1. Copy or edit a config under [`config/`](config/), e.g. [`config/run_inference.toml`](config/run_inference.toml).
 2. Set `bundle_path` and `model_path` (see [`ASGWB.load_problem`](ASGWB/src/io.jl) in the package docs).
-3. Adjust `detectors`, `sample_only`, `[init]`, and `[sampler]` (`n_samples`, `num_chains`, `checkpoint_every`, etc.).
+3. Set fiducial hyperparameters in `model.toml` `[parameters]` (used to condition fixed sites when `sample_only` is set). Adjust `detectors`, `sample_only`, and `[sampler]` (`n_samples`, `num_chains`, `checkpoint_every`, etc.). Sampled parameters start NUTS from the prior (`InitFromPrior`).
 4. Adjust `local_merger_rate`, `observation_time_yr`, `output_dir`, and `output_prefix` for the run scenario and chain output location.
 
 For a short smoke run (few samples, `H0` only), use [`config/run_inference_smoke_h0.toml`](config/run_inference_smoke_h0.toml).

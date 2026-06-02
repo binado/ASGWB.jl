@@ -54,7 +54,8 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
             Turing.NUTS(3, 0.8),
             3;
             progress = false,
-            chain_type = FlexiChains.VNChain
+            chain_type = FlexiChains.VNChain,
+            initial_params = InitFromPrior()
         )
 
         @test Turing.logjoint(sampled_model, theta0) ≈ Turing.logjoint(model, theta0) rtol = 1e-6
@@ -70,7 +71,8 @@ include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
             Turing.NUTS(3, 0.8),
             3;
             progress = false,
-            chain_type = FlexiChains.VNChain
+            chain_type = FlexiChains.VNChain,
+            initial_params = InitFromPrior()
         )
         @test chain_h0 isa FlexiChains.VNChain
         pnames = sort(collect(Symbol.(FlexiChains.parameters(chain_h0))))

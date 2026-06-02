@@ -1,7 +1,7 @@
 catalog_path = "../catalog.h5"
 model_path = "../model.toml"
 detectors = ["E1", "E2", "E3"]
-sample_only = ["H0"]
+sample_only = ["Ξ₀"]
 seed = 1
 local_merger_rate = 161.0
 observation_time_yr = 1.0
@@ -9,15 +9,6 @@ observation_time_yr = 1.0
 # Optional. Relative paths are resolved against this TOML file's directory.
 output_dir = "../chains"
 output_prefix = "chains"
-
-[init]
-H0 = 67.66
-Omega_m = 0.3096
-Xi_0 = 1.0
-Xi_n = 1.91
-gamma = 2.7
-kappa = 5.7
-z_peak = 2.0
 
 [sampler]
 # Keep these small for smoke tests; increase for real runs.

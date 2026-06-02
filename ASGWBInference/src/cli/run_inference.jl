@@ -3,12 +3,10 @@ module RunInferenceCLI
 using ASGWB
 using ASGWB:
              Detector,
-             canonical_hyperparameters,
              validate_hyperparameters,
              validate_subset,
              full_hyperparameters,
-             full_hyperprior,
-             hyperparameters
+             full_hyperprior
 using ..ChainIO: atomic_save_chain
 using ..InferenceImpl: build_turing_model, condition_turing_model, validate_hyperprior,
                        load_problem_context, POPULATION_REGISTRY
@@ -26,12 +24,14 @@ using AbstractMCMC: bundle_samples
 using FlexiChains: VNChain
 using Dates: now, format
 
-"""Check each `init` scalar has positive prior density under the matching `priors` entry."""
-function validate_init_against_priors(priors, init)
+"""Check each fiducial scalar has positive prior density under the matching `priors` entry."""
+function validate_init_against_priors(priors, fiducial)
     for (k, d) in pairs(priors)
-        v = init[k]
+        v = fiducial[k]
         isfinite(logpdf(d, v)) || throw(
-            ArgumentError("init.$k = $v is outside the support of the corresponding prior"),
+            ArgumentError(
+            "fiducial.$k = $v is outside the support of the corresponding prior",
+        ),
         )
     end
     return nothing
@@ -227,21 +227,14 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     order = full_hyperparameters(C, pop)
     hyperprior = full_hyperprior(C, pop)
 
-    raw_init = get(settings, "init", Dict{String, Any}())
-    raw_init isa AbstractDict ||
-        throw(ArgumentError("init must be omitted or a TOML table"))
-    init_overrides = NamedTuple(Symbol(k) => Float64(v) for (k, v) in raw_init)
-    init = canonical_hyperparameters(
-        order,
-        merge(problem.fiducial_hyperparameters, init_overrides);
-        context = "init hyperparameters"
-    )
+    fiducial = problem.fiducial_hyperparameters
+    initial_params = fill(InitFromPrior(), num_chains)
 
     sample_only = parse_sample_only(settings, order)
 
-    validate_init_against_priors(hyperprior.dists, init)
+    validate_init_against_priors(hyperprior.dists, fiducial)
     validate_hyperprior(order, hyperprior)
-    validate_hyperparameters(order, init; context = "init hyperparameters")
+    validate_hyperparameters(order, fiducial; context = "fiducial hyperparameters")
     if sample_only !== nothing
         isempty(sample_only) && throw(
             ArgumentError(
@@ -291,7 +284,7 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     )
     conditioned = condition_turing_model(
         turing_model,
-        init,
+        fiducial,
         hyperprior,
         sample_only;
         order = order
@@ -311,13 +304,14 @@ function _run(settings::Dict, settings_dir::AbstractString; interactive::Bool = 
     chain = if callback === nothing
         sample(
             conditioned, nuts, MCMCThreads(), n_samples, num_chains;
-            progress = progress, save_state = final_save_state, chain_type = VNChain
+            progress = progress, save_state = final_save_state, chain_type = VNChain,
+            initial_params = initial_params
         )
     else
         sample(
             conditioned, nuts, MCMCThreads(), n_samples, num_chains;
             progress = progress, save_state = final_save_state, callback = callback,
-            chain_type = VNChain
+            chain_type = VNChain, initial_params = initial_params
         )
     end
     @info "NUTS finished" chain_size=size(chain)
