@@ -43,7 +43,7 @@ Production sampling is driven from the notebooks, not a TOML CLI. The canonical 
 ### Data and model assembly
 
 1. Provide a waveform **catalog** HDF5 file (`catalog.h5`) at the repo root or set `catalog_path` in the notebook. Catalogs store per-sample intrinsic parameters and a `(n_freq, n_samples)` flux matrix `|h₊|² + |h×|²` (before fiducial `(D_L/D_gw)²` scaling). Use [`ASGWB.load_catalog`](ASGWB/src/catalog/io.jl) / [`ASGWB.save_catalog`](ASGWB/src/catalog/io.jl).
-2. Define a concrete [`PopulationModel`](CBCDistributions/src/physical_model.jl) subtype in Julia (`hyperparameters`, `hyperprior`, `single_event_prior`).
+2. Define a concrete [`PopulationModel`](CBCDistributions/src/physical_model.jl) subtype in Julia (`hyperparameters`, `single_event_prior`) and build hyperparameter priors with `product_distribution(...)` (see the notebook cells).
 3. Restructure catalog columns into the `NamedTuple` expected by `single_event_prior` (see `bns_samples_from_catalog` in the notebook).
 4. Build [`ImportanceSamplingProblem`](ASGWB/src/inference_types.jl) with fiducial hyperparameters, then [`build_model_context`](ASGWB/src/context.jl) for detector PSDs and fiducial caches.
 5. Sample with `ASGWBInference.build_turing_model`, `condition_turing_model`, and Turing NUTS; save chains via `ASGWBInference.atomic_save_chain`.

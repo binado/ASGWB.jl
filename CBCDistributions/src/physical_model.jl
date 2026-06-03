@@ -5,12 +5,14 @@ using Distributions: ProductNamedTupleDistribution
     PopulationModel
 
 Abstract supertype for caller-defined population models.  Concrete subtypes
-must implement the three-method contract:
+must implement the two-method contract:
 
 - `hyperparameters(pop) -> NTuple{N, Symbol}` — ordered population parameter names.
-- `hyperprior(pop) -> ProductNamedTupleDistribution` — prior over those parameters.
 - `single_event_prior(pop, cosmo, Λ) -> ProductNamedTupleDistribution` — per-event
   distribution conditioned on cosmology `cosmo` and hyperparameters `Λ`.
+
+Hyperparameter priors are caller-defined (e.g. `product_distribution(...)` in
+notebooks or tests); they are not part of this package API.
 """
 abstract type PopulationModel end
 
@@ -23,15 +25,6 @@ Ordered tuple of hyperparameter symbols owned by `pop`.  Implement on concrete
 subtypes; do not overlap with the cosmology symbols.
 """
 function hyperparameters end
-
-"""
-    hyperprior(pop::PopulationModel) -> ProductNamedTupleDistribution
-    hyperprior(::Type{C}) -> ProductNamedTupleDistribution
-
-Prior distribution over hyperparameters.  The population variant covers
-`hyperparameters(pop)`; the cosmology-type variant covers `hyperparameters(C)`.
-"""
-function hyperprior end
 
 """
     single_event_prior(pop, cosmo, Λ) -> ProductNamedTupleDistribution
@@ -50,15 +43,6 @@ used for the flat HMC/Turing parameter vector.
 function full_hyperparameters(::Type{C}, pop::PopulationModel) where {C <:
                                                                       AbstractCosmology}
     return (hyperparameters(C)..., hyperparameters(pop)...)
-end
-
-"""
-    full_hyperprior(C, pop) -> ProductNamedTupleDistribution
-
-Combined prior over all hyperparameters: cosmology first, then population.
-"""
-function full_hyperprior(::Type{C}, pop::PopulationModel) where {C <: AbstractCosmology}
-    return product_distribution(merge(hyperprior(C).dists, hyperprior(pop).dists))
 end
 
 """

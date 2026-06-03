@@ -1,17 +1,17 @@
-# Test-only reference population implementing the three-method PopulationModel
-# contract. The framework owns no concrete population types; callers define the
-# concrete model used by their notebooks or scripts.
+# Test-only reference population implementing the PopulationModel contract.
+# The framework owns no concrete population types; callers define the concrete
+# model used by their notebooks or scripts.
 using ASGWB: PopulationModel, AbstractCosmology, OrderedUniformSourceMassPair,
              AlignedSpinChiSimple, redshift_prior, MadauDickinsonSourceFrame,
              BNS_LAMBDA_HIGH
-import ASGWB: hyperparameters, hyperprior, single_event_prior
+import ASGWB: hyperparameters, single_event_prior
 using Distributions: Uniform, product_distribution
 
 struct ParityBNSPopulation <: PopulationModel end
 
 hyperparameters(::ParityBNSPopulation) = (:γ, :κ, :zpeak)
 
-function hyperprior(::ParityBNSPopulation)
+function parity_population_hyperprior()
     return product_distribution((
         γ = Uniform(0.5, 10.0),
         κ = Uniform(0.05, 10.0),

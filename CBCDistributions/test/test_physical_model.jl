@@ -2,25 +2,11 @@ using Test
 using Distributions
 using CBCDistributions
 
-# Minimal concrete PopulationModel for testing the three-method contract.
-struct TestPop <: PopulationModel end
-
-CBCDistributions.hyperparameters(::TestPop) = (:α, :β)
-function CBCDistributions.hyperprior(::TestPop)
-    product_distribution((
-        α = Uniform(0.0, 1.0),
-        β = Uniform(1.0, 2.0)
-    ))
-end
-function CBCDistributions.single_event_prior(::TestPop, cosmo::AbstractCosmology, Λ::NamedTuple)
-    return product_distribution((x = Uniform(0.0, Λ.α), y = Uniform(0.0, Λ.β)))
-end
-
 @testset "PopulationModel interface — TestPop" begin
     pop = TestPop()
     @test hyperparameters(pop) == (:α, :β)
 
-    hp = hyperprior(pop)
+    hp = population_hyperprior(pop)
     @test hp isa Distributions.ProductNamedTupleDistribution
     @test keys(hp.dists) == (:α, :β)
 
@@ -32,32 +18,35 @@ end
     @test :y in keys(sep.dists)
 end
 
-@testset "full_hyperparameters and full_hyperprior" begin
+@testset "full_hyperparameters and merge_hyperpriors" begin
     pop = TestPop()
     @test full_hyperparameters(ModifiedPropagation{LambdaCDM}, pop) ==
           (:H0, :Ωm, :Ξ₀, :Ξₙ, :α, :β)
 
-    hp = full_hyperprior(ModifiedPropagation{LambdaCDM}, pop)
+    hp = merge_hyperpriors(
+        cosmology_hyperprior(ModifiedPropagation{LambdaCDM}),
+        population_hyperprior(pop),
+    )
     @test hp isa Distributions.ProductNamedTupleDistribution
     @test keys(hp.dists) == (:H0, :Ωm, :Ξ₀, :Ξₙ, :α, :β)
 
     @test full_hyperparameters(LambdaCDM, pop) == (:H0, :Ωm, :α, :β)
 end
 
-@testset "hyperprior for cosmology types" begin
-    hp_lcdm = hyperprior(LambdaCDM)
+@testset "cosmology_hyperprior for cosmology types" begin
+    hp_lcdm = cosmology_hyperprior(LambdaCDM)
     @test keys(hp_lcdm.dists) == (:H0, :Ωm)
 
-    hp_w0 = hyperprior(W0CDM)
+    hp_w0 = cosmology_hyperprior(W0CDM)
     @test keys(hp_w0.dists) == (:H0, :Ωm, :w0)
 
-    hp_cpl = hyperprior(W0WaCDM)
+    hp_cpl = cosmology_hyperprior(W0WaCDM)
     @test keys(hp_cpl.dists) == (:H0, :Ωm, :w0, :wa)
 
-    hp_mod = hyperprior(ModifiedPropagation{LambdaCDM})
+    hp_mod = cosmology_hyperprior(ModifiedPropagation{LambdaCDM})
     @test keys(hp_mod.dists) == (:H0, :Ωm, :Ξ₀, :Ξₙ)
 
-    hp_mod_w0 = hyperprior(ModifiedPropagation{W0CDM})
+    hp_mod_w0 = cosmology_hyperprior(ModifiedPropagation{W0CDM})
     @test keys(hp_mod_w0.dists) == (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ)
 end
 

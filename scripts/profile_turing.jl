@@ -49,7 +49,7 @@ using ASGWB:
              ModifiedPropagation,
              LambdaCDM,
              Detector
-import ASGWB: hyperparameters, hyperprior, single_event_prior
+import ASGWB: hyperparameters, single_event_prior
 using BenchmarkTools
 using DelimitedFiles
 using LogDensityProblems
@@ -67,14 +67,6 @@ include(_PARITY_TEST_CACHE)
 struct BNSPopulationModel <: PopulationModel end
 
 hyperparameters(::BNSPopulationModel) = (:γ, :κ, :zpeak)
-
-function hyperprior(::BNSPopulationModel)
-    return product_distribution((
-        γ = Uniform(0.5, 10.0),
-        κ = Uniform(0.05, 10.0),
-        zpeak = Uniform(0.05, 10.0)
-    ))
-end
 
 function single_event_prior(::BNSPopulationModel, cosmo::AbstractCosmology, Λ::NamedTuple)
     z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ)

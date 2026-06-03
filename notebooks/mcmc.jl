@@ -46,7 +46,7 @@ begin
                  stack_source_masses,
                  Ωgw
     using ASGWBInference: atomic_save_chain, build_turing_model, condition_turing_model
-    import ASGWB: hyperparameters, hyperprior, single_event_prior
+    import ASGWB: hyperparameters, single_event_prior
     using AdvancedHMC
     using CairoMakie
     using Dates: format, now
@@ -69,14 +69,6 @@ begin
     struct BNSPopulationModel <: PopulationModel end
 
     hyperparameters(::BNSPopulationModel) = (:γ, :κ, :zpeak)
-
-    function hyperprior(::BNSPopulationModel)
-        return product_distribution((
-            γ = Uniform(0.5, 10.0),
-            κ = Uniform(0.05, 10.0),
-            zpeak = Uniform(0.05, 10.0)
-        ))
-    end
 
     function single_event_prior(
             ::BNSPopulationModel, cosmo::AbstractCosmology, Λ::NamedTuple)

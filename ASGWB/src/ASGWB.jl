@@ -24,7 +24,7 @@ module ASGWB
 
 using CBCDistributions
 import CBCDistributions: cosmology, cosmology_type, gravitational_wave_distance,
-                         hyperparameters, hyperprior, single_event_prior
+                         hyperparameters, single_event_prior
 
 include("types.jl")
 include("models/base.jl")
@@ -51,10 +51,8 @@ export ImportanceSamplingProblem,
        ObservationContext,
        PopulationModel,
        hyperparameters,
-       hyperprior,
        single_event_prior,
        full_hyperparameters,
-       full_hyperprior,
        canonical_hyperparameters,
        validate_hyperparameters,
        validate_subset,

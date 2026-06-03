@@ -5,13 +5,15 @@ using ASGWB:
              ModifiedPropagation,
              LambdaCDM, W0CDM, W0WaCDM,
              full_hyperparameters,
-             full_hyperprior,
              canonical_hyperparameters,
              validate_hyperparameters
 using ASGWBInference: validate_hyperprior
 
 if !@isdefined ParityBNSPopulation
     include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "fixture_population.jl"))
+end
+if !@isdefined PARITY_PRIORS
+    include(joinpath(@__DIR__, "..", "..", "ASGWB", "test", "parity_fixtures.jl"))
 end
 
 @testset "caller-defined population hyperparameter contract" begin
@@ -21,7 +23,7 @@ end
 
     @test order == (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 
-    prior_a = full_hyperprior(C, pop)
+    prior_a = PARITY_PRIORS
     prior_b = product_distribution((
         zpeak = Uniform(0.0, 5.0),
         κ = Uniform(0.0, 10.0),
