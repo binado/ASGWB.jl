@@ -10,14 +10,6 @@ function importance_weights(
     return exp.(log_ratio) .* dgw_fid_sq ./ dgw_theta_sq
 end
 
-function _dgw_from_cached_dl(z, d_l, c::AbstractCosmology)
-    return d_l
-end
-
-function _dgw_from_cached_dl(z, d_l, c::ModifiedPropagation)
-    return gravitational_wave_distance(z, d_l, c.Ξ₀, c.Ξₙ)
-end
-
 @inline function _importance_weight_at_sample(
         target_log_prob::AbstractVector,
         proposal_log_prob::AbstractVector{<:Real},
@@ -31,7 +23,7 @@ end
     log_ratio = target_log_prob[sample_index] - proposal_log_prob[sample_index]
     d_l = luminosity_distance_at_sample(
         cosmology_cache, interp, redshift_grid, z, sample_index)
-    dgw_theta = _dgw_from_cached_dl(z[sample_index], d_l, cosmology_cache.cosmology)
+    dgw_theta = gravitational_wave_distance(z[sample_index], d_l, cosmology_cache.cosmology)
     return exp(log_ratio) * dgw_fid_sq[sample_index] / dgw_theta^2
 end
 

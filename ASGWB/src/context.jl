@@ -10,7 +10,7 @@ function _reconstruct_dgw_fid_sq(
 )::Vector{Float64} where {C <: AbstractCosmology}
     c = cosmology(C, Λ)
     d_l = luminosity_distance.(z, c)
-    d_gw = _dgw_from_cached_dl.(z, d_l, Ref(c))
+    d_gw = gravitational_wave_distance.(z, d_l, Ref(c))
     return Float64.(d_gw .^ 2)
 end
 
@@ -26,7 +26,7 @@ function _reconstruct_cached_flux_over_dgw2(
         throw(ArgumentError("flux column count must match redshift sample count"))
     c = cosmology(C, Λ)
     d_l = luminosity_distance.(z, c)
-    d_gw = _dgw_from_cached_dl.(z, d_l, Ref(c))
+    d_gw = gravitational_wave_distance.(z, d_l, Ref(c))
     scale_row = reshape(Float64.((d_l ./ d_gw) .^ 2), 1, :)
     return Matrix{Float64}(fluxes) .* scale_row
 end

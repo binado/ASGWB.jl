@@ -244,12 +244,17 @@ function gravitational_wave_distance(
     return (Ξ₀ + (1 - Ξ₀) / (1 + z)^Ξₙ) * luminosity_distance
 end
 
-function gravitational_wave_distance(z::Real, c::AbstractCosmology)
-    return luminosity_distance(z, c)
+# GW luminosity distance from a precomputed EM luminosity distance `d_l`, dispatched on the
+# propagation model: standard cosmologies leave it unchanged, `ModifiedPropagation` applies
+# the (Ξ₀, Ξₙ) factor. Shared by the importance hot path (which already has `d_l` cached) and
+# the convenience method below, so the propagation dispatch lives in exactly one place.
+gravitational_wave_distance(::Real, d_l::Real, ::AbstractCosmology) = d_l
+function gravitational_wave_distance(z::Real, d_l::Real, c::ModifiedPropagation)
+    return gravitational_wave_distance(z, d_l, c.Ξ₀, c.Ξₙ)
 end
 
-function gravitational_wave_distance(z::Real, c::ModifiedPropagation)
-    return gravitational_wave_distance(z, luminosity_distance(z, c.base), c.Ξ₀, c.Ξₙ)
+function gravitational_wave_distance(z::Real, c::AbstractCosmology)
+    return gravitational_wave_distance(z, luminosity_distance(z, c), c)
 end
 
 # ---------------------------------------------------------------------------
