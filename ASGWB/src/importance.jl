@@ -1,15 +1,5 @@
 using LinearAlgebra
 
-function importance_weights(
-        log_ratio::AbstractVector{<:Real},
-        dgw_fid_sq::AbstractVector{<:Real},
-        dgw_theta_sq::AbstractVector{<:Real}
-)
-    length(log_ratio) == length(dgw_fid_sq) == length(dgw_theta_sq) ||
-        throw(ArgumentError("importance weight inputs must have matching lengths"))
-    return exp.(log_ratio) .* dgw_fid_sq ./ dgw_theta_sq
-end
-
 @inline function _importance_weight_at_sample(
         target_log_prob::AbstractVector,
         proposal_log_prob::AbstractVector{<:Real},

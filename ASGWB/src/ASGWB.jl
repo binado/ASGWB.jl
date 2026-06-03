@@ -128,8 +128,7 @@ export OrderedUniformSourceMassPair,
        batched_logpdf
 
 # Importance sampling
-export importance_weights,
-       compute_importance_weights,
+export compute_importance_weights,
        spectral_density,
        inner_product,
        spectral_snr_squared,
