@@ -81,7 +81,7 @@ function build_model_context(
     z = problem.samples.redshift
     n_samp = length(z)
 
-    all_freq = collect(Float64, frequencies(grid))
+    all_freq = frequencies(grid)
     mask = in_band_mask(grid)
     n_freq_full = length(all_freq)
 

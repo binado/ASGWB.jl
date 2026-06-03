@@ -22,8 +22,8 @@ function save_catalog(path::AbstractString, file::WaveformCatalogFile)
         a["approximant"] = m.approximant
         a[CATALOG_SOURCE_TYPE_ATTR] = String(m.source_type)
         g = m.grid
-        for f in fieldnames(FrequencyGrid)
-            a["grid_$f"] = getfield(g, f)
+        for fld in fieldnames(FrequencyGrid)
+            a["grid_$fld"] = getfield(g, fld)
         end
         a["git_revision"] = m.git_revision
         a["command"] = m.command
