@@ -59,10 +59,6 @@ function _validate_frequency_grid(
     return nothing
 end
 
-function Base.Dict(g::FrequencyGrid)::Dict{String, Float64}
-    return Dict{String, Float64}(string(f) => getfield(g, f) for f in fieldnames(typeof(g)))
-end
-
 """
     frequencies(g::FrequencyGrid) -> Vector{Float64}
 

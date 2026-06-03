@@ -51,15 +51,7 @@ end
     end
 end
 
-@testset "FrequencyGrid Dict export and validation" begin
-    grid = FrequencyGrid(1.0, 4.0, 2.0, 1.0, 2.0)
-    @test Dict(grid) == Dict(
-        "duration" => 1.0,
-        "sampling_frequency" => 4.0,
-        "reference_frequency" => 2.0,
-        "minimum_frequency" => 1.0,
-        "maximum_frequency" => 2.0
-    )
+@testset "FrequencyGrid validation" begin
     @test FrequencyGrid(1.0, 4.0, 2.0, 1.0).maximum_frequency == 2.0
 
     @test_throws ArgumentError FrequencyGrid(0.0, 4.0, 2.0, 1.0, 2.0)
