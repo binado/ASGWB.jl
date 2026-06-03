@@ -4,7 +4,8 @@ using ForwardDiff
 using CBCDistributions: CumulativeIntegral1D, cdf, hubble_constant_si, interpolate,
                         normalizer, cosmology_parameters, cosmology, cosmology_type,
                         cosmology_config_name, SUPPORTED_COSMOLOGIES, comoving_distance,
-                        W0CDM, W0WaCDM
+                        W0CDM, W0WaCDM, ModifiedPropagation, hyperparameters,
+                        base_cosmology
 
 @testset "hubble_constant_si" begin
     H0 = 70.0
@@ -32,6 +33,7 @@ end
     @test cosmology_parameters(LambdaCDM) == (:H0, :Ωm)
     @test cosmology_parameters(W0CDM) == (:H0, :Ωm, :w0)
     @test cosmology_parameters(W0WaCDM) == (:H0, :Ωm, :w0, :wa)
+    @test hyperparameters(ModifiedPropagation{LambdaCDM}) == (:H0, :Ωm, :Ξ₀, :Ξₙ)
 
     h_lcdm = (H0 = 67.0, Ωm = 0.315)
     @test cosmology(LambdaCDM, h_lcdm) == LambdaCDM(67.0, 0.315)
@@ -47,9 +49,18 @@ end
     @test cosmology(h_cpl) == W0WaCDM(67.0, 0.315, -0.9, 0.2)
 
     @test cosmology_config_name(LambdaCDM) == "LambdaCDM"
+    @test cosmology_config_name(ModifiedPropagation{LambdaCDM}) ==
+          "ModifiedPropagation{LambdaCDM}"
     @test cosmology_type("W0CDM") === W0CDM
-    @test SUPPORTED_COSMOLOGIES == (LambdaCDM, W0CDM, W0WaCDM)
+    @test ModifiedPropagation{LambdaCDM} in SUPPORTED_COSMOLOGIES
     @test_throws ArgumentError cosmology_type("not_a_model")
+
+    h_mod = (; h_lcdm..., Ξ₀ = 1.2, Ξₙ = 2.0)
+    c_mod = cosmology(ModifiedPropagation{LambdaCDM}, h_mod)
+    @test c_mod isa ModifiedPropagation{<:LambdaCDM}
+    @test base_cosmology(c_mod) == LambdaCDM(67.0, 0.315)
+    @test gravitational_wave_distance(0.5, c_mod) ≈
+          gravitational_wave_distance(0.5, luminosity_distance(0.5, c_mod.base), 1.2, 2.0)
 end
 
 @testset "dark_energy_eos" begin

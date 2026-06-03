@@ -1,6 +1,8 @@
-cache_path = "parity:posterior"
+catalog_path = "parity:posterior"
 detectors = ["H1", "L1"]
 seed = 1
+local_merger_rate = 1e-7
+observation_time_yr = 1e-6
 
 [priors.H0]
 low = 20.0
@@ -10,11 +12,11 @@ high = 140.0
 low = 0.0
 high = 1.0
 
-[priors.chi0]
+[priors.Xi_0]
 low = 0.0
 high = 2.0
 
-[priors.chin]
+[priors.Xi_n]
 low = -1.0
 high = 1.0
 
@@ -33,8 +35,8 @@ high = 5.0
 [init]
 H0 = 70.0
 Omega_m = 0.3
-chi0 = 1.1
-chin = 0.2
+Xi_0 = 1.1
+Xi_n = 0.2
 gamma = 2.9
 kappa = 6.0
 z_peak = 2.2

@@ -1,70 +1,39 @@
 """
-    ObservationConfig
+    ObservationContext
 
 Detector-side SGWB observation layout: frequency grid, per-bin effective strain PSD
 amplitude from the detector network (ORFs and tabulated PSDs; square matches network
 variance), Gaussian bin scales for the likelihood, analysis band mask, and observation
-time metadata.
+time metadata. The in-band Gaussian scale is precomputed for the likelihood hot path.
+
+The observed/fiducial spectral density is intentionally *not* part of this object; it is
+the default observed data of a built [`ModelContext`](@ref) and lives there.
 """
-struct ObservationConfig
+struct ObservationContext
     frequencies::Vector{Float64}
     effective_psd::Vector{Float64}
     sgwb_scale::Vector{Float64}
     in_band_mask::BitVector
-    fiducial_spectral_density::Vector{Float64}
     observation_time_sec::Float64
     observation_time_yr::Float64
     sgwb_scale_in_band::Vector{Float64}
-    fiducial_spectral_density_in_band::Vector{Float64}
 end
 
-function ObservationConfig(
+function ObservationContext(
         frequencies::Vector{Float64},
         effective_psd::Vector{Float64},
         sgwb_scale::Vector{Float64},
         in_band_mask::BitVector,
-        fiducial_spectral_density::Vector{Float64},
         observation_time_sec::Float64,
         observation_time_yr::Float64
 )
-    return ObservationConfig(
+    return ObservationContext(
         frequencies,
         effective_psd,
         sgwb_scale,
         in_band_mask,
-        fiducial_spectral_density,
         observation_time_sec,
         observation_time_yr,
-        sgwb_scale[in_band_mask],
-        fiducial_spectral_density[in_band_mask]
+        sgwb_scale[in_band_mask]
     )
 end
-
-"""
-    ProposalFiducialParameters
-
-Fiducial cosmology, propagation, and population scalars read from the HDF5 cache
-(`hyperparameters` and optionally matching keys under `redshift_prior_spec`), not the live MCMC state.
-"""
-Base.@kwdef struct ProposalFiducialParameters
-    H0::Float64
-    Ωm::Float64
-    Ξ₀::Float64
-    Ξₙ::Float64
-    """Madau–Dickinson population scalars for reconstructing proposal redshift density (format v3)."""
-    γ::Union{Nothing, Float64} = nothing
-    κ::Union{Nothing, Float64} = nothing
-    zpeak::Union{Nothing, Float64} = nothing
-    """Power-law redshift index when `redshift_prior_spec.family` is `PowerLaw` (HDF5 key `lamb`)."""
-    Λ::Union{Nothing, Float64} = nothing
-    """Dark-energy equation-of-state parameter (absent means this cache assumed ΛCDM, w0=-1)."""
-    w0::Union{Nothing, Float64} = nothing
-    """CPL dark-energy running (absent means this cache assumed w0CDM or ΛCDM with wa=0)."""
-    wa::Union{Nothing, Float64} = nothing
-end
-
-"""HDF5 `proposal_samples` group attribute naming the compact-object proposal class."""
-const PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR = "source_type"
-
-"""`proposal_samples` / [`PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR`](@ref) value for BNS importance samples."""
-const PROPOSAL_SAMPLES_SOURCE_TYPE_BNS = "BNS"

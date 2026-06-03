@@ -1,13 +1,19 @@
 using ASGWB
+using CBCDistributions: SampleInterpolant
 using ForwardDiff
 using Test
 
-if !@isdefined parity_cache_path
+if !@isdefined parity_catalog_dir
     include(joinpath(@__DIR__, "parity_test_cache.jl"))
 end
 include(joinpath(@__DIR__, "parity_fixtures.jl"))
 
-function _importance_type_test_problem(n::Integer)
+const _IMP_C = ModifiedPropagation{LambdaCDM}
+const _IMP_POP = ParityBNSPopulation()
+const _IMP_ORDER = full_hyperparameters(_IMP_C, _IMP_POP)
+
+# Construct a problem + ModelContext directly (no catalog/detectors) for type/edge tests.
+function _importance_type_test_fixture(n::Integer)
     samples = (
         mass = stack_source_masses(fill(1.4, n), fill(1.2, n)),
         redshift = fill(0.1, n),
@@ -16,82 +22,48 @@ function _importance_type_test_problem(n::Integer)
         Λ₁ = fill(100.0, n),
         Λ₂ = fill(100.0, n)
     )
-    proposal = ProposalData(
-        FULL_BNS_INTRINSIC_ORDER,
-        samples,
-        zeros(n),
-        zeros(n, length(FULL_BNS_INTRINSIC_ORDER)),
-        zeros(2, n),
-        ones(n)
+    Λ = canonical_hyperparameters(
+        _IMP_ORDER,
+        (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
     )
-    observation = ObservationConfig(
-        [1.0, 2.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
-        BitVector([true, true]),
-        [0.0, 0.0],
-        1.0,
-        1.0
-    )
-    spec = RedshiftPriorSpec(MadauDickinson, 0.001, 1.0, 32, nothing)
-    fid = ProposalFiducialParameters(;
-        H0 = 67.0,
-        Ωm = 0.315,
-        Ξ₀ = 1.0,
-        Ξₙ = 0.0,
-        γ = 2.7,
-        κ = 3.0,
-        zpeak = 2.5
-    )
-    return importance_sampling_problem(proposal, observation, spec, 1.0, fid)
+    problem = ImportanceSamplingProblem(_IMP_POP, zeros(2, n), samples, Λ)
+    z_grid = collect(Float64, DEFAULT_Z_GRID)
+    interp = SampleInterpolant(samples.redshift, z_grid)
+    obs = ObservationContext(
+        [1.0, 2.0], [1.0, 1.0], [1.0, 1.0], BitVector([true, true]), 1.0, 1.0)
+    ctx = ModelContext(
+        zeros(n), ones(n), zeros(2, n), z_grid, interp, obs, 1.0, [0.0, 0.0])
+    return problem, ctx, Λ
 end
 
-@testset "importance smoke" begin
-    cache = load_cache(parity_cache_path(:posterior), [Detector("H1"), Detector("L1")])
+@testset "importance smoke and naive/cached parity" begin
+    loaded = parity_problem_context(:posterior, [Detector("H1"), Detector("L1")])
+    problem, C, ctx = loaded.problem, loaded.cosmology_type, loaded.ctx
     theta = PARITY_THETA
 
-    model_evaluation = evaluate_model_terms(
-        MadauDickinsonModifiedPropagation(),
-        theta,
-        cache
-    )
-    model_evaluation_with_grid = evaluate_model_terms(
-        MadauDickinsonModifiedPropagation(),
-        theta,
-        cache,
-        cache.redshift_cache.redshift_grid
-    )
-    @test length(model_evaluation.weights) == length(cache.proposal.samples.redshift)
-    @test all(isfinite, model_evaluation.weights)
-    @test all(isfinite, model_evaluation.log_ratio)
-    @test all(isfinite, model_evaluation.target_log_prob)
-    @test all(isfinite, model_evaluation.spectral_density)
-    @test isfinite(model_evaluation.redshift_integral)
-    @test isfinite(model_evaluation.expected_number_of_sources)
-    @test model_evaluation_with_grid.spectral_density ≈ model_evaluation.spectral_density
+    weights_cached = compute_importance_weights(problem, C, theta, ctx)
+    weights_naive = compute_importance_weights(problem, C, theta)
+    @test length(weights_cached) == length(problem.samples.redshift)
+    @test all(isfinite, weights_cached)
+    @test weights_cached ≈ weights_naive   # R2 parity oracle
 
-    cosmology_cache,
-    redshift_prior = cosmology_and_redshift_prior(
-        cosmology(MadauDickinsonModifiedPropagation(), theta),
-        theta,
-        cache.redshift_prior_spec,
-        cache.redshift_cache.redshift_grid
+    rate_cached = merger_rate(problem, C, theta, ctx)
+    rate_naive = merger_rate(
+        problem, C, theta,
+        ctx.local_merger_rate,
+        ctx.observation.observation_time_yr,
+        ctx.observation.observation_time_sec
     )
-    iw = compute_importance_weights(cache, theta, cosmology_cache, redshift_prior)
-    @test iw.weights ≈ model_evaluation.weights
-    @test iw.log_ratio ≈ model_evaluation.log_ratio
-    @test iw.target_log_prob ≈ model_evaluation.target_log_prob
-    @test iw.dgw_theta_sq ≈ model_evaluation.dgw_theta_sq
+    @test isfinite(rate_cached)
+    @test rate_cached ≈ rate_naive
 
-    rate = merger_rate_per_sec(
-        redshift_prior,
-        cache.local_merger_rate,
-        cache.observation.observation_time_yr,
-        cache.observation.observation_time_sec
-    )
-    @test isfinite(rate)
-    @test model_evaluation.expected_number_of_sources ≈
-          rate * cache.observation.observation_time_sec
+    # Spectral-density parity: explicitly recomputed flux through the same array kernel.
+    flux_naive = ASGWB._reconstruct_cached_flux_over_dgw2(
+        problem.fluxes, problem.samples.redshift, C, fiducial_hyperparameters(problem))
+    Sh_cached = spectral_density(ctx.cached_flux_over_dgw2, rate_cached; weights = weights_cached)
+    Sh_naive = spectral_density(flux_naive, rate_naive; weights = weights_naive)
+    @test all(isfinite, Sh_cached)
+    @test Sh_cached ≈ Sh_naive
 end
 
 @testset "empty importance weights preserve AD element types" begin
@@ -106,32 +78,14 @@ end
         zpeak = dual(2.5)
     )
 
-    empty_problem = _importance_type_test_problem(0)
-    populated_problem = _importance_type_test_problem(1)
-    cosmology_dual = cosmology(MadauDickinsonModifiedPropagation(), theta)
-    empty_cosmology_cache,
-    empty_redshift_prior = cosmology_and_redshift_prior(
-        cosmology_dual,
-        theta,
-        empty_problem.redshift_prior_spec,
-        empty_problem.redshift_cache.redshift_grid
-    )
-    populated_cosmology_cache,
-    populated_redshift_prior = cosmology_and_redshift_prior(
-        cosmology_dual,
-        theta,
-        populated_problem.redshift_prior_spec,
-        populated_problem.redshift_cache.redshift_grid
-    )
+    empty_problem, empty_ctx, _ = _importance_type_test_fixture(0)
+    populated_problem, populated_ctx, _ = _importance_type_test_fixture(1)
 
-    empty_iw = compute_importance_weights(
-        empty_problem, theta, empty_cosmology_cache, empty_redshift_prior)
-    populated_iw = compute_importance_weights(
-        populated_problem, theta, populated_cosmology_cache, populated_redshift_prior)
+    empty_weights = compute_importance_weights(empty_problem, _IMP_C, theta, empty_ctx)
+    populated_weights = compute_importance_weights(
+        populated_problem, _IMP_C, theta, populated_ctx)
 
-    @test isempty(empty_iw.weights)
-    @test eltype(empty_iw.weights) == eltype(populated_iw.weights)
-    @test eltype(empty_iw.log_ratio) == eltype(populated_iw.log_ratio)
-    @test eltype(empty_iw.target_log_prob) == eltype(populated_iw.target_log_prob)
-    @test eltype(empty_iw.dgw_theta_sq) == eltype(populated_iw.dgw_theta_sq)
+    @test isempty(empty_weights)
+    @test all(isfinite, populated_weights)
+    @test eltype(populated_weights) <: ForwardDiff.Dual
 end

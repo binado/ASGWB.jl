@@ -2,92 +2,80 @@
     ASGWB
 
 Astrophysical stochastic gravitational-wave background modeling: importance
-caches, redshift grids, and likelihoods. MCMC via Turing/AdvancedHMC lives in the
+sampling, redshift grids, and likelihoods. Turing model construction lives in the
 `ASGWBInference` package (see the `ASGWBInference/` directory in the repository).
 
-Use [`importance_sampling_problem`](@ref) to build problems in memory, or
-[`load_cache`](@ref) to read the HDF5 importance cache. Caches record provenance via root
-attributes [`IMPORTANCE_CACHE_COMMAND_ATTR`](@ref) and [`IMPORTANCE_CACHE_GIT_REVISION_ATTR`](@ref)
-(`command` and `git_revision`). Pass a vector of at least two [`Detector`](@ref) values as the
-second argument so `effective_psd` and `sgwb_scale` are built from tabulated PSDs and ORFs (those
-datasets must not appear in the file). Two-dimensional datasets `cached_flux` and
-`proposal_intrinsic_vector` use HDF5 extent `(n_columns, n_samples)` and are normalized to
-`(n_samples, n_columns)` on load. Per-sample flux is stored as `cached_flux` (before the
-fiducial ``(D_L/D_{gw})^2`` factor). Datasets `proposal_log_prob` and `dgw_fid_sq` may be omitted
-and are then reconstructed. Population scalars may live in `hyperparameters` and/or
-`redshift_prior_spec` (duplicate keys must agree). An HDF5 `fiducial_spectral_density` dataset, if
-present, is ignored on load; [`load_cache`](@ref) always fills the observation using
-[`fiducial_spectral_density`](@ref) so the default likelihood data match the current Julia pipeline.
-Caches may omit
-`redshift_integral_fiducial`; it is then set from [`fiducial_redshift_integral`](@ref).
-Inference state is a flat hyperparameter `NamedTuple` validated against an
-[`AbstractASGWBModel`](@ref) contract; caches carry
-[`ProposalFiducialParameters`](@ref) in `fiducial_parameters` (HDF5 group `hyperparameters`).
+The primary inference artifact is **`catalog.h5`** ([`WaveformCatalogFile`](@ref)):
+per-sample intrinsic parameters with precomputed luminosity distances, and a
+`(n_freq, n_samples)` per-sample flux matrix `|h_+|² + |h_×|²` (before the
+fiducial `(D_L/D_gw)²` factor).
+
+Callers define their population model, fiducial hyperparameters, and catalog sample
+adapter in Julia, then construct a pure [`ImportanceSamplingProblem`](@ref). Derived
+`Λ`-independent caches (rescaled fluxes, proposal log-prob, redshift interpolant,
+detector PSDs, fiducial spectral density) are built into a [`ModelContext`](@ref) by
+[`build_model_context`](@ref).
+
+Inference state is a flat hyperparameter `NamedTuple` validated against the
+[`PopulationModel`](@ref) contract; the cosmology family `C` is threaded through atomic
+calls rather than stored on the problem.
 """
 module ASGWB
 
 using CBCDistributions
-import CBCDistributions: cosmology, cosmology_type
+import CBCDistributions: cosmology, cosmology_type, gravitational_wave_distance,
+                         hyperparameters, hyperprior, single_event_prior
 
 include("types.jl")
+include("models/base.jl")
+include("catalog/grid.jl")
+include("catalog/catalog.jl")
+include("catalog/io.jl")
 include("inference_types.jl")
-include("hyperparameters.jl")
 include("detector/psd.jl")
 include("detector/detector.jl")
 include("detector/overlap.jl")
 include("detector/effective_psd.jl")
 include("detector/observation.jl")
-include("cache.jl")
 include("importance.jl")
 include("spectral_density.jl")
 include("snr.jl")
 include("diagnostics.jl")
+include("context.jl")
 include("posterior.jl")
-include("io.jl")
 
 # Types
 export ImportanceSamplingProblem,
-       importance_sampling_problem,
-       ProposalData,
-       ObservationConfig,
-       RedshiftPriorSpec,
-       RedshiftPriorFamily,
-       MadauDickinson,
-       PowerLaw,
-       parse_redshift_prior_family,
-       AbstractASGWBModel,
-       MadauDickinsonModifiedPropagation,
+       ModelContext,
+       build_model_context,
+       ObservationContext,
+       PopulationModel,
        hyperparameters,
-       model_parameters,
-       propagation_model,
-       fiducial_cosmology,
-       cosmology_type,
+       hyperprior,
+       single_event_prior,
+       full_hyperparameters,
+       full_hyperprior,
        canonical_hyperparameters,
        validate_hyperparameters,
-       validate_prior,
        validate_subset,
-       ProposalFiducialParameters,
-       ProposalSampleBundle,
-       FullBNSSamplesSoA,
        stack_source_masses,
-       FULL_BNS_INTRINSIC_ORDER,
-       PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR,
-       PROPOSAL_SAMPLES_SOURCE_TYPE_BNS,
+       CATALOG_SOURCE_TYPE_ATTR,
+       CATALOG_SOURCE_TYPE_BNS,
        CumulativeIntegral1D,
        RedshiftPrior,
-       IntrinsicPriorStrategy,
-       IntrinsicPrior,
-       FullBNS,
        redshift
 
-# IO
-export load_cache,
-       reconstruct_proposal_log_prob,
-       reconstruct_dgw_fid_sq,
-       IMPORTANCE_CACHE_COMMAND_ATTR,
-       IMPORTANCE_CACHE_GIT_REVISION_ATTR
+# Catalog I/O
+export FrequencyGrid,
+       frequencies,
+       in_band_mask,
+       WaveformCatalog,
+       WaveformCatalogMetadata,
+       WaveformCatalogFile,
+       load_catalog,
+       save_catalog
 
-# Detector network (ORF / PSD effective strain PSD; used by `load_cache`)
+# Detector network (ORF / PSD effective strain PSD; used by `build_model_context`)
 export Detector,
        PowerSpectralDensity,
        default_detector_data_dir,
@@ -97,7 +85,7 @@ export Detector,
        gaussian_bin_scale,
        gaussian_bin_variance,
        frequency_bin_width,
-       build_observation_config
+       build_observation_context
 
 # Cosmology
 export E,
@@ -105,9 +93,9 @@ export E,
        LambdaCDM,
        W0CDM,
        W0WaCDM,
+       ModifiedPropagation,
        dark_energy_eos,
        de_density_ratio,
-       cosmology_parameters,
        cosmology,
        cosmology_config_name,
        cosmology_type,
@@ -122,13 +110,13 @@ export E,
 
 # Redshift & population
 export madau_dickinson_source_frame_distribution,
-       power_law_source_frame_distribution,
        detector_frame_merger_rate_density,
        build_redshift_prior,
-       cosmology_and_redshift_prior,
+       redshift_prior,
+       MadauDickinsonSourceFrame,
+       source_frame_distribution,
+       DEFAULT_Z_GRID,
        redshift_log_prob,
-       redshift_log_prob_samples,
-       redshift_log_prob_samples!,
        redshift_logpdf_eltype,
        redshift_integral,
        expected_number_of_events,
@@ -137,9 +125,9 @@ export madau_dickinson_source_frame_distribution,
 # Priors
 export OrderedUniformSourceMassPair,
        AlignedSpinChiSimple,
+       BNS_LAMBDA_HIGH,
        RedshiftInterpolatedDistribution,
-       intrinsic_prior,
-       validate_batch
+       batched_logpdf
 
 # Importance sampling
 export importance_weights,
@@ -148,17 +136,15 @@ export importance_weights,
        inner_product,
        spectral_snr_squared,
        spectral_snr,
-       Ωgw,
-       evaluate_model_terms
+       Ωgw
 
 # Diagnostics
 export normalized_ess, max_normalized_weight, log_ratio_variance
 
 # Posterior
 export loglikelihood,
-       logposterior,
+       merger_rate,
        fiducial_hyperparameters,
-       fiducial_spectral_density,
        fiducial_redshift_integral
 
 end

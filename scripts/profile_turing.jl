@@ -1,4 +1,4 @@
-# Profile the ASGWB Turing/AdvancedHMC log-density to find the bottleneck
+# Profile the ASGWB Turing log-density to find the bottleneck
 # inside a NUTS gradient evaluation, before deciding whether to refactor
 # the cosmology `quadgk` path.
 #
@@ -10,7 +10,7 @@
 # Sites under investigation:
 #   - CBCDistributions/src/cosmology.jl   quadgk inside comoving_distance
 #   - ASGWB/src/redshift.jl               differential_comoving_volume on z_grid
-#   - ASGWB/src/cache.jl, importance.jl   luminosity_distance per proposal sample
+#   - ASGWB/src/reconstruction.jl, importance.jl   luminosity_distance per proposal sample
 #   - ASGWBInference/src/turing_model.jl  DynamicPPL model being profiled
 #
 # This script is *measurement only*: it does not edit any ASGWB/src/ files.
@@ -22,25 +22,34 @@ const _PARITY_TEST_CACHE = joinpath(_REPO_ROOT, "ASGWB", "test", "parity_test_ca
 
 using Distributions: logpdf, product_distribution, Uniform
 using ASGWB
-using ASGWBInference.InferenceImpl:
-                                    build_turing_model,
-                                    ASGWBLogDensity,
-                                    ad_logdensity,
-                                    unconstrained_initial_point
+using ASGWBInference: build_turing_model, logposterior, validate_hyperprior
 using ASGWB:
-             load_cache,
-             cosmology_and_redshift_prior,
              compute_importance_weights,
+             merger_rate,
              merger_rate_per_sec,
              spectral_density,
-             logposterior,
-             luminosity_distance,
+             single_event_prior,
+             PopulationModel,
+             AbstractCosmology,
+             OrderedUniformSourceMassPair,
+             AlignedSpinChiSimple,
+             redshift_prior,
+             MadauDickinsonSourceFrame,
+             BNS_LAMBDA_HIGH,
+             stack_source_masses,
+             CosmologyCache,
              redshift,
              canonical_hyperparameters,
-             MadauDickinsonModifiedPropagation,
+             full_hyperparameters,
              cosmology,
-             validate_prior,
+             luminosity_distance,
+             load_catalog,
+             build_model_context,
+             ImportanceSamplingProblem,
+             ModifiedPropagation,
+             LambdaCDM,
              Detector
+import ASGWB: hyperparameters, hyperprior, single_event_prior
 using BenchmarkTools
 using DelimitedFiles
 using LogDensityProblems
@@ -53,7 +62,44 @@ using Statistics: mean
 using TOML
 using Turing: DynamicPPL
 
-const INFERENCE_MODEL = MadauDickinsonModifiedPropagation()
+include(_PARITY_TEST_CACHE)
+
+struct BNSPopulationModel <: PopulationModel end
+
+hyperparameters(::BNSPopulationModel) = (:γ, :κ, :zpeak)
+
+function hyperprior(::BNSPopulationModel)
+    return product_distribution((
+        γ = Uniform(0.5, 10.0),
+        κ = Uniform(0.05, 10.0),
+        zpeak = Uniform(0.05, 10.0)
+    ))
+end
+
+function single_event_prior(::BNSPopulationModel, cosmo::AbstractCosmology, Λ::NamedTuple)
+    z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ)
+    spin = AlignedSpinChiSimple()
+    return product_distribution((
+        mass = OrderedUniformSourceMassPair(),
+        redshift = z_d,
+        χ₁ = spin,
+        χ₂ = spin,
+        Λ₁ = Uniform(0.0, BNS_LAMBDA_HIGH),
+        Λ₂ = Uniform(0.0, BNS_LAMBDA_HIGH)
+    ))
+end
+
+function bns_samples_from_catalog(catalog_samples::NamedTuple)
+    return (
+        mass = stack_source_masses(
+            catalog_samples.mass_1_source, catalog_samples.mass_2_source),
+        redshift = copy(catalog_samples.redshift),
+        χ₁ = copy(catalog_samples.chi_1),
+        χ₂ = copy(catalog_samples.chi_2),
+        Λ₁ = copy(catalog_samples.lambda_1),
+        Λ₂ = copy(catalog_samples.lambda_2)
+    )
+end
 
 # ---------------------------------------------------------------------------
 # TOML config helpers
@@ -76,6 +122,17 @@ function _require_string_array(settings::Dict, key::AbstractString)
     all(x -> x isa AbstractString, v) ||
         throw(ArgumentError("TOML key $(repr(key)) must be an array of strings"))
     return Vector{String}(v)
+end
+
+function _resolve_catalog_path(catalog_path::String, base::AbstractString)
+    if startswith(catalog_path, "parity:")
+        dir = resolve_parity_catalog_dir(catalog_path)
+        dir === nothing && throw(
+            ArgumentError("unknown parity catalog alias $(repr(catalog_path))"),
+        )
+        return joinpath(dir, "catalog.h5")
+    end
+    return isabspath(catalog_path) ? catalog_path : normpath(joinpath(base, catalog_path))
 end
 
 function _load_observed_spectral_density(path::AbstractString, expected_len::Int)
@@ -105,22 +162,22 @@ function _priors_from_toml(priors_tbl::Dict)
     return product_distribution((
         H0 = Uniform(_uniform_bounds(priors_tbl, "H0")...),
         Ωm = Uniform(_uniform_bounds(priors_tbl, "Omega_m")...),
-        Ξ₀ = Uniform(_uniform_bounds(priors_tbl, "chi0")...),
-        Ξₙ = Uniform(_uniform_bounds(priors_tbl, "chin")...),
+        Ξ₀ = Uniform(_uniform_bounds(priors_tbl, "Xi_0")...),
+        Ξₙ = Uniform(_uniform_bounds(priors_tbl, "Xi_n")...),
         γ = Uniform(_uniform_bounds(priors_tbl, "gamma")...),
         κ = Uniform(_uniform_bounds(priors_tbl, "kappa")...),
         zpeak = Uniform(_uniform_bounds(priors_tbl, "z_peak")...)
     ))
 end
 
-function _theta0_from_toml(init_tbl::Dict)
+function _theta0_from_toml(init_tbl::Dict, order::Tuple{Vararg{Symbol}})
     return canonical_hyperparameters(
-        INFERENCE_MODEL,
+        order,
         (;
             H0 = init_tbl["H0"],
             Ωm = init_tbl["Omega_m"],
-            Ξ₀ = init_tbl["chi0"],
-            Ξₙ = init_tbl["chin"],
+            Ξ₀ = init_tbl["Xi_0"],
+            Ξₙ = init_tbl["Xi_n"],
             γ = init_tbl["gamma"],
             κ = init_tbl["kappa"],
             zpeak = init_tbl["z_peak"]
@@ -133,8 +190,8 @@ function _validate_init_in_priors(prior, init_tbl::Dict)
     for (key, sym) in (
         "H0" => :H0,
         "Omega_m" => :Ωm,
-        "chi0" => :Ξ₀,
-        "chin" => :Ξₙ,
+        "Xi_0" => :Ξ₀,
+        "Xi_n" => :Ξₙ,
         "gamma" => :γ,
         "kappa" => :κ,
         "z_peak" => :zpeak
@@ -218,12 +275,14 @@ end
 # ---------------------------------------------------------------------------
 
 function _run(;
-        cache_path::String,
+        catalog_path::String,
         detectors::Vector{Detector},
         priors,
-        θ0::NamedTuple,
+        init_tbl::Dict,
         seed::Union{Nothing, Int},
         observed_spectral_density_csv::Union{Nothing, String},
+        local_merger_rate::Float64,
+        observation_time_yr::Float64,
         seconds::Float64,
         profile_samples::Int,
         do_alloc::Bool,
@@ -231,20 +290,32 @@ function _run(;
 )
     t0 = time()
 
-    @info "loading importance cache" path=cache_path detectors=join(
-        (d.name
-        for d in detectors), ",")
-    problem = load_cache(cache_path, detectors)
-    @info "cache loaded" n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
+    @info "loading catalog" catalog_path detectors=join((d.name for d in detectors), ",")
+    loaded = load_catalog(catalog_path)
+    C = ModifiedPropagation{LambdaCDM}
+    pop = BNSPopulationModel()
+    order = full_hyperparameters(C, pop)
+    θ0 = _theta0_from_toml(init_tbl, order)
+    samples = bns_samples_from_catalog(loaded.catalog.samples)
+    problem = ImportanceSamplingProblem(pop, loaded.catalog.fluxes, samples, θ0)
+    ctx = build_model_context(
+        problem,
+        C,
+        loaded.metadata.grid,
+        detectors,
+        observation_time_yr,
+        local_merger_rate
+    )
+    @info "catalog loaded" n_frequency_bins=length(ctx.observation.frequencies) n_proposal_samples=length(problem.samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing
-        @info "using fiducial in-band spectrum from cache as observed data"
-        problem.observation.fiducial_spectral_density
+        @info "using fiducial in-band spectrum from catalog as observed data"
+        ctx.fiducial_spectral_density
     else
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
         _load_observed_spectral_density(
             observed_spectral_density_csv,
-            length(problem.observation.fiducial_spectral_density)
+            length(ctx.fiducial_spectral_density)
         )
     end
 
@@ -257,49 +328,36 @@ function _run(;
     # Build callables
     # ------------------------------------------------------------------
 
-    # Native (ASGWBLogDensity) path — pure Julia, no DynamicPPL
-    validate_prior(INFERENCE_MODEL, priors)
-    ld = ASGWBLogDensity(problem, priors; model = INFERENCE_MODEL)
-    z0 = unconstrained_initial_point(ld, θ0)
-    ad_ld = ad_logdensity(ld)
+    validate_hyperprior(order, priors)
 
     # Turing / DynamicPPL path
     model = build_turing_model(
         problem,
+        C,
+        ctx,
         priors;
-        model = INFERENCE_MODEL,
         track = false,
-        observed_spectral_density = observed
+        observed = observed
     )
     lf, z0_turing = _build_turing_logdensity(model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)
 
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
-    spec = problem.redshift_prior_spec
-    cosmology_cache0,
-    redshift_prior0 = cosmology_and_redshift_prior(
-        cosmology(INFERENCE_MODEL, h), h, spec, problem.redshift_cache.redshift_grid)
-    iw0 = compute_importance_weights(problem, h, cosmology_cache0, redshift_prior0)
-    rate0 = merger_rate_per_sec(
-        redshift_prior0,
-        problem.local_merger_rate,
-        problem.observation.observation_time_yr,
-        problem.observation.observation_time_sec
-    )
-    weights0 = iw0.weights
+    c0 = cosmology(C, h)
+    prior0 = single_event_prior(problem.population_model, c0, h)
+    redshift_prior0 = prior0.dists.redshift.prior
+    weights0 = compute_importance_weights(problem, C, h, ctx)
+    rate0 = merger_rate(problem, C, h, ctx)
     z_samples = redshift(problem)
 
     # ------------------------------------------------------------------
     # Warmup — trigger JIT / AD compilation before any benchmark
     # ------------------------------------------------------------------
     @info "warming up (JIT + AD compile)"
-    LogDensityProblems.logdensity(ld, z0)
-    LogDensityProblems.logdensity_and_gradient(ad_ld, z0)
     LogDensityProblems.logdensity(lf, z0_turing)
     LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
-    logposterior(h, problem, priors;
-        model = INFERENCE_MODEL, observed_spectral_density = observed)
+    logposterior(h, problem, C, ctx, priors; observed = observed)
 
     # ------------------------------------------------------------------
     # BenchmarkTools suite
@@ -312,44 +370,41 @@ function _run(;
     suite = BenchmarkGroup()
 
     suite["primal"] = BenchmarkGroup()
-    suite["primal"]["native"] = @benchmarkable LogDensityProblems.logdensity($ld, $z0)
     suite["primal"]["turing"] = @benchmarkable LogDensityProblems.logdensity($lf, $z0_turing)
     suite["primal"]["logposterior"] = @benchmarkable logposterior(
         $h,
         $problem,
+        $C,
+        $ctx,
         $priors;
-        model = $INFERENCE_MODEL,
-        observed_spectral_density = $observed
+        observed = $observed
     )
 
     suite["gradient"] = BenchmarkGroup()
     # gcsample=true forces a GC before each sample so AD timings are not
     # polluted by GC pauses from previous samples (AD allocates a lot).
-    suite["gradient"]["native"] = @benchmarkable(LogDensityProblems.logdensity_and_gradient($ad_ld, $z0),
-        gcsample = true)
     suite["gradient"]["turing"] = @benchmarkable(LogDensityProblems.logdensity_and_gradient($ad_lf, $z0_turing),
         gcsample = true)
 
     suite["stage"] = BenchmarkGroup()
-    suite["stage"]["redshift"] = @benchmarkable cosmology_and_redshift_prior(
-        cosmology($INFERENCE_MODEL, $h), $h, $spec, $(problem.redshift_cache.redshift_grid))
+    suite["stage"]["redshift"] = @benchmarkable single_event_prior(
+        $(problem.population_model), $c0, $h)
     suite["stage"]["weights"] = @benchmarkable compute_importance_weights(
-        $problem, $h, $cosmology_cache0, $redshift_prior0)
+        $problem, $C, $h, $ctx)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
         $redshift_prior0,
-        $(problem.local_merger_rate),
-        $(problem.observation.observation_time_yr),
-        $(problem.observation.observation_time_sec)
+        $(ctx.local_merger_rate),
+        $(ctx.observation.observation_time_yr),
+        $(ctx.observation.observation_time_sec)
     )
     suite["stage"]["spectral"] = @benchmarkable spectral_density(
-        $(problem.proposal.cached_flux_over_dgw2),
+        $(ctx.cached_flux_over_dgw2),
         $rate0;
         weights = $weights0
     )
     suite["stage"]["prior"] = @benchmarkable logpdf($priors, $h)
     # Bare luminosity_distance broadcast — isolates per-sample distance work in
-    # cache reconstruction and importance weighting (see ASGWB/src/cache.jl).
-    c0 = cosmology(INFERENCE_MODEL, h)
+    # Catalog reconstruction and importance weighting.
     suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $c0)
 
     @info "tuning benchmark suite (evals/sample calibration)"
@@ -362,25 +417,18 @@ function _run(;
     # Reporting
     # ------------------------------------------------------------------
     @info "=== primal ==="
-    t_primal_native = results["primal"]["native"]
     t_primal_turing = results["primal"]["turing"]
     t_primal_logpost = results["primal"]["logposterior"]
-    _print_trial_row("native (ASGWBLogDensity)", t_primal_native)
     _print_trial_row("turing (DynamicPPL)", t_primal_turing)
     _print_trial_row("logposterior (bare)", t_primal_logpost)
 
     @info "=== gradient ==="
-    t_grad_native = results["gradient"]["native"]
     t_grad_turing = results["gradient"]["turing"]
-    _print_trial_row("native (ForwardDiff)", t_grad_native)
     _print_trial_row("turing (ForwardDiff)", t_grad_turing)
 
     # AD cost multiplier via BenchmarkTools.ratio
-    r_native = ratio(median(t_grad_native), median(t_primal_native))
     r_turing = ratio(median(t_grad_turing), median(t_primal_turing))
-    @info @sprintf("AD multiplier (gradient/primal): native=%.2fx  turing=%.2fx",
-        time(r_native),
-        time(r_turing),)
+    @info @sprintf("AD multiplier (gradient/primal): turing=%.2fx", time(r_turing))
 
     @info "=== per-stage breakdown (denominator: median of logposterior primal) ==="
     primal_ns = _median_ns(t_primal_logpost)
@@ -391,11 +439,7 @@ function _run(;
     # ------------------------------------------------------------------
     # Sampling profile on the gradient
     # ------------------------------------------------------------------
-    # NUTS evaluates the same log-posterior body as `logposterior`; the native
-    # `ASGWBLogDensity` + ForwardDiff path is used here so hot spots map cleanly
-    # to `src/` without DynamicPPL stack noise (benchmarks above already compare
-    # native vs Turing gradient wall times).
-    @info "sampling-profile: running $profile_samples native ForwardDiff gradient evals under Profile.@profile"
+    @info "sampling-profile: running $profile_samples Turing ForwardDiff gradient evals under Profile.@profile"
     Profile.clear()
     # 100µs sampling delay: one gradient eval is ~100µs, so the default 1ms
     # delay misses almost every sample. Pair with n=10^7 so we never run out
@@ -403,7 +447,7 @@ function _run(;
     Profile.init(; n = 10^7, delay = 1e-4)
     Profile.@profile begin
         for _ in 1:profile_samples
-            LogDensityProblems.logdensity_and_gradient(ad_ld, z0)
+            LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
         end
     end
 
@@ -441,7 +485,7 @@ function _run(;
         # the dominant allocation sites.
         Profile.Allocs.@profile sample_rate = 0.01 begin
             for _ in 1:max(profile_samples, 50)
-                LogDensityProblems.logdensity_and_gradient(ad_ld, z0)
+                LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
             end
         end
         allocs_snap = Profile.Allocs.fetch()
@@ -482,19 +526,15 @@ function _run(;
         _fmt_bytes(memory(median(t))),
         pct_of === nothing ? "-" : @sprintf("%.1f%%", 100 * _median_ns(t) / pct_of),)
     )
-    _mdrow("primal", "native", t_primal_native; pct_of = primal_ns)
     _mdrow("primal", "turing", t_primal_turing; pct_of = primal_ns)
     _mdrow("primal", "logposterior", t_primal_logpost; pct_of = primal_ns)
-    _mdrow("gradient", "native", t_grad_native; pct_of = primal_ns)
     _mdrow("gradient", "turing", t_grad_turing; pct_of = primal_ns)
     for key in ("redshift", "weights", "rate", "spectral", "prior", "lumdist")
         _mdrow("stage", key, results["stage"][key]; pct_of = primal_ns)
     end
     println()
     println(
-        @sprintf("AD multiplier (gradient/primal): native=%.2fx, turing=%.2fx",
-        time(r_native),
-        time(r_turing))
+        @sprintf("AD multiplier (gradient/primal): turing=%.2fx", time(r_turing))
     )
     println()
     println("Tip: save a baseline with")
@@ -509,7 +549,7 @@ function _run(;
 end
 
 """
-Profile the ASGWB Turing/AdvancedHMC log-density to localize the NUTS bottleneck.
+Profile the ASGWB Turing log-density to localize the NUTS bottleneck.
 
 Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation profiles.
 
@@ -534,37 +574,36 @@ function profile_turing(;
 )
     @info "loading config" path = config_file
     cfg = TOML.parsefile(config_file)
+    settings_dir = dirname(abspath(config_file))
 
-    raw_cache = _require(cfg, "cache_path")::String
-    cache_path = if startswith(raw_cache, "parity:")
-        isdefined(@__MODULE__, :resolve_parity_cache_path) ||
-            include(_PARITY_TEST_CACHE)
-        resolve_parity_cache_path(raw_cache)
-    else
-        raw_cache
-    end
+    raw_catalog = _require(cfg, "catalog_path")::String
+    catalog_path = _resolve_catalog_path(raw_catalog, settings_dir)
     detectors = [Detector(n) for n in _require_string_array(cfg, "detectors")]
     seed = get(cfg, "seed", nothing)
     observed_csv = get(cfg, "observed_spectral_density_csv", nothing)
     if observed_csv !== nothing
         observed_csv = String(observed_csv)
     end
+    local_merger_rate = Float64(_require(cfg, "local_merger_rate"))
+    observation_time_yr = Float64(_require(cfg, "observation_time_yr"))
 
     priors_tbl = _require_table(cfg, "priors")
     init_tbl = _require_table(cfg, "init")
     priors = _priors_from_toml(priors_tbl)
     _validate_init_in_priors(priors, init_tbl)
-    θ0 = _theta0_from_toml(init_tbl)
 
-    @info "effective settings" cache=cache_path detectors=join((d.name for d in detectors), ",") seed=seed
+    @info "effective settings" catalog_path detectors=join(
+        (d.name for d in detectors), ",") seed=seed
 
     return _run(;
-        cache_path,
+        catalog_path,
         detectors,
         priors,
-        θ0,
+        init_tbl,
         seed,
         observed_spectral_density_csv = observed_csv,
+        local_merger_rate,
+        observation_time_yr,
         seconds,
         profile_samples,
         do_alloc = alloc,
@@ -640,4 +679,6 @@ end
 
 end # module ASGWBProfileCLI
 
-exit(Base.invokelatest(ASGWBProfileCLI.command_main))
+if abspath(PROGRAM_FILE) == abspath(@__FILE__)
+    exit(Base.invokelatest(ASGWBProfileCLI.command_main))
+end

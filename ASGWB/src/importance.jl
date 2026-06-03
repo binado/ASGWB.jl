@@ -1,11 +1,5 @@
 using LinearAlgebra
 
-"""
-    importance_weights(log_ratio, dgw_fid_sq, dgw_theta_sq) -> Vector
-
-Numerical importance weights: `exp(log_ratio) * dgw_fid_sq / dgw_theta_sq`. All inputs
-are vectors of equal length; no high-level objects involved.
-"""
 function importance_weights(
         log_ratio::AbstractVector{<:Real},
         dgw_fid_sq::AbstractVector{<:Real},
@@ -16,126 +10,123 @@ function importance_weights(
     return exp.(log_ratio) .* dgw_fid_sq ./ dgw_theta_sq
 end
 
-@inline function _importance_terms_at_sample(
-        problem::ImportanceSamplingProblem,
-        h::NamedTuple,
-        cosmology_cache::CosmologyCache,
-        prior::RedshiftPrior,
-        norm::Real,
-        tiny::Real,
+@inline function _importance_weight_at_sample(
+        target_log_prob::AbstractVector,
+        proposal_log_prob::AbstractVector{<:Real},
+        dgw_fid_sq::AbstractVector{<:Real},
         z::AbstractVector{<:Real},
+        redshift_grid::AbstractVector{<:Real},
         interp::SampleInterpolant,
+        cosmology_cache::CosmologyCache,
         sample_index::Integer
 )
-    pdf_at_z = _interpolate_at_sample(prior.dN_dz.y, interp, sample_index)
-    redshift_log_prob = _normalized_log_density(pdf_at_z, norm, tiny)
-    target_log_prob = problem.redshift_cache.cached_intrinsic_log_prob[sample_index] +
-                      redshift_log_prob
-    log_ratio = target_log_prob - problem.proposal.log_prob[sample_index]
+    log_ratio = target_log_prob[sample_index] - proposal_log_prob[sample_index]
     d_l = luminosity_distance_at_sample(
-        cosmology_cache,
-        interp,
-        problem.redshift_cache.redshift_grid,
-        z,
-        sample_index
-    )
-    dgw_theta = gravitational_wave_distance(z[sample_index], d_l, h.Ξ₀, h.Ξₙ)
-    dgw_theta_sq = dgw_theta^2
-    weight = exp(log_ratio) * problem.proposal.dgw_fid_sq[sample_index] / dgw_theta_sq
-    return target_log_prob, log_ratio, dgw_theta_sq, weight
+        cosmology_cache, interp, redshift_grid, z, sample_index)
+    dgw_theta = gravitational_wave_distance(z[sample_index], d_l, cosmology_cache.cosmology)
+    return exp(log_ratio) * dgw_fid_sq[sample_index] / dgw_theta^2
 end
 
-function _importance_output_eltypes(
-        problem::ImportanceSamplingProblem,
-        h::NamedTuple,
-        cosmology_cache::CosmologyCache,
-        prior::RedshiftPrior
+# Shared kernel for both the naive and cached `compute_importance_weights` methods. Inputs
+# are explicit arrays so the only difference between the two backends is where the fiducial
+# caches come from (recomputed vs read from a `ModelContext`). Built with `map` over the
+# index range: this keeps the result type stable (a properly-typed empty vector for n == 0,
+# rather than a `Union` with `Float64[]`) so the AD/`Dual` likelihood path stays inferrable.
+function _importance_weights_core(
+        target_log_prob::AbstractVector,
+        proposal_log_prob::AbstractVector{<:Real},
+        dgw_fid_sq::AbstractVector{<:Real},
+        z::AbstractVector{<:Real},
+        redshift_grid::AbstractVector{<:Real},
+        interp::SampleInterpolant,
+        cosmology_cache::CosmologyCache
 )
-    target_log_prob_type = promote_type(
-        eltype(problem.redshift_cache.cached_intrinsic_log_prob),
-        redshift_logpdf_eltype(prior)
-    )
-    log_ratio_type = promote_type(target_log_prob_type, eltype(problem.proposal.log_prob))
-    dgw_theta_sq_type = promote_type(
-        eltype(redshift(problem)),
-        typeof(h.H0),
-        typeof(h.Ξ₀),
-        typeof(h.Ξₙ),
-        eltype(cosmology_cache.inv_E_integral.y),
-        eltype(cosmology_cache.inv_E_integral.cumulative)
-    )
-    weight_type = promote_type(
-        log_ratio_type,
-        eltype(problem.proposal.dgw_fid_sq),
-        dgw_theta_sq_type
-    )
-    return (;
-        weights = weight_type,
-        log_ratio = log_ratio_type,
-        target_log_prob = target_log_prob_type,
-        dgw_theta_sq = dgw_theta_sq_type
-    )
+    length(z) == length(target_log_prob) ||
+        throw(ArgumentError("population prior logpdf length must match proposal sample count"))
+    return map(eachindex(z)) do i
+        _importance_weight_at_sample(
+            target_log_prob, proposal_log_prob, dgw_fid_sq, z, redshift_grid, interp,
+            cosmology_cache, i)
+    end
 end
 
 """
-    compute_importance_weights(problem, h, cosmology_cache, prior) -> NamedTuple
+    compute_importance_weights(problem, C, Λ, ctx::ModelContext) -> Vector
 
-High-level builder: given the [`ImportanceSamplingProblem`](@ref), live
-hyperparameter `NamedTuple`, a [`CosmologyCache`](@ref), and a [`RedshiftPrior`](@ref), compute
-per-sample importance weights and the intermediate quantities used by diagnostics
-and the parity shim.
-
-Returns a NamedTuple with fields `weights`, `log_ratio`, `target_log_prob`, `dgw_theta_sq`.
+Per-sample importance weights at hyperparameters `Λ` (cosmology family `C`), reading the
+fiducial proposal caches from `ctx`. This is the hot path used by the likelihood and the
+generative model.
 """
 function compute_importance_weights(
         problem::ImportanceSamplingProblem,
-        h::NamedTuple,
-        cosmology_cache::CosmologyCache,
-        prior::RedshiftPrior
+        ::Type{C},
+        Λ::NamedTuple,
+        ctx::ModelContext
+) where {C <: AbstractCosmology}
+    c = cosmology(C, Λ)
+    prior = single_event_prior(problem.population_model, c, Λ)
+    return compute_importance_weights(problem, c, prior, ctx)
+end
+
+"""
+    compute_importance_weights(problem, c, prior, ctx::ModelContext) -> Vector
+
+Importance weights from an already-built cosmology `c` and single-event `prior`. Callers
+that also need `prior` (e.g. the likelihood, which derives the merger rate from it) build
+the prior — and its embedded redshift `CosmologyCache` — only once per evaluation instead of
+once per atomic call. This is the bare form the forward model calls directly.
+"""
+function compute_importance_weights(
+        problem::ImportanceSamplingProblem,
+        c::AbstractCosmology,
+        prior,
+        ctx::ModelContext
 )
-    z = redshift(problem)
-    n = length(z)
-    norm = redshift_integral(prior)
-    T = promote_type(eltype(prior.dN_dz.y), typeof(norm))
-    tiny = floatmin(T)
-    if n == 0
-        eltypes = _importance_output_eltypes(problem, h, cosmology_cache, prior)
-        return (;
-            weights = Vector{eltypes.weights}(),
-            log_ratio = Vector{eltypes.log_ratio}(),
-            target_log_prob = Vector{eltypes.target_log_prob}(),
-            dgw_theta_sq = Vector{eltypes.dgw_theta_sq}()
-        )
-    end
+    cosmology_cache = CosmologyCache(c, ctx.redshift_grid)
+    target_log_prob = batched_logpdf(prior, problem.samples)
+    return _importance_weights_core(
+        target_log_prob,
+        ctx.proposal_log_prob,
+        ctx.dgw_fid_sq,
+        problem.samples.redshift,
+        ctx.redshift_grid,
+        ctx.sample_interpolant,
+        cosmology_cache
+    )
+end
 
-    interp = problem.redshift_cache.sample_interpolant
-    first_terms = _importance_terms_at_sample(
-        problem, h, cosmology_cache, prior, norm, tiny, z, interp, 1)
-    first_target, first_ratio, first_dgw_sq, first_weight = first_terms
-    target_log_prob = Vector{typeof(first_target)}(undef, n)
-    log_ratio = Vector{typeof(first_ratio)}(undef, n)
-    dgw_theta_sq = Vector{typeof(first_dgw_sq)}(undef, n)
-    weights = Vector{typeof(first_weight)}(undef, n)
+"""
+    compute_importance_weights(problem, C, Λ) -> Vector
 
-    @inbounds begin
-        target_log_prob[1] = first_target
-        log_ratio[1] = first_ratio
-        dgw_theta_sq[1] = first_dgw_sq
-        weights[1] = first_weight
-        for i in 2:n
-            terms = _importance_terms_at_sample(
-                problem, h, cosmology_cache, prior, norm, tiny, z, interp, i)
-            target, ratio, dgw_sq, weight = terms
-            target_log_prob[i] = target
-            log_ratio[i] = ratio
-            dgw_theta_sq[i] = dgw_sq
-            weights[i] = weight
-        end
-    end
-    return (;
-        weights = weights,
-        log_ratio = log_ratio,
-        target_log_prob = target_log_prob,
-        dgw_theta_sq = dgw_theta_sq
+Naive importance weights: recompute the fiducial proposal caches (`proposal_log_prob`,
+`dgw_fid_sq`, redshift interpolant) from scratch at `problem.fiducial_hyperparameters`,
+then weight at `Λ`. Slower than the `ctx` method but free of any precomputed state, so it
+serves as the correctness oracle for the cached path.
+"""
+function compute_importance_weights(
+        problem::ImportanceSamplingProblem,
+        ::Type{C},
+        Λ::NamedTuple
+) where {C <: AbstractCosmology}
+    Λ_fid = problem.fiducial_hyperparameters
+    z = problem.samples.redshift
+    proposal_log_prob = _reconstruct_proposal_log_prob(
+        problem.samples, C, problem.population_model, Λ_fid)
+    dgw_fid_sq = _reconstruct_dgw_fid_sq(z, C, Λ_fid)
+    redshift_grid = collect(Float64, DEFAULT_Z_GRID)
+    interp = SampleInterpolant(z, redshift_grid)
+
+    c = cosmology(C, Λ)
+    cosmology_cache = CosmologyCache(c, redshift_grid)
+    prior = single_event_prior(problem.population_model, c, Λ)
+    target_log_prob = batched_logpdf(prior, problem.samples)
+    return _importance_weights_core(
+        target_log_prob,
+        proposal_log_prob,
+        dgw_fid_sq,
+        z,
+        redshift_grid,
+        interp,
+        cosmology_cache
     )
 end

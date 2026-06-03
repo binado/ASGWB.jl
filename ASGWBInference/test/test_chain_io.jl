@@ -2,7 +2,10 @@ using Test
 using JLD2
 using FlexiChains
 using FlexiChains: Extra, Parameter, VNChain, @varname
-using ASGWBInference: ChainIO, StackPartialChainsCLI
+using ASGWBInference: ChainIO
+
+const _REPO = normpath(joinpath(@__DIR__, "..", ".."))
+include(joinpath(_REPO, "scripts", "stack_partial_chains.jl"))
 
 function synthetic_chain(values; chain_indices = 1:size(values, 2),
         last_sampler_state = fill(missing, size(values, 2)))

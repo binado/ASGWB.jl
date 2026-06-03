@@ -1,445 +1,140 @@
 using HDF5
-using HDF5: delete_attribute
 using Distributions: Uniform, logpdf
 using Test
-using Base.Filesystem: cp
 using ASGWB
 
-if !@isdefined parity_cache_path
+if !@isdefined parity_catalog_dir
     include(joinpath(@__DIR__, "parity_test_cache.jl"))
 end
 
 const _TEST_LOAD_DETS = [Detector("H1"), Detector("L1")]
 
-@testset "load_cache omits proposal_log_prob, dgw_fid_sq, fiducial spectrum; full BNS reconstruction" begin
-    fixture_path = parity_cache_path(:importance_context)
-    ref = load_cache(fixture_path, _TEST_LOAD_DETS)
-    z = ref.proposal.samples.redshift
-    spec = ref.redshift_prior_spec
-    γ, κ, zp = 2.7, 3.0, 2.5
-    fid = ProposalFiducialParameters(;
-        H0 = ref.fiducial_parameters.H0,
-        Ωm = ref.fiducial_parameters.Ωm,
-        Ξ₀ = ref.fiducial_parameters.Ξ₀,
-        Ξₙ = ref.fiducial_parameters.Ξₙ,
-        γ = γ,
-        κ = κ,
-        zpeak = zp
+function _load_variant(variant::Symbol)
+    return parity_problem_context(variant, _TEST_LOAD_DETS)
+end
+
+@testset "save_catalog/load_catalog round-trip" begin
+    grid = FrequencyGrid(1.0, 4.0, 2.0, 1.0, 2.0)
+    samples = (
+        mass_1_source = [1.4, 1.4],
+        mass_2_source = [1.2, 1.2],
+        redshift = [0.1, 0.2],
+        chi_1 = [0.0, 0.0],
+        chi_2 = [0.0, 0.0],
+        lambda_1 = [100.0, 100.0],
+        lambda_2 = [100.0, 100.0],
+        luminosity_distance = [430.0, 880.0]
     )
-    model = propagation_model(fid)
-    h = canonical_hyperparameters(
-        model,
-        (;
-            H0 = fid.H0,
-            Ωm = fid.Ωm,
-            Ξ₀ = fid.Ξ₀,
-            Ξₙ = fid.Ξₙ,
-            γ = γ,
-            κ = κ,
-            zpeak = zp
-        )
-    )
-    d_l = luminosity_distance.(z, cosmology(model, h))
-    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
-    scale = (d_l ./ d_gw) .^ 2
-    raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
-    redshift_prior = build_redshift_prior(h, spec, cosmology(model, h))
-    expected_lp = reconstruct_proposal_log_prob(ref.proposal.samples, spec, fid)
-    expected_ri = Float64(ASGWB.redshift_integral(redshift_prior))
+    fluxes = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    meta = WaveformCatalogMetadata("IMRPhenomPV2", :BNS, grid, "rev", "cmd")
+    catalog = WaveformCatalog(samples, fluxes)
+    file = WaveformCatalogFile(catalog, meta)
 
     path, io = mktemp()
     close(io)
     try
-        h5open(path, "w") do f
-            a = attributes(f)
-            a[IMPORTANCE_CACHE_COMMAND_ATTR] = "synthetic test writer"
-            a[IMPORTANCE_CACHE_GIT_REVISION_ATTR] = "test"
-            a["local_merger_rate"] = ref.local_merger_rate
-            a["observation_time_sec"] = ref.observation.observation_time_sec
-            a["observation_time_yr"] = ref.observation.observation_time_yr
-            write(f, "intrinsic_site_order", ref.proposal.intrinsic_site_order)
-            write(
-                f,
-                "proposal_intrinsic_vector",
-                Matrix(permutedims(ref.proposal.intrinsic_vector))
-            )
-            write(f, "frequencies", ref.observation.frequencies)
-            write(f, "in_band_mask", Vector{Bool}(ref.observation.in_band_mask))
-            write(f, "cached_flux", raw_flux)
-
-            g = create_group(f, "proposal_samples")
-            attributes(g)[PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR] = PROPOSAL_SAMPLES_SOURCE_TYPE_BNS
-            s = ref.proposal.samples
-            write(g, "mass_1_source", Vector(s.mass[1, :]))
-            write(g, "mass_2_source", Vector(s.mass[2, :]))
-            write(g, "redshift", s.redshift)
-            write(g, "chi_1", s.χ₁)
-            write(g, "chi_2", s.χ₂)
-            write(g, "lambda_1", s.Λ₁)
-            write(g, "lambda_2", s.Λ₂)
-
-            hg = create_group(f, "hyperparameters")
-            write(hg, "H0", fid.H0)
-            write(hg, "Omega_m", fid.Ωm)
-            write(hg, "chi0", fid.Ξ₀)
-            write(hg, "chin", fid.Ξₙ)
-            write(hg, "gamma", γ)
-            write(hg, "kappa", κ)
-            write(hg, "z_peak", zp)
-
-            sg = create_group(f, "redshift_prior_spec")
-            write(sg, "family", "madau_dickinson")
-            write(sg, "z_min", spec.z_min)
-            write(sg, "z_max", spec.z_max)
-            write(sg, "num_interp", spec.num_interp)
+        save_catalog(path, file)
+        loaded = load_catalog(path)
+        @test Set(keys(loaded.catalog.samples)) == Set(keys(catalog.samples))
+        for k in keys(catalog.samples)
+            @test loaded.catalog.samples[k] ≈ catalog.samples[k]
         end
-
-        p = load_cache(path, _TEST_LOAD_DETS)
-        @test p.proposal.cached_flux_over_dgw2 ≈ ref.proposal.cached_flux_over_dgw2
-        @test p.proposal.dgw_fid_sq ≈ d_gw .^ 2
-        @test p.proposal.log_prob ≈ expected_lp
-        @test fiducial_spectral_density(p) ≈ p.observation.fiducial_spectral_density
-        @test fiducial_redshift_integral(p) ≈ p.redshift_integral_fiducial rtol = 1e-6
-        @test p.redshift_integral_fiducial ≈ expected_ri rtol = 1e-6
+        @test loaded.catalog.fluxes ≈ catalog.fluxes
+        @test loaded.metadata.approximant == meta.approximant
+        @test loaded.metadata.source_type == meta.source_type
+        @test loaded.metadata.grid.duration == grid.duration
+        @test loaded.metadata.grid.sampling_frequency == grid.sampling_frequency
+        @test loaded.metadata.grid.minimum_frequency == grid.minimum_frequency
+        @test loaded.metadata.grid.maximum_frequency == grid.maximum_frequency
     finally
         rm(path; force = true)
     end
 end
 
-@testset "importance_sampling_problem matches load_cache fixture" begin
-    fixture_path = parity_cache_path(:importance_context)
-    from_file = load_cache(fixture_path, _TEST_LOAD_DETS)
+@testset "FrequencyGrid validation" begin
+    @test FrequencyGrid(1.0, 4.0, 2.0, 1.0).maximum_frequency == 2.0
 
-    samples = (
-        mass = stack_source_masses([1.4, 1.4], [1.2, 1.2]),
-        redshift = [0.1, 0.2],
-        χ₁ = [0.0, 0.0],
-        χ₂ = [0.0, 0.0],
-        Λ₁ = [100.0, 100.0],
-        Λ₂ = [100.0, 100.0]
-    )
-    lp = reconstruct_proposal_log_prob(
-        samples,
-        from_file.redshift_prior_spec,
-        from_file.fiducial_parameters
-    )
-    intrinsic_mat = Float64[1.4 1.2 0.1 0.0 0.0 100.0 100.0
-                            1.4 1.2 0.2 0.0 0.0 100.0 100.0]
-    dgw_sq = reconstruct_dgw_fid_sq(samples.redshift, from_file.fiducial_parameters)
-    proposal = ProposalData(
-        FULL_BNS_INTRINSIC_ORDER,
-        samples,
-        lp,
-        intrinsic_mat,
-        [1.0 1.5; 2.0 2.5],
-        dgw_sq
-    )
-    spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 1024, nothing)
-    from_memory = importance_sampling_problem(
-        proposal,
-        from_file.observation,
-        spec,
-        161.0,
-        1.0,
-        from_file.fiducial_parameters
-    )
-
-    @test from_memory.proposal.intrinsic_site_order ==
-          from_file.proposal.intrinsic_site_order
-    @test from_memory.proposal.samples.redshift == from_file.proposal.samples.redshift
-    @test from_memory.proposal.log_prob ≈ from_file.proposal.log_prob
-    @test from_memory.proposal.intrinsic_vector ≈ from_file.proposal.intrinsic_vector
-    @test from_memory.proposal.cached_flux_over_dgw2 ≈
-          from_file.proposal.cached_flux_over_dgw2
-    @test from_memory.proposal.dgw_fid_sq ≈ from_file.proposal.dgw_fid_sq
-    @test from_memory.observation.frequencies ≈ from_file.observation.frequencies
-    @test from_memory.observation.effective_psd ≈ from_file.observation.effective_psd
-    @test from_memory.observation.sgwb_scale ≈ from_file.observation.sgwb_scale
-    @test from_memory.observation.in_band_mask == from_file.observation.in_band_mask
-    @test from_memory.observation.fiducial_spectral_density ≈
-          from_file.observation.fiducial_spectral_density
-    @test from_memory.observation.observation_time_sec ==
-          from_file.observation.observation_time_sec
-    @test from_memory.observation.observation_time_yr ==
-          from_file.observation.observation_time_yr
-    @test from_memory.redshift_prior_spec.family == from_file.redshift_prior_spec.family
-    @test from_memory.redshift_prior_spec.z_min == from_file.redshift_prior_spec.z_min
-    @test from_memory.redshift_prior_spec.z_max == from_file.redshift_prior_spec.z_max
-    @test from_memory.redshift_prior_spec.num_interp ==
-          from_file.redshift_prior_spec.num_interp
-    @test from_memory.redshift_prior_spec.time_delay_model ===
-          from_file.redshift_prior_spec.time_delay_model
-    @test from_memory.fiducial_parameters.H0 == from_file.fiducial_parameters.H0
-    @test from_memory.fiducial_parameters.Ωm == from_file.fiducial_parameters.Ωm
-    @test from_memory.fiducial_parameters.Ξ₀ == from_file.fiducial_parameters.Ξ₀
-    @test from_memory.fiducial_parameters.Ξₙ == from_file.fiducial_parameters.Ξₙ
-    @test from_memory.local_merger_rate == from_file.local_merger_rate
-    @test from_memory.redshift_integral_fiducial == from_file.redshift_integral_fiducial
-    @test typeof(from_memory.strategy) == typeof(from_file.strategy)
+    @test_throws ArgumentError FrequencyGrid(0.0, 4.0, 2.0, 1.0, 2.0)
+    @test_throws ArgumentError FrequencyGrid(1.0, 0.0, 2.0, 1.0, 2.0)
+    @test_throws ArgumentError FrequencyGrid(1.0, 4.0, 2.0, -1.0, 2.0)
+    @test_throws ArgumentError FrequencyGrid(1.0, 4.0, 2.0, 2.0, 2.0)
+    @test_throws ArgumentError FrequencyGrid(1.0, 4.0, 2.0, 1.0, 3.0)
 end
 
-@testset "load_cache" begin
-    fixture_path = parity_cache_path(:importance_context)
-    problem = load_cache(fixture_path, _TEST_LOAD_DETS)
+@testset "WaveformCatalog shape validation" begin
+    @test WaveformCatalog((redshift = [0.1, 0.2],), zeros(3, 2)) isa WaveformCatalog
+    @test WaveformCatalog((x = [1.0], y = [2.0]), zeros(2, 1)) isa WaveformCatalog
+    @test_throws ArgumentError WaveformCatalog((x = [1.0], y = [2.0, 3.0]), zeros(2, 2))
+    @test_throws ArgumentError WaveformCatalog((redshift = [0.1, 0.2],), zeros(3, 3))
+end
 
-    @test problem.proposal.intrinsic_site_order == FULL_BNS_INTRINSIC_ORDER
-    s = problem.proposal.samples
-    @test s.redshift ≈ [0.1, 0.2]
-    @test Vector(s.mass[1, :]) ≈ [1.4, 1.4]
-    @test Vector(s.mass[2, :]) ≈ [1.2, 1.2]
-    @test s.χ₁ ≈ [0.0, 0.0]
-    @test s.χ₂ ≈ [0.0, 0.0]
-    @test s.Λ₁ ≈ [100.0, 100.0]
-    @test s.Λ₂ ≈ [100.0, 100.0]
-    expected_lp = reconstruct_proposal_log_prob(
-        problem.proposal.samples,
-        problem.redshift_prior_spec,
-        problem.fiducial_parameters
-    )
-    @test problem.proposal.log_prob ≈ expected_lp rtol = 1e-6
-    @test problem.proposal.intrinsic_vector ≈ Float64[1.4 1.2 0.1 0.0 0.0 100.0 100.0
-                  1.4 1.2 0.2 0.0 0.0 100.0 100.0]
-    @test problem.proposal.cached_flux_over_dgw2 ≈ [1.0 1.5; 2.0 2.5]
-    @test problem.proposal.dgw_fid_sq ≈ reconstruct_dgw_fid_sq(
-        problem.proposal.samples.redshift,
-        problem.fiducial_parameters
-    )
-    @test problem.observation.frequencies ≈ [1.0, 2.0]
-    @test length(problem.observation.effective_psd) ==
-          length(problem.observation.frequencies)
-    @test length(problem.observation.sgwb_scale) == length(problem.observation.frequencies)
-    @test problem.observation.in_band_mask == BitVector([true, true])
-    model = propagation_model(problem.fiducial_parameters)
-    ev = evaluate_model_terms(model, fiducial_hyperparameters(problem), problem)
-    @test problem.observation.fiducial_spectral_density ≈ ev.spectral_density
-    @test problem.observation.sgwb_scale_in_band ≈ problem.observation.sgwb_scale
-    @test problem.observation.fiducial_spectral_density_in_band ≈
-          ev.spectral_density_in_band
-    @test problem.fiducial_parameters.H0 == 67.0
-    @test problem.fiducial_parameters.Ωm == 0.315
-    @test problem.fiducial_parameters.Ξ₀ == 1.0
-    @test problem.fiducial_parameters.Ξₙ == 0.0
-    @test problem.redshift_prior_spec.family == MadauDickinson
-    @test problem.redshift_prior_spec.z_min == 0.001
-    @test problem.redshift_prior_spec.z_max == 20.0
-    @test problem.redshift_prior_spec.time_delay_model === nothing
-    @test problem.redshift_prior_spec.num_interp == 1024
-    @test problem.local_merger_rate == 161.0
-    @test problem.observation.observation_time_yr == 1.0
-    @test problem.observation.observation_time_sec == 365.25 * 24 * 3600
-    @test problem.redshift_integral_fiducial == 1.0
-    @test problem.strategy isa FullBNS
+@testset "ImportanceSamplingProblem is a pure spec" begin
+    loaded = _load_variant(:importance_context)
+    problem = loaded.problem
+
+    @test problem isa ImportanceSamplingProblem
+    @test problem.population_model isa ParityBNSPopulation
     @test redshift(problem) ≈ [0.1, 0.2]
+    @test Vector(problem.samples.mass[1, :]) ≈ [1.4, 1.4]
+    @test Vector(problem.samples.mass[2, :]) ≈ [1.2, 1.2]
+    @test problem.samples.χ₁ ≈ [0.0, 0.0]
+    @test problem.samples.Λ₁ ≈ [100.0, 100.0]
+    @test problem.fluxes ≈ Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+
+    Λ = fiducial_hyperparameters(problem)
+    @test Λ.H0 == 67.0
+    @test Λ.Ωm == 0.315
+    @test Λ.Ξ₀ == 1.0
+    @test Λ.γ == 2.7
 end
 
-@testset "fiducial_spectral_density uses W0CDM when cache stores w0" begin
-    fixture_path = parity_cache_path(:importance_context)
-    ref = load_cache(fixture_path, _TEST_LOAD_DETS)
-    z = ref.proposal.samples.redshift
-    spec = ref.redshift_prior_spec
-    γ, κ, zp = 2.7, 3.0, 2.5
-    w0_val = -0.9
-    fid = ProposalFiducialParameters(;
-        H0 = ref.fiducial_parameters.H0,
-        Ωm = ref.fiducial_parameters.Ωm,
-        Ξ₀ = ref.fiducial_parameters.Ξ₀,
-        Ξₙ = ref.fiducial_parameters.Ξₙ,
-        γ = γ,
-        κ = κ,
-        zpeak = zp,
-        w0 = w0_val
-    )
-    model = propagation_model(fid)
-    @test model isa MadauDickinsonModifiedPropagation{W0CDM}
-    h = canonical_hyperparameters(
-        model,
-        (;
-            H0 = fid.H0,
-            Ωm = fid.Ωm,
-            w0 = w0_val,
-            Ξ₀ = fid.Ξ₀,
-            Ξₙ = fid.Ξₙ,
-            γ = γ,
-            κ = κ,
-            zpeak = zp
-        )
-    )
-    d_l = luminosity_distance.(z, cosmology(model, h))
-    d_gw = gravitational_wave_distance.(z, d_l, fid.Ξ₀, fid.Ξₙ)
-    scale = (d_l ./ d_gw) .^ 2
-    raw_flux = ref.proposal.cached_flux_over_dgw2 ./ reshape(scale, 1, :)
+@testset "build_model_context reconstructs derived caches" begin
+    loaded = _load_variant(:importance_context)
+    problem = loaded.problem
+    C = loaded.cosmology_type
+    ctx = loaded.ctx
+    pop = problem.population_model
+    Λ = fiducial_hyperparameters(problem)
 
-    path, io = mktemp()
-    close(io)
-    try
-        h5open(path, "w") do f
-            a = attributes(f)
-            a[IMPORTANCE_CACHE_COMMAND_ATTR] = "synthetic w0 test"
-            a[IMPORTANCE_CACHE_GIT_REVISION_ATTR] = "test"
-            a["local_merger_rate"] = ref.local_merger_rate
-            a["observation_time_sec"] = ref.observation.observation_time_sec
-            a["observation_time_yr"] = ref.observation.observation_time_yr
-            write(f, "intrinsic_site_order", ref.proposal.intrinsic_site_order)
-            write(
-                f,
-                "proposal_intrinsic_vector",
-                Matrix(permutedims(ref.proposal.intrinsic_vector))
-            )
-            write(f, "frequencies", ref.observation.frequencies)
-            write(f, "in_band_mask", Vector{Bool}(ref.observation.in_band_mask))
-            write(f, "cached_flux", raw_flux)
-            g = create_group(f, "proposal_samples")
-            attributes(g)[PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR] = PROPOSAL_SAMPLES_SOURCE_TYPE_BNS
-            s = ref.proposal.samples
-            write(g, "mass_1_source", Vector(s.mass[1, :]))
-            write(g, "mass_2_source", Vector(s.mass[2, :]))
-            write(g, "redshift", s.redshift)
-            write(g, "chi_1", s.χ₁)
-            write(g, "chi_2", s.χ₂)
-            write(g, "lambda_1", s.Λ₁)
-            write(g, "lambda_2", s.Λ₂)
-            hg = create_group(f, "hyperparameters")
-            write(hg, "H0", fid.H0)
-            write(hg, "Omega_m", fid.Ωm)
-            write(hg, "chi0", fid.Ξ₀)
-            write(hg, "chin", fid.Ξₙ)
-            write(hg, "gamma", γ)
-            write(hg, "kappa", κ)
-            write(hg, "z_peak", zp)
-            write(hg, "w0", w0_val)
-            sg = create_group(f, "redshift_prior_spec")
-            write(sg, "family", "madau_dickinson")
-            write(sg, "z_min", spec.z_min)
-            write(sg, "z_max", spec.z_max)
-            write(sg, "num_interp", spec.num_interp)
-        end
+    # Ξ₀ = 1, Ξₙ = 0 ⇒ D_gw = D_L ⇒ no rescaling of the raw fluxes.
+    @test ctx.cached_flux_over_dgw2 ≈ problem.fluxes
+    @test all(isfinite, ctx.proposal_log_prob)
+    @test all(isfinite, ctx.dgw_fid_sq)
+    @test all(>(0), ctx.dgw_fid_sq)
 
-        p = load_cache(path, _TEST_LOAD_DETS)
-        @test propagation_model(p.fiducial_parameters) isa
-              MadauDickinsonModifiedPropagation{W0CDM}
-        Λ = fiducial_hyperparameters(p)
-        ev = evaluate_model_terms(propagation_model(p.fiducial_parameters), Λ, p)
-        @test fiducial_spectral_density(p) ≈ ev.spectral_density
-        h_lcdm = canonical_hyperparameters(
-            MadauDickinsonModifiedPropagation(),
-            (;
-                (k => Λ[k]
-            for k in hyperparameters(MadauDickinsonModifiedPropagation()))...)
-        )
-        ev_lcdm = evaluate_model_terms(MadauDickinsonModifiedPropagation(), h_lcdm, p)
-        @test !(fiducial_spectral_density(p) ≈ ev_lcdm.spectral_density)
-    finally
-        rm(path; force = true)
-    end
+    @test length(ctx.redshift_grid) == length(DEFAULT_Z_GRID)
+    @test ctx.observation.frequencies ≈ [0.0, 20.0, 40.0]
+    @test ctx.observation.in_band_mask == BitVector([false, true, true])
+    @test length(ctx.observation.effective_psd) == length(ctx.observation.frequencies)
+    @test ctx.observation.sgwb_scale_in_band ≈
+          ctx.observation.sgwb_scale[ctx.observation.in_band_mask]
+    @test ctx.observation.observation_time_yr == 1.0
+    @test ctx.observation.observation_time_sec ≈ 365.25 * 24 * 3600
+    @test ctx.local_merger_rate == 161.0
+
+    @test all(isfinite, ctx.fiducial_spectral_density)
+    @test length(ctx.fiducial_spectral_density) == length(ctx.observation.frequencies)
+    @test fiducial_redshift_integral(problem, C) ≈
+          fiducial_redshift_integral(C, pop, Λ) rtol = 1e-6
 end
 
-@testset "load_cache rejects unsupported proposal_samples source_type" begin
-    fixture_path = parity_cache_path(:importance_context)
-    path = joinpath(mktempdir(), "bad_source_type.h5")
-    cp(fixture_path, path; force = true)
-    h5open(path, "r+") do f
-        g = f["proposal_samples"]
-        delete_attribute(g, PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR)
-        attributes(g)[PROPOSAL_SAMPLES_SOURCE_TYPE_ATTR] = "BBH"
-    end
-    @test_throws ArgumentError load_cache(path, _TEST_LOAD_DETS)
-end
+@testset "fiducial spectral density differs across cosmologies" begin
+    loaded_w0 = _load_variant(:w0cdm)
+    @test loaded_w0.cosmology_type === ModifiedPropagation{W0CDM}
+    fs_w0 = loaded_w0.ctx.fiducial_spectral_density
+    @test all(isfinite, fs_w0)
 
-@testset "importance_sampling_problem 5-arg infers redshift integral" begin
-    fid = ProposalFiducialParameters(;
-        H0 = 67.0,
-        Ωm = 0.315,
-        Ξ₀ = 1.0,
-        Ξₙ = 0.0,
-        γ = 2.7,
-        κ = 3.0,
-        zpeak = 2.5
-    )
-    spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 256, nothing)
-    ri = fiducial_redshift_integral(fid, spec)
-    samples = (
-        mass = stack_source_masses([1.4], [1.2]),
-        redshift = [0.1],
-        χ₁ = [0.0],
-        χ₂ = [0.0],
-        Λ₁ = [100.0],
-        Λ₂ = [100.0]
-    )
-    lp = reconstruct_proposal_log_prob(samples, spec, fid)
-    proposal = ProposalData(
-        FULL_BNS_INTRINSIC_ORDER,
-        samples,
-        lp,
-        reshape([1.4, 1.2, 0.1, 0.0, 0.0, 100.0, 100.0], 1, :),
-        fill(1.0, 1, 2),
-        [1.0]
-    )
-    observation = ObservationConfig(
-        [1.0, 2.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
-        BitVector([true, true]),
-        [0.0, 0.0],
-        1.0,
-        1.0
-    )
-    p = importance_sampling_problem(proposal, observation, spec, 1.0, fid)
-    @test p.redshift_integral_fiducial ≈ ri rtol = 1e-10
-end
-
-@testset "importance_sampling_problem accepts custom intrinsic prior factory" begin
-    fid = ProposalFiducialParameters(;
-        H0 = 67.0,
-        Ωm = 0.315,
-        Ξ₀ = 1.0,
-        Ξₙ = 0.0,
-        γ = 2.7,
-        κ = 3.0,
-        zpeak = 2.5
-    )
-    spec = RedshiftPriorSpec(MadauDickinson, 0.001, 20.0, 64, nothing)
-    samples = (
-        mass = stack_source_masses([1.4, 1.5], [1.2, 1.3]),
-        redshift = [0.1, 0.2],
-        χ₁ = [0.0, 0.1],
-        χ₂ = [0.0, -0.2],
-        Λ₁ = [100.0, 200.0],
-        Λ₂ = [150.0, 250.0]
-    )
-    proposal = ProposalData(
-        FULL_BNS_INTRINSIC_ORDER,
-        samples,
-        zeros(2),
-        Float64[1.4 1.2 0.1 0.0 0.0 100.0 150.0
-                1.5 1.3 0.2 0.1 -0.2 200.0 250.0],
-        ones(2, 2),
-        ones(2)
-    )
-    observation = ObservationConfig(
-        [1.0, 2.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
-        BitVector([true, true]),
-        [0.0, 0.0],
-        1.0,
-        1.0
-    )
-    factory = strategy -> begin
-        @test strategy isa FullBNS
-        IntrinsicPrior((χ₁ = Uniform(-1.0, 1.0), Λ₁ = Uniform(0.0, 500.0)))
-    end
-
-    p = importance_sampling_problem(
-        proposal,
-        observation,
-        spec,
-        1.0,
-        1.0,
-        fid;
-        intrinsic_prior_factory = factory
-    )
-    expected = [logpdf(Uniform(-1.0, 1.0), samples.χ₁[i]) +
-                logpdf(Uniform(0.0, 500.0), samples.Λ₁[i])
-                for i in eachindex(samples.χ₁)]
-    @test p.redshift_cache.cached_intrinsic_log_prob ≈ expected
+    # Build a LambdaCDM context from the same raw inputs and confirm the fiducial spectrum
+    # is not identical (the cosmology genuinely feeds through the caches).
+    p_w0 = loaded_w0.problem
+    Λ = fiducial_hyperparameters(p_w0)
+    C_lcdm = ModifiedPropagation{LambdaCDM}
+    order_lcdm = full_hyperparameters(C_lcdm, p_w0.population_model)
+    Λ_lcdm = canonical_hyperparameters(order_lcdm, (; (k => Λ[k] for k in order_lcdm)...))
+    p_lcdm = ImportanceSamplingProblem(
+        p_w0.population_model, p_w0.fluxes, p_w0.samples, Λ_lcdm)
+    grid = FrequencyGrid(0.05, 80.0, 20.0, 15.0, 40.0)
+    ctx_lcdm = build_model_context(
+        p_lcdm, C_lcdm, grid, _TEST_LOAD_DETS, 1.0, 161.0)
+    @test !(fs_w0 ≈ ctx_lcdm.fiducial_spectral_density)
 end

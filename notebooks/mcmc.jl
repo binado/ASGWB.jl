@@ -8,7 +8,7 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.19.1
 #   kernelspec:
-#     display_name: Julia 1.12.6
+#     display_name: Julia 1.12
 #     language: julia
 #     name: julia-1.12
 # ---
@@ -16,196 +16,189 @@
 # %% [markdown]
 # # MCMC
 #
-# Same overall flow as `scripts/run_turing.jl`, but this notebook uses **unicode-key named tuples** (`Ωm`, `Ξ₀`, …) aligned with the Turing `product_distribution` prior. On-disk JSON for the CLI still uses ASCII keys (`Omega_m`, …). After **`load_cache`**, it plots **Ω_GW(f)** at the initial `θ0` (via `evaluate_importance_terms` and `Ωgw`) with **CairoMakie**, then runs **NUTS** in a dedicated cell with the same steps as `sample_with_turing` (`build_turing_model`, `condition_turing_model`, `InitFromParams`, `sample`).
-#
-# On-disk chains use **JLD2** with the top-level key **`chain`**, matching **`scripts/run_inference.jl`**. Set **`chain_input_jld2`** to a path (absolute or relative to the package root, like the cache HDF5 path) to skip sampling and load an existing run for diagnostics only.
-#
-# The first cell activates the **workspace subproject** `Project.toml` under `notebooks/` (Pkg **workspace** with the package root: one shared `Manifest.toml` at the repo root). Notebook-only packages (**`CairoMakie`**, **`LaTeXStrings`**, **`FlexiChains`**, **`PairPlots`**) live there; **`ASGWB`** is a path dev of the sibling `ASGWB/` package. **`CairoMakie`** with **`LaTeXStrings`** (`L"..."`) draws Ω_GW; **`FlexiChains`** Makie plots and **`PairPlots`** cover MCMC diagnostics (same stack as **`notebooks/plots.jl`**). **`Turing`** and the core **`ASGWB`** stack come from the devved package. Saved **`chain`** JLD2 files are directly consumable by **`plots.jl`**.
-
-# %%
-begin
-    num_threads = Base.Threads.nthreads()
-    print(num_threads)
-end
+# Notebook-first MCMC workflow matching `mcmc_pluto.jl`: inline population model,
+# inline fiducials and hyperprior bounds, `load_catalog`, explicit
+# `ImportanceSamplingProblem`, Turing NUTS sampling, JLD2 chain output, and plots.
 
 # %%
 begin
     import Pkg
-    # Activates the environment in the directory where the notebook lives
     Pkg.activate(@__DIR__)
-    # Ensure dependencies are installed for fresh clones or clean depots
     Pkg.instantiate()
+
     using ASGWB
-    using ASGWBInference: build_turing_model, condition_turing_model
     using ASGWB:
-                 load_cache,
-                 evaluate_model_terms,
-                 Ωgw,
-                 canonical_hyperparameters,
-                 MadauDickinsonModifiedPropagation,
-                 hyperparameters,
-                 validate_prior,
-                 validate_subset,
-                 Detector
-    using Turing
+                 AbstractCosmology,
+                 AlignedSpinChiSimple,
+                 BNS_LAMBDA_HIGH,
+                 Detector,
+                 ImportanceSamplingProblem,
+                 MadauDickinsonSourceFrame,
+                 OrderedUniformSourceMassPair,
+                 PopulationModel,
+                 build_model_context,
+                 compute_importance_weights,
+                 full_hyperparameters,
+                 load_catalog,
+                 merger_rate,
+                 redshift_prior,
+                 spectral_density,
+                 stack_source_masses,
+                 Ωgw
+    using ASGWBInference: atomic_save_chain, build_turing_model, condition_turing_model
+    import ASGWB: hyperparameters, hyperprior, single_event_prior
     using AdvancedHMC
-    using Random
-    using JLD2
-    using Logging
+    using CairoMakie
+    using Dates: format, now
+    using Distributions: Uniform, product_distribution
     using FlexiChains
     using FlexiChains: VNChain
-    using PairPlots
-    using CairoMakie
+    using JLD2: load
     using LaTeXStrings
-    using Distributions
     using LinearAlgebra: BLAS
-    # Avoid BLAS oversubscription with MCMCThreads
+    using PairPlots
+    using Random
+    using Turing
+
     BLAS.set_num_threads(1)
+    num_threads = Base.Threads.nthreads()
 end
 
 # %%
 begin
-    using DelimitedFiles
+    struct BNSPopulationModel <: PopulationModel end
 
-    function load_observed_spectral_density(path::AbstractString, expected_len::Int)
-        isfile(path) ||
-            throw(ArgumentError("observed spectrum file not found: $(repr(path))"))
-        v = vec(readdlm(path, ',', Float64))
-        length(v) == expected_len || throw(
-            ArgumentError(
-            "observed_spectral_density_csv has length $(length(v)), expected $expected_len",
-        ),
+    hyperparameters(::BNSPopulationModel) = (:γ, :κ, :zpeak)
+
+    function hyperprior(::BNSPopulationModel)
+        return product_distribution((
+            γ = Uniform(0.5, 10.0),
+            κ = Uniform(0.05, 10.0),
+            zpeak = Uniform(0.05, 10.0)
+        ))
+    end
+
+    function single_event_prior(
+            ::BNSPopulationModel, cosmo::AbstractCosmology, Λ::NamedTuple)
+        z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ)
+        spin = AlignedSpinChiSimple()
+        return product_distribution((
+            mass = OrderedUniformSourceMassPair(),
+            redshift = z_d,
+            χ₁ = spin,
+            χ₂ = spin,
+            Λ₁ = Uniform(0.0, BNS_LAMBDA_HIGH),
+            Λ₂ = Uniform(0.0, BNS_LAMBDA_HIGH)
+        ))
+    end
+
+    function bns_samples_from_catalog(catalog_samples::NamedTuple)
+        return (
+            mass = stack_source_masses(
+                catalog_samples.mass_1_source, catalog_samples.mass_2_source),
+            redshift = copy(catalog_samples.redshift),
+            χ₁ = copy(catalog_samples.chi_1),
+            χ₂ = copy(catalog_samples.chi_2),
+            Λ₁ = copy(catalog_samples.lambda_1),
+            Λ₂ = copy(catalog_samples.lambda_2)
         )
-        return v
     end
+end
 
-    """Check each `init` scalar has positive prior density under the matching `priors` entry."""
-    function validate_init_against_priors(priors, init)
-        for (k, d) in pairs(priors)
-            v = init[k]
-            isfinite(logpdf(d, v)) || throw(
-                ArgumentError(
-                "init.$k = $v is outside the support of the corresponding prior",
-            ),
-            )
-        end
-        return nothing
-    end
+# %%
+begin
+    _repo_root = normpath(joinpath(@__DIR__, ".."))
 
-    # --- edit everything below (same role as the JSON used by `scripts/run_turing.jl`) ---
+    catalog_path = joinpath(_repo_root, "catalog.h5")
+    detectors = [Detector("E1"), Detector("E2"), Detector("E3")]
+    sample_only = (:Ξ₀,)
 
-    inference_model = MadauDickinsonModifiedPropagation()
-    cache = "analysis_numpyro_julia_cache.h5"
-    detectors = [Detector("S1"), Detector("R1")]
-    sample_only = (:H0,)
+    seed = 42
+    Random.seed!(seed)
 
-    priors = (
-        H0 = Uniform(20, 140),
+    local_merger_rate = 161.0
+    observation_time_yr = 1.0
+
+    output_dir = joinpath(_repo_root, "chains")
+    output_prefix = "chains"
+
+    sampler = (
+        n_samples = 3000,
+        n_adapts = 3000,
+        target_acceptance = 0.9,
+        num_chains = 0
+    )
+
+    cosmology_parameters = (;
+        H0 = 67.66,
+        Ωm = 0.3096,
+        Ξ₀ = 1.0,
+        Ξₙ = 1.91
+    )
+    cosmology_model = LambdaCDM(cosmology_parameters.H0, cosmology_parameters.Ωm)
+    cosmology = ModifiedPropagation(
+        cosmology_model,
+        cosmology_parameters.Ξ₀,
+        cosmology_parameters.Ξₙ
+    )
+    C = typeof(cosmology)
+
+    fiducials = (;
+        cosmology_parameters...,
+        γ = 2.7,
+        κ = 5.7,
+        zpeak = 2.0
+    )
+
+    hyperprior = product_distribution((
+        H0 = Uniform(20.0, 140.0),
         Ωm = Uniform(0.05, 0.95),
-        Ξ₀ = Uniform(0.5, 5),
-        Ξₙ = Uniform(0.05, 3),
-        γ = Uniform(0.5, 10),
-        κ = Uniform(0.05, 10),
-        zpeak = Uniform(0.05, 10)
-    )
-
-    init = (H0 = 67.66, Ωm = 0.3096, Ξ₀ = 1.0, Ξₙ = 1.91, γ = 2.7, κ = 5.7, zpeak = 2.0)
-
-    sampler = (n_samples = 2000, n_adapts = 2000, target_acceptance = 0.9)
-
-    seed = 1
-    observed_spectral_density_csv = nothing
-    output_suffix = sample_only === nothing ? "all" : join(map(string, sample_only), "-")
-    output_jld2 = "chains-$output_suffix.jld2"
-    chain_input_jld2 = nothing
-
-    validate_init_against_priors(priors, init)
-    priors_turing = product_distribution((
-        H0 = priors.H0,
-        Ωm = priors.Ωm,
-        Ξ₀ = priors.Ξ₀,
-        Ξₙ = priors.Ξₙ,
-        γ = priors.γ,
-        κ = priors.κ,
-        zpeak = priors.zpeak
+        Ξ₀ = Uniform(0.5, 5.0),
+        Ξₙ = Uniform(0.05, 3.0),
+        γ = Uniform(0.5, 10.0),
+        κ = Uniform(0.05, 10.0),
+        zpeak = Uniform(0.05, 10.0)
     ))
-    validate_prior(inference_model, priors_turing)
-    if sample_only !== nothing
-        isempty(sample_only) && throw(
-            ArgumentError(
-            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
-        ),
-        )
-        validate_subset(sample_only, inference_model)
-    end
-    order = hyperparameters(inference_model)
-    fixed_sites = sample_only === nothing ?
-                  NamedTuple() :
-                  (; (k => init[k] for k in order if k ∉ sample_only)...)
-    θ0 = canonical_hyperparameters(inference_model, init)
+
+    chain_input_jld2 = nothing
+    num_chains = sampler.num_chains > 0 ? sampler.num_chains : num_threads
 end
 
 # %%
-fixed_sites
-
-# %%
 begin
-    function turing_initial_params(
-            theta0::NamedTuple,
-            sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
+    loaded = load_catalog(catalog_path)
+    pop = BNSPopulationModel()
+    samples = bns_samples_from_catalog(loaded.catalog.samples)
+    problem = ImportanceSamplingProblem(pop, loaded.catalog.fluxes, samples, fiducials)
+    ctx = build_model_context(
+        problem,
+        C,
+        loaded.metadata.grid,
+        detectors,
+        observation_time_yr,
+        local_merger_rate
     )
-        sample_only === nothing && return InitFromParams(theta0)
-        return InitFromParams((; (s => theta0[s] for s in sample_only)...))
-    end
+    order = full_hyperparameters(C, pop)
+    sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
+    observed = ctx.fiducial_spectral_density
 
-    @info "loading importance cache" path=cache detectors=join((d.name for d in detectors), ",")
-    t_cache = time()
-    problem = load_cache(cache, detectors)
-    @info "cache loaded" seconds=round(time()-t_cache; digits = 2) n_frequency_bins=length(problem.observation.frequencies) n_proposal_samples=length(problem.proposal.samples.redshift)
-
-    observed = if observed_spectral_density_csv === nothing
-        @info "using fiducial in-band spectrum from cache as observed data"
-        problem.observation.fiducial_spectral_density
-    else
-        @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
-        load_observed_spectral_density(
-            observed_spectral_density_csv,
-            length(problem.observation.fiducial_spectral_density)
-        )
-    end
-
-    if seed !== nothing
-        @info "seeding RNG" rng_seed = seed
-        Random.seed!(seed)
-    else
-        @info "RNG seed not set (nondeterministic run unless Julia was seeded elsewhere)"
-    end
-
-    sample_only_tup = if sample_only === nothing
-        nothing
-    else
-        Tuple(sample_only)
-    end
-    if sample_only_tup !== nothing
-        isempty(sample_only_tup) && throw(
-            ArgumentError(
-            "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
-        ),
-        )
-        validate_subset(sample_only_tup, inference_model)
-    end
-    sam = sampler
-    nothing
+    mkpath(output_dir)
+    timestamp = format(now(), "yyyymmdd-HHMMSS")
+    det_suffix = join((d.name for d in detectors), ",")
+    params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
+    base = "$(output_prefix)-$(params_suffix)-det=$(det_suffix)-seed$(seed)-$(timestamp)"
+    output_jld2 = joinpath(output_dir, "$base.jld2")
 end
 
 # %%
 begin
-    ev = evaluate_model_terms(MadauDickinsonModifiedPropagation(), θ0, problem)
-    f = problem.observation.frequencies
-    Ωgw_plot = Ωgw(ev.spectral_density, f, θ0.H0)
+    weights0 = compute_importance_weights(problem, C, fiducials, ctx)
+    rate0 = merger_rate(problem, C, fiducials, ctx)
+    Sh0 = spectral_density(ctx.cached_flux_over_dgw2, rate0; weights = weights0)
+    f = ctx.observation.frequencies
+    Ωgw_plot = Ωgw(Sh0, f, fiducials.H0)
     mask = Ωgw_plot .> 0.0
-    fm = f[mask]
-    Ωm = Ωgw_plot[mask]
+
     fig = Figure(size = (900, 450))
     ax = Axis(
         fig[1, 1];
@@ -215,103 +208,89 @@ begin
         yscale = log10,
         limits = (nothing, nothing, 1e-15, nothing)
     )
-    if !isempty(Ωm)
-        lines!(ax, fm, Ωm; label = L"$\mathrm{model~at}~\theta_0$")
+    if any(mask)
+        lines!(ax, f[mask], Ωgw_plot[mask]; label = L"$\mathrm{model~at~fiducial}$")
         axislegend(ax; position = :rt)
     end
     fig
 end
 
 # %%
-Ωgw
-
-# %%
 begin
     if chain_input_jld2 !== nothing
         chain_path = isabspath(chain_input_jld2) ? String(chain_input_jld2) :
-                     normpath(joinpath(pkgdir(ASGWB), chain_input_jld2))
+                     normpath(joinpath(_repo_root, chain_input_jld2))
         isfile(chain_path) ||
             throw(ArgumentError("JLD2 chain file not found: $(repr(chain_path))"))
-        @info "loading chain from JLD2" path = chain_path
         chain = load(chain_path)["chain"]
-        @info "chain loaded" chain_size = size(chain)
     else
-        @info "starting NUTS" n_adapts=sam.n_adapts n_samples=sam.n_samples target_acceptance=sam.target_acceptance sample_only=sample_only_tup
-        model = build_turing_model(
+        turing_model = build_turing_model(
             problem,
-            priors_turing;
-            model = inference_model,
+            C,
+            ctx,
+            hyperprior;
             track = true,
-            observed_spectral_density = observed
+            observed = observed
         )
         conditioned = condition_turing_model(
-            model,
-            θ0,
-            priors_turing,
+            turing_model,
+            fiducials,
+            hyperprior,
             sample_only_tup;
-            model = inference_model
+            order = order
         )
         nuts = Turing.NUTS(
-            sam.n_adapts,
-            sam.target_acceptance;
+            sampler.n_adapts,
+            sampler.target_acceptance;
             metricT = AdvancedHMC.DenseEuclideanMetric
         )
         chain = sample(
             conditioned,
             nuts,
             MCMCThreads(),
-            sam.n_samples,
-            num_threads;
+            sampler.n_samples,
+            num_chains;
             progress = true,
             save_state = false,
-            chain_type = VNChain
+            chain_type = VNChain,
+            initial_params = fill(InitFromPrior(), num_chains)
         )
-        @info "NUTS finished" chain_size = size(chain)
     end
     chain
 end
 
 # %% [markdown]
-# ## Storing the chains
+# ## Storing The Chains
 
 # %%
 begin
     if chain_input_jld2 === nothing
-        @info "Saving chain object to JLD2" path = output_jld2
-        jldsave(output_jld2; chain)
-        @info "Done"
-    else
-        @info "Skipping JLD2 save (chain was loaded from disk)"
+        atomic_save_chain(output_jld2, chain)
     end
 end
 
 # %% [markdown]
-# ## Diagnostic plots
+# ## Diagnostic Plots
 
 # %%
 summarystats(chain)
 
 # %%
-begin
-    fig = FlexiChains.mtraceplot(chain)
-    fig
-end
+FlexiChains.mtraceplot(chain)
 
 # %%
 begin
     n_draws = size(chain, 1)
     autocor_maxlag = min(100, max(1, n_draws - 1))
-    fig = FlexiChains.mautocorplot(chain; lags = 1:autocor_maxlag)
-    fig
+    FlexiChains.mautocorplot(chain; lags = 1:autocor_maxlag)
 end
 
 # %%
 begin
     chain_params = FlexiChains.parameters(chain)
-    fig = if length(chain_params) >= 2
+    if length(chain_params) >= 2
         pairplot(chain)
     else
         Makie.density(chain)
     end
-    fig
 end

@@ -3,12 +3,22 @@ using Random
 
 export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
        detector_frame_merger_rate_density, expected_number_of_events,
-       madau_dickinson_source_frame_distribution, power_law_source_frame_distribution,
-       redshift_grid, SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
+       madau_dickinson_source_frame_distribution,
+       SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
        luminosity_distance_at_sample,
        build_redshift_prior, cosmology_and_redshift_prior,
        RedshiftInterpolatedDistribution, _normalized_log_density,
-       redshift_log_prob_samples, redshift_log_prob_samples!, redshift_logpdf_eltype
+       redshift_logpdf_eltype,
+       MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior,
+       DEFAULT_Z_GRID
+
+"""
+    DEFAULT_Z_GRID
+
+Default redshift integration grid: 256 uniformly-spaced points on [1e-3, 20].
+Shared across [`redshift_prior`](@ref) calls that do not pass an explicit grid.
+"""
+const DEFAULT_Z_GRID = collect(LinRange(1e-3, 20.0, 256))
 
 """
     RedshiftPrior(dN_dz)
@@ -83,17 +93,49 @@ function madau_dickinson_source_frame_distribution(
            (1 + (1 + zpeak)^(-κ))
 end
 
-power_law_source_frame_distribution(z::Real; Λ::Real) = (1 + z)^Λ
+# ---------------------------------------------------------------------------
+# Redshift prior seam: dispatch on source-frame model type
+# ---------------------------------------------------------------------------
 
 """
-    redshift_grid(spec::RedshiftPriorSpec) -> Vector{Float64}
+    MadauDickinsonSourceFrame
 
-Uniform redshift grid implied by `spec` (materialized as `Vector{Float64}`).
-This is safe to precompute once and reuse across likelihood evaluations.
+Dispatch tag for the Madau–Dickinson (2014) star-formation-rate source-frame
+merger-rate model.  Pass to [`source_frame_distribution`](@ref) or
+[`redshift_prior`](@ref).
 """
-function redshift_grid(spec::RedshiftPriorSpec)
-    return collect(LinRange(spec.z_min, spec.z_max, spec.num_interp))
+struct MadauDickinsonSourceFrame end
+
+"""
+    source_frame_distribution(::MadauDickinsonSourceFrame, z, Λ) -> Real
+
+Source-frame merger-rate density at redshift `z` under the Madau–Dickinson model.
+Reads `γ`, `κ`, `zpeak` from `Λ`.
+"""
+function source_frame_distribution(::MadauDickinsonSourceFrame, z::Real, Λ::NamedTuple)
+    return madau_dickinson_source_frame_distribution(z; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
 end
+
+"""
+    redshift_prior(sf_model, cosmo, Λ; z_grid) -> RedshiftInterpolatedDistribution
+
+Build the detector-frame redshift prior using `sf_model` to evaluate the
+source-frame merger-rate density.  `z_grid` defaults to [`DEFAULT_Z_GRID`](@ref).
+"""
+function redshift_prior(
+        sf_model,
+        cosmo::AbstractCosmology,
+        Λ::NamedTuple;
+        z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
+)
+    cache = CosmologyCache(cosmo, z_grid)
+    sfn = z -> source_frame_distribution(sf_model, z, Λ)
+    return RedshiftInterpolatedDistribution(build_redshift_prior(sfn, cache))
+end
+
+# ---------------------------------------------------------------------------
+# Grid interpolation helpers
+# ---------------------------------------------------------------------------
 
 """
     SampleInterpolant
@@ -214,43 +256,6 @@ function redshift_logpdf_eltype(prior::RedshiftPrior)
     return promote_type(eltype(prior.dN_dz.y), typeof(redshift_integral(prior)))
 end
 
-"""
-    redshift_log_prob_samples!(out, prior, redshifts) -> out
-
-Fill `out` with per-sample redshift log-density `_redshift_logpdf(prior, z)`.
-`out` must have the same length as `redshifts`; values outside the prior's
-support evaluate to `-Inf`.
-"""
-function redshift_log_prob_samples!(
-        out::AbstractVector,
-        prior::RedshiftPrior,
-        redshifts::AbstractVector{<:Real}
-)
-    length(out) == length(redshifts) ||
-        throw(ArgumentError("output length must match the number of redshift samples"))
-    @inbounds for i in eachindex(redshifts)
-        out[i] = _redshift_logpdf(prior, redshifts[i])
-    end
-    return out
-end
-
-"""
-    redshift_log_prob_samples(prior, redshifts) -> Vector
-
-Allocating variant of [`redshift_log_prob_samples!`](@ref). The element type
-promotes with the redshift contribution (e.g. `ForwardDiff.Dual` when `prior`
-was built under AD).
-"""
-function redshift_log_prob_samples(
-        prior::RedshiftPrior,
-        redshifts::AbstractVector{<:Real}
-)
-    T = promote_type(eltype(redshifts), redshift_logpdf_eltype(prior))
-    out = Vector{T}(undef, length(redshifts))
-    isempty(redshifts) && return out
-    return redshift_log_prob_samples!(out, prior, redshifts)
-end
-
 function luminosity_distance_at_sample(
         cache::CosmologyCache,
         interp::SampleInterpolant,
@@ -269,45 +274,6 @@ function luminosity_distance_at_sample(
     return (1 + z) * cache.d_h * integral
 end
 
-function build_redshift_prior(
-        h::NamedTuple,
-        spec::RedshiftPriorSpec,
-        cache::CosmologyCache
-)
-    isnothing(spec.time_delay_model) || throw(
-        ArgumentError("time-delay redshift models are not supported in the Julia v0 port"),
-    )
-    spec.family == MadauDickinson || throw(
-        ArgumentError(
-        "build_redshift_prior only supports the MadauDickinson redshift prior family",
-    ),
-    )
-    # Streamlined closure: capture only the necessary scalars
-    γ, κ, zpeak = h.γ, h.κ, h.zpeak
-    sfn = z -> madau_dickinson_source_frame_distribution(z; γ, κ, zpeak)
-    return build_redshift_prior(sfn, cache)
-end
-
-function cosmology_and_redshift_prior(
-        cosmology::AbstractCosmology,
-        h::NamedTuple,
-        spec::RedshiftPriorSpec,
-        z_grid::AbstractVector{<:Real} = redshift_grid(spec)
-)
-    cache = CosmologyCache(cosmology, z_grid)
-    return cache, build_redshift_prior(h, spec, cache)
-end
-
-function build_redshift_prior(
-        h::NamedTuple,
-        spec::RedshiftPriorSpec,
-        cosmology::AbstractCosmology,
-        z_grid::AbstractVector{<:Real} = redshift_grid(spec)
-)
-    return build_redshift_prior(h, spec, CosmologyCache(cosmology, z_grid))
-end
-
-
 struct RedshiftInterpolatedDistribution{P <: RedshiftPrior} <:
        ContinuousUnivariateDistribution
     prior::P
@@ -315,6 +281,7 @@ end
 
 Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.prior.dN_dz.x)
 Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.prior.dN_dz.x)
+Base.eltype(d::RedshiftInterpolatedDistribution) = redshift_logpdf_eltype(d.prior)
 
 function Distributions.insupport(d::RedshiftInterpolatedDistribution, value::Real)
     return minimum(d) <= value <= maximum(d)

@@ -11,7 +11,7 @@ where ``\\sigma_i = \\mathrm{effective\\_psd}_i / \\sqrt{2 T \\Delta f}`` (equiv
 
 Vectors `a`, `b`, and `effective_psd` must have the same length. Observation time ``T`` is in
 seconds, bin width ``\\Delta f =`` `df` is in Hz, and network [`effective_psd`](@ref) follows the
-same convention as [`ObservationConfig`](@ref) (use the same `df` as
+same convention as [`ObservationContext`](@ref) (use the same `df` as
 [`frequency_bin_width`](@ref) on the analysis grid when binning is uniform).
 
 With ``a = b`` equal to a strain spectral density ``S_h``, ``\\langle S_h, S_h \\rangle`` is
@@ -41,7 +41,7 @@ where ``S_{h,i}`` is the strain spectral density in bin ``i`` and
 
 with observation time ``T`` in seconds, frequency bin width ``\\Delta f =`` `df` in Hz, and
 network [`effective_psd`](@ref) in the same convention as [`gaussian_bin_scale`](@ref) and
-[`ObservationConfig`](@ref) (per-bin `sgwb_scale` from [`build_observation_config`](@ref) matches
+[`ObservationContext`](@ref) (per-bin `sgwb_scale` from [`build_observation_context`](@ref) matches
 this `σ` path when `df` is the same width used there, e.g. from [`frequency_bin_width`](@ref) on
 the analysis frequency grid).
 

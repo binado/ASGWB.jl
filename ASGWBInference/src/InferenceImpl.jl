@@ -3,45 +3,31 @@ module InferenceImpl
 using ASGWB
 using ASGWB:
              ImportanceSamplingProblem,
-             AbstractASGWBModel,
-             MadauDickinsonModifiedPropagation,
+             ModelContext,
+             PopulationModel,
              AbstractCosmology,
-             LambdaCDM,
-             W0CDM,
-             W0WaCDM,
-             cosmology_type,
-             cosmology_parameters,
              SUPPORTED_COSMOLOGIES,
-             evaluate_model_terms,
+             loglikelihood,
+             cosmology,
+             single_event_prior,
+             compute_importance_weights,
+             merger_rate,
+             spectral_density,
              canonical_hyperparameters,
-             hyperparameters,
-             validate_hyperparameters,
-             validate_prior,
+             full_hyperparameters,
              validate_subset,
-             logposterior,
              normalized_ess,
              spectral_snr_squared,
              frequency_bin_width
-using AdvancedHMC
-using Bijectors
-using Distributions: MvNormal, ProductNamedTupleDistribution
-using FiniteDiff
-using ForwardDiff
+using Distributions: MvNormal, ProductNamedTupleDistribution, logpdf
 using LinearAlgebra: Diagonal
-using LogDensityProblems
-using LogDensityProblemsAD
 using Turing
 
-include("sampling.jl")
 include("turing_model.jl")
 
-export ASGWBLogDensity,
-       unconstrained_initial_point,
-       constrained_parameters,
-       ad_logdensity,
-       finite_difference_logdensity_and_gradient,
-       sample_with_advancedhmc,
-       build_turing_model,
-       condition_turing_model
+export build_turing_model,
+       condition_turing_model,
+       logposterior,
+       validate_hyperprior
 
 end
