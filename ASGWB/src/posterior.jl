@@ -97,30 +97,3 @@ end
 function fiducial_hyperparameters(problem::ImportanceSamplingProblem)
     problem.fiducial_hyperparameters
 end
-
-"""
-    fiducial_redshift_integral(C, population, Λ) -> Float64
-
-Redshift-integrated detector-frame merger-rate density at hyperparameters `Λ`.
-"""
-function fiducial_redshift_integral(
-        ::Type{C},
-        population::M,
-        Λ::NamedTuple
-) where {C <: AbstractCosmology, M <: PopulationModel}
-    c = cosmology(C, Λ)
-    prior = single_event_prior(population, c, Λ)
-    return Float64(redshift_integral(prior.dists.redshift.prior))
-end
-
-"""
-    fiducial_redshift_integral(problem, C) -> Float64
-
-Redshift integral at `problem.fiducial_hyperparameters` for cosmology family `C`.
-"""
-function fiducial_redshift_integral(
-        problem::ImportanceSamplingProblem,
-        ::Type{C}
-) where {C <: AbstractCosmology}
-    return fiducial_redshift_integral(C, problem.population_model, problem.fiducial_hyperparameters)
-end

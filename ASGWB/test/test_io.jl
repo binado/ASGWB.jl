@@ -114,8 +114,6 @@ end
 
     @test all(isfinite, ctx.fiducial_spectral_density)
     @test length(ctx.fiducial_spectral_density) == length(ctx.observation.frequencies)
-    @test fiducial_redshift_integral(problem, C) ≈
-          fiducial_redshift_integral(C, pop, Λ) rtol = 1e-6
 end
 
 @testset "fiducial spectral density differs across cosmologies" begin
