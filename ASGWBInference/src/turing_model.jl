@@ -68,7 +68,15 @@ end
         eltype = nothing
     )
 
-    weights, rate = weights_and_rate(problem, C, Λc, ctx)
+    c = cosmology(C, Λc)
+    event_prior = single_event_prior(problem.population_model, c, Λc)
+    weights = compute_importance_weights(problem, c, event_prior, ctx)
+    rate = merger_rate(
+        event_prior,
+        ctx.local_merger_rate,
+        ctx.observation.observation_time_yr,
+        ctx.observation.observation_time_sec
+    )
     Sh = spectral_density(ctx.cached_flux_over_dgw2, rate; weights = weights)
 
     obs = ctx.observation

@@ -144,7 +144,6 @@ export normalized_ess, max_normalized_weight, log_ratio_variance
 # Posterior
 export loglikelihood,
        merger_rate,
-       weights_and_rate,
        fiducial_hyperparameters,
        fiducial_redshift_integral
 
