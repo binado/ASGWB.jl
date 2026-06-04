@@ -1,9 +1,14 @@
 using LinearAlgebra
 
+# Per-sample importance weight as a product of three physically independent factors:
+# the population prior ratio `exp(log_ratio)`, the FLRW background distance ratio
+# `(D_L,fid/D_L,θ)²`, and the modified-propagation factor `(1/Ξ_θ)²`. The raw catalog flux
+# carries `1/D_L,fid²`, so multiplying by `dl_fid_sq / (D_L,θ² · Ξ_θ²)` recovers the
+# physically correct `1/D_gw,θ²` dilution.
 @inline function _importance_weight_at_sample(
         target_log_prob::AbstractVector,
         proposal_log_prob::AbstractVector{<:Real},
-        dgw_fid_sq::AbstractVector{<:Real},
+        dl_fid_sq::AbstractVector{<:Real},
         z::AbstractVector{<:Real},
         redshift_grid::AbstractVector{<:Real},
         interp::SampleInterpolant,
@@ -13,8 +18,8 @@ using LinearAlgebra
     log_ratio = target_log_prob[sample_index] - proposal_log_prob[sample_index]
     d_l = luminosity_distance_at_sample(
         cosmology_cache, interp, redshift_grid, z, sample_index)
-    dgw_theta = gravitational_wave_distance(z[sample_index], d_l, cosmology_cache.cosmology)
-    return exp(log_ratio) * dgw_fid_sq[sample_index] / dgw_theta^2
+    Ξ_theta = gw_em_distance_ratio(z[sample_index], cosmology_cache.cosmology)
+    return exp(log_ratio) * dl_fid_sq[sample_index] / (d_l^2 * Ξ_theta^2)
 end
 
 # Shared kernel for both the naive and cached `compute_importance_weights` methods. Inputs
@@ -25,7 +30,7 @@ end
 function _importance_weights_core(
         target_log_prob::AbstractVector,
         proposal_log_prob::AbstractVector{<:Real},
-        dgw_fid_sq::AbstractVector{<:Real},
+        dl_fid_sq::AbstractVector{<:Real},
         z::AbstractVector{<:Real},
         redshift_grid::AbstractVector{<:Real},
         interp::SampleInterpolant,
@@ -35,7 +40,7 @@ function _importance_weights_core(
         throw(ArgumentError("population prior logpdf length must match proposal sample count"))
     return map(eachindex(z)) do i
         _importance_weight_at_sample(
-            target_log_prob, proposal_log_prob, dgw_fid_sq, z, redshift_grid, interp,
+            target_log_prob, proposal_log_prob, dl_fid_sq, z, redshift_grid, interp,
             cosmology_cache, i)
     end
 end
@@ -77,7 +82,7 @@ function compute_importance_weights(
     return _importance_weights_core(
         target_log_prob,
         ctx.proposal_log_prob,
-        ctx.dgw_fid_sq,
+        ctx.dl_fid_sq,
         problem.samples.redshift,
         ctx.redshift_grid,
         ctx.sample_interpolant,
@@ -89,7 +94,7 @@ end
     compute_importance_weights(problem, C, Λ) -> Vector
 
 Naive importance weights: recompute the fiducial proposal caches (`proposal_log_prob`,
-`dgw_fid_sq`, redshift interpolant) from scratch at `problem.fiducial_hyperparameters`,
+`dl_fid_sq`, redshift interpolant) from scratch at `problem.fiducial_hyperparameters`,
 then weight at `Λ`. Slower than the `ctx` method but free of any precomputed state, so it
 serves as the correctness oracle for the cached path.
 """
@@ -102,7 +107,7 @@ function compute_importance_weights(
     z = problem.samples.redshift
     proposal_log_prob = _reconstruct_proposal_log_prob(
         problem.samples, C, problem.population_model, Λ_fid)
-    dgw_fid_sq = _reconstruct_dgw_fid_sq(z, C, Λ_fid)
+    dl_fid_sq = _reconstruct_dl_fid_sq(z, C, Λ_fid)
     redshift_grid = collect(Float64, DEFAULT_Z_GRID)
     interp = SampleInterpolant(z, redshift_grid)
 
@@ -113,7 +118,7 @@ function compute_importance_weights(
     return _importance_weights_core(
         target_log_prob,
         proposal_log_prob,
-        dgw_fid_sq,
+        dl_fid_sq,
         z,
         redshift_grid,
         interp,

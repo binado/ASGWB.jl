@@ -77,7 +77,7 @@ end
         ctx.observation.observation_time_yr,
         ctx.observation.observation_time_sec
     )
-    Sh = spectral_density(ctx.cached_flux_over_dgw2, rate; weights = weights)
+    Sh = spectral_density(problem.fluxes, rate; weights = weights)
 
     obs = ctx.observation
     observed_in_band ~ MvNormal(

@@ -186,7 +186,7 @@ end
 begin
     weights0 = compute_importance_weights(problem, C, fiducials, ctx)
     rate0 = merger_rate(problem, C, fiducials, ctx)
-    Sh0 = spectral_density(ctx.cached_flux_over_dgw2, rate0; weights = weights0)
+    Sh0 = spectral_density(problem.fluxes, rate0; weights = weights0)
     f = ctx.observation.frequencies
     Ωgw_plot = Ωgw(Sh0, f, fiducials.H0)
     mask = Ωgw_plot .> 0.0

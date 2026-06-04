@@ -234,22 +234,36 @@ function differential_comoving_volume(z::Real, c::AbstractCosmology, dist::Cumul
     return d_h * d_c^2 / E(z, c)
 end
 
+"""
+    gw_em_distance_ratio(z, c) -> Real
+
+Ratio `Ξ(z) = D_gw / D_L` between the gravitational-wave and electromagnetic luminosity
+distances at redshift `z`. Standard FLRW cosmologies recover GR (`Ξ ≡ 1`); a
+[`ModifiedPropagation`](@ref) applies the `(Ξ₀, Ξₙ)` factor
+
+``\\Xi(z) = \\Xi_0 + (1 - \\Xi_0) / (1 + z)^{\\Xi_n}``.
+
+This is the single source of truth for the propagation factor; `gravitational_wave_distance`
+is `gw_em_distance_ratio(z, c) * D_L`.
+"""
+gw_em_distance_ratio(z::Real, Ξ₀::Real, Ξₙ::Real) = Ξ₀ + (1 - Ξ₀) / (1 + z)^Ξₙ
+gw_em_distance_ratio(z::Real, ::AbstractCosmology) = one(z)
+gw_em_distance_ratio(z::Real, c::ModifiedPropagation) = gw_em_distance_ratio(z, c.Ξ₀, c.Ξₙ)
+
 function gravitational_wave_distance(
         z::Real,
         luminosity_distance::Real,
         Ξ₀::Real,
         Ξₙ::Real
 )
-    return (Ξ₀ + (1 - Ξ₀) / (1 + z)^Ξₙ) * luminosity_distance
+    return gw_em_distance_ratio(z, Ξ₀, Ξₙ) * luminosity_distance
 end
 
-# GW luminosity distance from a precomputed EM luminosity distance `d_l`, dispatched on the
-# propagation model: standard cosmologies leave it unchanged, `ModifiedPropagation` applies
-# the (Ξ₀, Ξₙ) factor. Shared by the importance hot path (which already has `d_l` cached) and
-# the convenience method below, so the propagation dispatch lives in exactly one place.
-gravitational_wave_distance(::Real, d_l::Real, ::AbstractCosmology) = d_l
-function gravitational_wave_distance(z::Real, d_l::Real, c::ModifiedPropagation)
-    return gravitational_wave_distance(z, d_l, c.Ξ₀, c.Ξₙ)
+# GW luminosity distance from a precomputed EM luminosity distance `d_l`. The propagation
+# dispatch lives entirely in `gw_em_distance_ratio` (1 for standard cosmologies, the
+# (Ξ₀, Ξₙ) factor for `ModifiedPropagation`), so this is just `Ξ(z) * d_l`.
+function gravitational_wave_distance(z::Real, d_l::Real, c::AbstractCosmology)
+    gw_em_distance_ratio(z, c) * d_l
 end
 
 function gravitational_wave_distance(z::Real, c::AbstractCosmology)

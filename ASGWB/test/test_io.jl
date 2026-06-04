@@ -96,11 +96,9 @@ end
     pop = problem.population_model
     Λ = fiducial_hyperparameters(problem)
 
-    # Ξ₀ = 1, Ξₙ = 0 ⇒ D_gw = D_L ⇒ no rescaling of the raw fluxes.
-    @test ctx.cached_flux_over_dgw2 ≈ problem.fluxes
     @test all(isfinite, ctx.proposal_log_prob)
-    @test all(isfinite, ctx.dgw_fid_sq)
-    @test all(>(0), ctx.dgw_fid_sq)
+    @test all(isfinite, ctx.dl_fid_sq)
+    @test all(>(0), ctx.dl_fid_sq)
 
     @test length(ctx.redshift_grid) == length(DEFAULT_Z_GRID)
     @test ctx.observation.frequencies ≈ [0.0, 20.0, 40.0]

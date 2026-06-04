@@ -24,7 +24,7 @@ module ASGWB
 
 using CBCDistributions
 import CBCDistributions: cosmology, cosmology_type, gravitational_wave_distance,
-                         hyperparameters, single_event_prior
+                         gw_em_distance_ratio, hyperparameters, single_event_prior
 
 include("types.jl")
 include("models/base.jl")
@@ -103,6 +103,7 @@ export E,
        luminosity_distance,
        differential_comoving_volume,
        gravitational_wave_distance,
+       gw_em_distance_ratio,
        H0,
        Ωm
 

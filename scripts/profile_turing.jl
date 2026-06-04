@@ -390,7 +390,7 @@ function _run(;
         $(ctx.observation.observation_time_sec)
     )
     suite["stage"]["spectral"] = @benchmarkable spectral_density(
-        $(ctx.cached_flux_over_dgw2),
+        $(problem.fluxes),
         $rate0;
         weights = $weights0
     )

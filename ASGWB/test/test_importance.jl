@@ -32,7 +32,7 @@ function _importance_type_test_fixture(n::Integer)
     obs = ObservationContext(
         [1.0, 2.0], [1.0, 1.0], [1.0, 1.0], BitVector([true, true]), 1.0, 1.0)
     ctx = ModelContext(
-        zeros(n), ones(n), zeros(2, n), z_grid, interp, obs, 1.0, [0.0, 0.0])
+        zeros(n), ones(n), z_grid, interp, obs, 1.0, [0.0, 0.0])
     return problem, ctx, Λ
 end
 
@@ -57,11 +57,9 @@ end
     @test isfinite(rate_cached)
     @test rate_cached ≈ rate_naive
 
-    # Spectral-density parity: explicitly recomputed flux through the same array kernel.
-    flux_naive = ASGWB._reconstruct_cached_flux_over_dgw2(
-        problem.fluxes, problem.samples.redshift, C, fiducial_hyperparameters(problem))
-    Sh_cached = spectral_density(ctx.cached_flux_over_dgw2, rate_cached; weights = weights_cached)
-    Sh_naive = spectral_density(flux_naive, rate_naive; weights = weights_naive)
+    # Spectral-density parity: raw fluxes through the same array kernel on both paths.
+    Sh_cached = spectral_density(problem.fluxes, rate_cached; weights = weights_cached)
+    Sh_naive = spectral_density(problem.fluxes, rate_naive; weights = weights_naive)
     @test all(isfinite, Sh_cached)
     @test Sh_cached ≈ Sh_naive
 end

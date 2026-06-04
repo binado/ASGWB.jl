@@ -29,6 +29,31 @@ end
     @test d_gw ≈ [10.0, 20.0]
 end
 
+@testset "gw_em_distance_ratio" begin
+    zs = (0.0, 0.3, 1.0, 2.5)
+
+    # Standard FLRW cosmologies recover GR: Ξ ≡ 1, so D_gw = D_L.
+    for c in (LambdaCDM(67.0, 0.315), W0CDM(67.0, 0.315, -0.9),
+        W0WaCDM(67.0, 0.315, -0.9, 0.2))
+        for z in zs
+            @test gw_em_distance_ratio(z, c) ≈ 1.0
+            @test gravitational_wave_distance(z, c) ≈ luminosity_distance(z, c)
+        end
+    end
+
+    # ModifiedPropagation applies Ξ(z) = Ξ₀ + (1 - Ξ₀)/(1 + z)^Ξₙ.
+    Ξ₀, Ξₙ = 1.2, 2.0
+    c_mod = ModifiedPropagation(LambdaCDM(67.0, 0.315), Ξ₀, Ξₙ)
+    for z in zs
+        Ξ = Ξ₀ + (1 - Ξ₀) / (1 + z)^Ξₙ
+        @test gw_em_distance_ratio(z, c_mod) ≈ Ξ
+        @test gw_em_distance_ratio(z, Ξ₀, Ξₙ) ≈ Ξ
+        # gravitational_wave_distance is exactly Ξ(z) · D_L.
+        @test gravitational_wave_distance(z, c_mod) ≈
+              gw_em_distance_ratio(z, c_mod) * luminosity_distance(z, c_mod)
+    end
+end
+
 @testset "cosmology_parameters and cosmology" begin
     @test cosmology_parameters(LambdaCDM) == (:H0, :Ωm)
     @test cosmology_parameters(W0CDM) == (:H0, :Ωm, :w0)

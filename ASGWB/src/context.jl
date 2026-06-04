@@ -2,33 +2,16 @@
 # `ModelContext` itself is defined in inference_types.jl so it precedes the importance.jl
 # method signatures that dispatch on it.
 
-# Per-sample squared GW luminosity distance at the fiducial cosmology/propagation.
-function _reconstruct_dgw_fid_sq(
+# Per-sample squared EM luminosity distance at the fiducial cosmology. The (Ξ₀, Ξₙ)
+# propagation factor is *not* applied here: the full distance correction is carried live in
+# the importance weights as `dl_fid_sq / (D_L,θ² · Ξ_θ²)`.
+function _reconstruct_dl_fid_sq(
         z::AbstractVector{<:Real},
         ::Type{C},
         Λ::NamedTuple
 )::Vector{Float64} where {C <: AbstractCosmology}
     c = cosmology(C, Λ)
-    d_l = luminosity_distance.(z, c)
-    d_gw = gravitational_wave_distance.(z, d_l, Ref(c))
-    return Float64.(d_gw .^ 2)
-end
-
-# Apply the squared ratio (D_L / D_gw)² sample-wise to the raw catalog fluxes.
-# Inputs/outputs use the `(n_freq, n_samples)` layout (each sample a contiguous column).
-function _reconstruct_cached_flux_over_dgw2(
-        fluxes::AbstractMatrix{<:Real},
-        z::AbstractVector{<:Real},
-        ::Type{C},
-        Λ::NamedTuple
-)::Matrix{Float64} where {C <: AbstractCosmology}
-    size(fluxes, 2) == length(z) ||
-        throw(ArgumentError("flux column count must match redshift sample count"))
-    c = cosmology(C, Λ)
-    d_l = luminosity_distance.(z, c)
-    d_gw = gravitational_wave_distance.(z, d_l, Ref(c))
-    scale_row = reshape(Float64.((d_l ./ d_gw) .^ 2), 1, :)
-    return Matrix{Float64}(fluxes) .* scale_row
+    return Float64.(luminosity_distance.(z, c) .^ 2)
 end
 
 # Proposal log-density per sample: single-event prior logpdf at the fiducial point.
@@ -52,10 +35,10 @@ Build the `Λ`-independent [`ModelContext`](@ref) for `problem` at cosmology fam
 mask). `detectors` must contain at least two [`Detector`](@ref)s; the network effective PSD
 and Gaussian bin scales are computed from tabulated PSDs and overlap-reduction functions.
 
-The proposal caches (`proposal_log_prob`, `dgw_fid_sq`, `cached_flux_over_dgw2`) are
-recomputed from the raw catalog at the fiducial cosmology `cosmology(C, Λ_fid)`, so stale
-on-disk values are never trusted. The `fiducial_spectral_density` is produced by running the
-inline `weights → rate → Sₕ` sequence at the fiducial point.
+The proposal caches (`proposal_log_prob`, `dl_fid_sq`) are recomputed at the fiducial
+cosmology `cosmology(C, Λ_fid)`, so stale on-disk values are never trusted. The raw catalog
+`fluxes` are used directly (no `(D_L/D_gw)²` pre-scaling). The `fiducial_spectral_density` is
+produced by running the inline `weights → rate → Sₕ` sequence at the fiducial point.
 """
 function build_model_context(
         problem::ImportanceSamplingProblem,
@@ -101,8 +84,7 @@ function build_model_context(
     det_vec = Vector{Detector}(collect(detectors))
     observation = build_observation_context(all_freq, det_vec, mask, obs_sec, obs_yr)
 
-    cached_flux_over_dgw2 = _reconstruct_cached_flux_over_dgw2(problem.fluxes, z, C, Λ_fid)
-    dgw_fid_sq = _reconstruct_dgw_fid_sq(z, C, Λ_fid)
+    dl_fid_sq = _reconstruct_dl_fid_sq(z, C, Λ_fid)
     proposal_log_prob = _reconstruct_proposal_log_prob(
         problem.samples, C, problem.population_model, Λ_fid)
 
@@ -119,7 +101,7 @@ function build_model_context(
         weights_fid = _importance_weights_core(
             batched_logpdf(prior_fid, problem.samples),
             proposal_log_prob,
-            dgw_fid_sq,
+            dl_fid_sq,
             z,
             redshift_grid,
             interp,
@@ -127,7 +109,7 @@ function build_model_context(
         )
         rate_fid = merger_rate_per_sec(
             prior_fid.dists.redshift.prior, local_rate, obs_yr, obs_sec)
-        spectral_density(cached_flux_over_dgw2, rate_fid; weights = weights_fid)
+        spectral_density(problem.fluxes, rate_fid; weights = weights_fid)
     catch err
         throw(
             ArgumentError(
@@ -139,8 +121,7 @@ function build_model_context(
 
     return ModelContext(
         proposal_log_prob,
-        dgw_fid_sq,
-        cached_flux_over_dgw2,
+        dl_fid_sq,
         redshift_grid,
         interp,
         observation,

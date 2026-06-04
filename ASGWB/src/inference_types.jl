@@ -15,7 +15,9 @@ Fields:
 - `fiducial_hyperparameters::NamedTuple` — canonical fiducial hyperparameters; the
   cosmology + propagation + population state at which the proposal caches are built.
 
-All derived/`Λ`-independent caches (rescaled fluxes, proposal log-prob, redshift
+The raw `fluxes` are used directly in the spectral-density contraction; the full distance
+correction `(D_L,fid/D_L,θ)²·(1/Ξ_θ²)` lives in the importance weights, not in the fluxes.
+All derived/`Λ`-independent caches (`dl_fid_sq`, proposal log-prob, redshift
 interpolant, detector PSDs, fiducial spectral density) live in [`ModelContext`](@ref),
 built by [`build_model_context`](@ref). The cosmology family `C` is passed as a call
 argument, never stored here.
@@ -37,8 +39,8 @@ redshift(problem::ImportanceSamplingProblem) = redshift(problem.samples)
 Flat catalog-derived cache of all `Λ`-independent derived state for an [`ImportanceSamplingProblem`](@ref),
 built once by [`build_model_context`](@ref) and reused by every likelihood/model call:
 
-- proposal caches at the fiducial point: `proposal_log_prob`, `dgw_fid_sq`,
-  `cached_flux_over_dgw2` (`(n_freq, n_samples)`),
+- proposal caches at the fiducial point: `proposal_log_prob`, `dl_fid_sq` (squared EM
+  luminosity distance at the fiducial cosmology),
 - redshift state: `redshift_grid` and the proposal `sample_interpolant`,
 - detector/observation state grouped in [`ObservationContext`](@ref),
 - `local_merger_rate` (events Gpc⁻³ yr⁻¹), and
@@ -51,8 +53,7 @@ construction: `build_model_context` and the model that uses it close over a sing
 """
 struct ModelContext
     proposal_log_prob::Vector{Float64}
-    dgw_fid_sq::Vector{Float64}
-    cached_flux_over_dgw2::Matrix{Float64}
+    dl_fid_sq::Vector{Float64}
     redshift_grid::Vector{Float64}
     sample_interpolant::SampleInterpolant
     observation::ObservationContext
