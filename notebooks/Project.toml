@@ -1,3 +1,7 @@
+name = "NotebookSupport"
+uuid = "712e5b67-f2a6-4ad3-9012-d896aa0ccef2"
+version = "0.1.0"
+
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 ASGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
