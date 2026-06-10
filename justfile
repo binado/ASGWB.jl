@@ -4,9 +4,10 @@ fmt:
 test:
     julia --project=ASGWB -e 'using Pkg; Pkg.test()'
     julia --project=ASGWBInference -e 'using Pkg; Pkg.test()'
+    julia --project=CBCDistributions -e 'using Pkg; Pkg.test()'
 
-pluto:
-    julia --project=notebooks -e 'using Pkg; Pkg.instantiate(); using Pluto; Pluto.run(notebook="notebooks/mcmc_pluto.jl")'
+pluto threads='"auto"':
+    julia -e 'using Pluto; Pluto.run(threads={{threads}})'
 
 resolve package="ASGWB":
     julia --project={{package}} -e 'using Pkg; Pkg.resolve()'
