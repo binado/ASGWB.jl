@@ -11,7 +11,7 @@ begin
     Pkg.instantiate()
     using ASGWB:
                  PopulationModel,
-                 AbstractCosmology,
+                 CosmologyCache,
                  LambdaCDM,
                  cosmology,
                  OrderedUniformSourceMassPair,
@@ -112,10 +112,10 @@ begin
 
     function single_event_prior(
             ::BNSUniformMassAlignedSpinTidalSFR,
-            cosmo::AbstractCosmology,
+            cache::CosmologyCache,
             Λ::NamedTuple
     )
-        z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ)
+        z_d = redshift_prior(MadauDickinsonSourceFrame(), cache, Λ)
         spin = AlignedSpinChiSimple(a_max = Λ.a_max)
         return product_distribution((
             mass = OrderedUniformSourceMassPair(low = Λ.m_low, high = Λ.m_high),

@@ -94,8 +94,8 @@ begin
     # end
 
     function single_event_prior(
-            ::BNSPopulationModel, cosmo::AbstractCosmology, Λ::NamedTuple)
-        z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ)
+            ::BNSPopulationModel, cache::CosmologyCache, Λ::NamedTuple)
+        z_d = redshift_prior(MadauDickinsonSourceFrame(), cache, Λ)
         spin = AlignedSpinChiSimple()
         return product_distribution((
             mass = OrderedUniformSourceMassPair(),

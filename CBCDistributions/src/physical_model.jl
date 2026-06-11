@@ -8,8 +8,12 @@ Abstract supertype for caller-defined population models.  Concrete subtypes
 must implement the two-method contract:
 
 - `hyperparameters(pop) -> NTuple{N, Symbol}` — ordered population parameter names.
-- `single_event_prior(pop, cosmo, Λ) -> ProductNamedTupleDistribution` — per-event
-  distribution conditioned on cosmology `cosmo` and hyperparameters `Λ`.
+- `single_event_prior(pop, cache::CosmologyCache, Λ) -> ProductNamedTupleDistribution`
+  — per-event distribution conditioned on the cosmology carried by `cache` and
+  hyperparameters `Λ`. Build the redshift component with
+  `redshift_prior(sf_model, cache, Λ)` so the cache is reused. A generic
+  `single_event_prior(pop, cosmo::AbstractCosmology, Λ; z_grid)` adapter is provided
+  for callers that only hold a bare cosmology.
 
 Hyperparameter priors are caller-defined (e.g. `product_distribution(...)` in
 notebooks or tests); they are not part of this package API.
@@ -27,12 +31,31 @@ subtypes; do not overlap with the cosmology symbols.
 function hyperparameters end
 
 """
-    single_event_prior(pop, cosmo, Λ) -> ProductNamedTupleDistribution
+    single_event_prior(pop, cache::CosmologyCache, Λ) -> ProductNamedTupleDistribution
 
-Per-event distribution over intrinsic parameters for a given cosmology and
-hyperparameter state `Λ`.  Implement on concrete `PopulationModel` subtypes.
+Per-event distribution over intrinsic parameters for the cosmology carried by
+`cache` and hyperparameter state `Λ`.  Implement on concrete `PopulationModel`
+subtypes, threading `cache` into `redshift_prior` so its cumulative cosmology
+integral is reused by the importance-weight path rather than rebuilt.
 """
 function single_event_prior end
+
+"""
+    single_event_prior(pop, cosmo::AbstractCosmology, Λ; z_grid) -> ProductNamedTupleDistribution
+
+Generic adapter for callers that hold a bare cosmology (the oracle and
+fiducial-reconstruction paths). Builds a [`CosmologyCache`](@ref) on `z_grid`
+(default [`DEFAULT_Z_GRID`](@ref)) and dispatches to the population's cache method.
+The hot path builds the cache once and calls the cache method directly.
+"""
+function single_event_prior(
+        pop::PopulationModel,
+        cosmo::AbstractCosmology,
+        Λ::NamedTuple;
+        z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
+)
+    return single_event_prior(pop, CosmologyCache(cosmo, z_grid), Λ)
+end
 
 """
     full_hyperparameters(C, pop) -> NTuple{N,Symbol}

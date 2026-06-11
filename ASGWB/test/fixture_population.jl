@@ -1,7 +1,7 @@
 # Test-only reference population implementing the PopulationModel contract.
 # The framework owns no concrete population types; callers define the concrete
 # model used by their notebooks or scripts.
-using ASGWB: PopulationModel, AbstractCosmology, OrderedUniformSourceMassPair,
+using ASGWB: PopulationModel, CosmologyCache, OrderedUniformSourceMassPair,
              AlignedSpinChiSimple, redshift_prior, MadauDickinsonSourceFrame,
              BNS_LAMBDA_HIGH
 import ASGWB: hyperparameters, single_event_prior
@@ -19,8 +19,8 @@ function parity_population_hyperprior()
     ))
 end
 
-function single_event_prior(::ParityBNSPopulation, cosmo::AbstractCosmology, Λ::NamedTuple)
-    z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ)
+function single_event_prior(::ParityBNSPopulation, cache::CosmologyCache, Λ::NamedTuple)
+    z_d = redshift_prior(MadauDickinsonSourceFrame(), cache, Λ)
     spin = AlignedSpinChiSimple()
     return product_distribution((
         mass = OrderedUniformSourceMassPair(),
