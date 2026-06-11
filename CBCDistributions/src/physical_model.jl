@@ -181,13 +181,31 @@ function _add_component_logpdf!(
     return out
 end
 
+# Optional precomputed-interpolant hook. A distribution that can exploit a
+# `SampleInterpolant` for a fixed set of sample points overrides the 4-arg form
+# (see `RedshiftInterpolatedDistribution` in redshift.jl). Every other component —
+# and a `nothing` interpolant — falls back to the per-sample scalar loops above,
+# so `batched_logpdf` needs no knowledge of which distributions are interpolated.
+function _add_component_logpdf!(out::AbstractVector, d, field, interp)
+    return _add_component_logpdf!(out, d, field)
+end
+
 """
-    batched_logpdf(d::ProductNamedTupleDistribution, samples::NamedTuple) -> Vector
+    batched_logpdf(d::ProductNamedTupleDistribution, samples::NamedTuple, sample_interps=nothing) -> Vector
 
 Per-sample log-density of `d` evaluated against a struct-of-arrays `samples`.
 Each field of `d.dists` is matched to the same field in `samples`.
+
+`sample_interps`, when supplied, is a `NamedTuple` of precomputed `SampleInterpolant`s
+keyed by field name. A component whose distribution implements the 4-arg
+`_add_component_logpdf!` (e.g. grid-interpolated priors) uses its interpolant to
+skip the per-sample grid search; every other component ignores it.
 """
-function batched_logpdf(d::ProductNamedTupleDistribution, samples::NamedTuple)
+function batched_logpdf(
+        d::ProductNamedTupleDistribution,
+        samples::NamedTuple,
+        sample_interps = nothing
+)
     first_key = first(keys(d.dists))
     n = _component_batch_length(d.dists[first_key], samples, first_key)
     T = _batched_output_eltype(d.dists)
@@ -196,7 +214,8 @@ function batched_logpdf(d::ProductNamedTupleDistribution, samples::NamedTuple)
         n_key = _component_batch_length(d.dists[key], samples, key)
         n_key == n ||
             throw(ArgumentError("population prior sample fields must have matching lengths"))
-        _add_component_logpdf!(out, d.dists[key], samples[key])
+        interp = sample_interps === nothing ? nothing : get(sample_interps, key, nothing)
+        _add_component_logpdf!(out, d.dists[key], samples[key], interp)
     end
     return out
 end

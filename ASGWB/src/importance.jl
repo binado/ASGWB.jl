@@ -78,7 +78,10 @@ function compute_importance_weights(
         prior,
         ctx::ModelContext
 )
-    target_log_prob = batched_logpdf(prior, problem.samples)
+    # Reuse the precomputed per-sample grid locations for the redshift component so
+    # its batched logpdf skips the per-sample grid search every gradient evaluation.
+    target_log_prob = batched_logpdf(
+        prior, problem.samples, (; redshift = ctx.sample_interpolant))
     return _importance_weights_core(
         target_log_prob,
         ctx.proposal_log_prob,

@@ -304,6 +304,31 @@ function Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real)
     return redshift_log_prob(d.prior, value)
 end
 
+# Opt-in batched log-density for the importance-weight hot path: the proposal
+# redshifts are fixed and live on the prior's grid, so `interp` carries their
+# precomputed cell index and within-cell fraction. This skips the per-sample grid
+# search (`searchsortedlast`) that the scalar `logpdf` path repeats every gradient
+# evaluation, and hoists the normalization out of the loop. `field` (the sample
+# redshifts) is unused: the locations are baked into `interp`.
+function _add_component_logpdf!(
+        out::AbstractVector,
+        d::RedshiftInterpolatedDistribution,
+        field::AbstractVector,
+        interp::SampleInterpolant
+)
+    length(out) == length(interp.bin_idx) ||
+        throw(ArgumentError("sample interpolant length must match batch size"))
+    prior = d.prior
+    y = prior.dN_dz.y
+    norm = redshift_integral(prior)
+    tiny = floatmin(real(eltype(out)))
+    @inbounds for i in eachindex(out)
+        pdf_i = _interpolate_at_sample(y, interp, i)
+        out[i] += _normalized_log_density(pdf_i, norm, tiny)
+    end
+    return out
+end
+
 function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
     target = rand(rng) * redshift_integral(d.prior)
     cumulative = d.prior.dN_dz.cumulative
