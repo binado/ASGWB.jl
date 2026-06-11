@@ -77,26 +77,27 @@ function _spectral_density_forwarddiff(
     length(weights) == n_samples ||
         throw(DimensionMismatch("weight length must match flux sample dimension"))
 
-    primal_weights = Vector{V}(undef, n_samples)
-    partial_weights = Matrix{V}(undef, n_samples, N)
+    # Pack value + partials into one contiguous `(n_samples, N+1)` buffer so a single
+    # gemm `fluxes * weight_block` yields the primal sum (column 1) and every partial
+    # sum (columns 2:N+1) at once, instead of a separate gemv + gemm.
+    weight_block = Matrix{V}(undef, n_samples, N + 1)
     @inbounds for i in 1:n_samples
         w = weights[i]
-        primal_weights[i] = ForwardDiff.value(w)
+        weight_block[i, 1] = ForwardDiff.value(w)
         p = ForwardDiff.partials(w)
         for j in 1:N
-            partial_weights[i, j] = p[j]
+            weight_block[i, j + 1] = p[j]
         end
     end
 
-    primal_sum = fluxes * primal_weights
-    partial_sums = fluxes * partial_weights
+    sums = fluxes * weight_block
     scale = V(0.4) / V(n_samples)
     out = Vector{ForwardDiff.Dual{Tag, V, N}}(undef, n_freq)
     @inbounds for i in 1:n_freq
-        value = scale * rate_value * primal_sum[i]
+        primal_sum = sums[i, 1]
+        value = scale * rate_value * primal_sum
         partials = ntuple(
-            j -> scale *
-                 (rate_partials[j] * primal_sum[i] + rate_value * partial_sums[i, j]),
+            j -> scale * (rate_partials[j] * primal_sum + rate_value * sums[i, j + 1]),
             Val(N)
         )
         out[i] = ForwardDiff.Dual{Tag, V, N}(value, ForwardDiff.Partials(partials))
