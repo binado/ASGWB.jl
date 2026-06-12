@@ -38,7 +38,7 @@ julia --project=ASGWBInference -e 'using Pkg; Pkg.test()'
 
 ## MCMC inference (notebook-first)
 
-Production sampling is driven from the notebooks, not a TOML CLI. The canonical entry point is [`notebooks/mcmc_pluto.jl`](notebooks/mcmc_pluto.jl) (Pluto); [`notebooks/mcmc.jl`](notebooks/mcmc.jl) is the Jupytext equivalent.
+Production sampling is driven from the notebooks, not a TOML CLI. The canonical entry point is [`notebooks/mcmc.jl`](notebooks/mcmc.jl) (Pluto).
 
 ### Data and model assembly
 
@@ -57,7 +57,7 @@ From the repository root:
 ```bash
 just pluto
 # or
-julia --project=notebooks -e 'using Pkg; Pkg.instantiate(); using Pluto; Pluto.run(notebook="notebooks/mcmc_pluto.jl")'
+julia --project=notebooks -e 'using Pkg; Pkg.instantiate(); using Pluto; Pluto.run(notebook="notebooks/mcmc.jl")'
 ```
 
 Edit fiducials, hyperprior bounds, detectors, and sampler settings in the notebook cells (no `model.toml` or `MCMC_CONFIG_FILEPATH`).
@@ -76,8 +76,7 @@ Notebooks live under [`notebooks/`](notebooks/) as Pluto (`.jl` with Pluto cell 
 
 | Notebook | Purpose |
 |----------|---------|
-| [`notebooks/mcmc_pluto.jl`](notebooks/mcmc_pluto.jl) | **Canonical** end-to-end catalog load, Ω_GW plots, Turing NUTS, chain save/load. |
-| [`notebooks/mcmc.jl`](notebooks/mcmc.jl) | Jupytext version of the MCMC workflow. |
+| [`notebooks/mcmc.jl`](notebooks/mcmc.jl) | **Canonical** end-to-end catalog load, Ω_GW plots, Turing NUTS, chain save/load. |
 | [`notebooks/plots.jl`](notebooks/plots.jl) | MCMC diagnostics and figures from saved chains (`FlexiChains`, `PairPlots`, `CairoMakie`). |
 | [`notebooks/amplitude_posterior_gaussian_approximation.jl`](notebooks/amplitude_posterior_gaussian_approximation.jl) | Compare a 1D posterior to a Fisher / SNR Gaussian approximation (single-parameter chains). |
 
