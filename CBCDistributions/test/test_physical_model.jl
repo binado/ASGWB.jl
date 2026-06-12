@@ -103,6 +103,33 @@ end
     @test lps.x .+ lps.y ≈ batched_logpdf(prior, samples)
 end
 
+@testset "component_logpdfs rejects mismatched sample field lengths" begin
+    pop = TestPop()
+    cosmo = LambdaCDM(67.0, 0.315)
+    Λ = (H0 = 67.0, Ωm = 0.315, α = 0.8, β = 1.8)
+    prior = single_event_prior(pop, cosmo, Λ)
+    samples = (x = [0.1, 0.5], y = [1.1])
+
+    @test_throws ArgumentError component_logpdfs(prior, samples)
+end
+
+@testset "logprobdiff egal skip rejects out-of-support proposal logpdfs" begin
+    pop = TestPop()
+    cosmo = LambdaCDM(67.0, 0.315)
+    Λ = (H0 = 67.0, Ωm = 0.315, α = 0.8, β = 1.8)
+    samples = (x = [0.1, 1.5], y = [1.1, 1.7])  # x[2] outside Uniform(0, α)
+
+    proposal = single_event_prior(pop, cosmo, Λ)
+    proposal_logprob = component_logpdfs(proposal, samples)
+    @test !all(isfinite, proposal_logprob.x)
+
+    prior_same = single_event_prior(pop, cosmo, Λ)
+    diff = logprobdiff(pop, prior_same, proposal, proposal_logprob, samples)
+    ref = batched_logpdf(prior_same, samples) .- batched_logpdf(proposal, samples)
+    @test diff[1] ≈ ref[1]
+    @test isnan(diff[2]) && isnan(ref[2])
+end
+
 @testset "logprobdiff default: egal skip and two-sided reference" begin
     pop = TestPop()
     cosmo = LambdaCDM(67.0, 0.315)

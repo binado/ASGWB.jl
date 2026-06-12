@@ -243,9 +243,13 @@ function component_logpdfs(
         sample_interps = nothing
 )
     ks = keys(d.dists)
+    first_key = first(ks)
+    n = _component_batch_length(d.dists[first_key], samples, first_key)
     vals = map(ks) do key
         dk = d.dists[key]
-        n = _component_batch_length(dk, samples, key)
+        n_key = _component_batch_length(dk, samples, key)
+        n_key == n ||
+            throw(ArgumentError("population prior sample fields must have matching lengths"))
         out = zeros(_batched_output_eltype((dk,)), n)
         interp = sample_interps === nothing ? nothing : get(sample_interps, key, nothing)
         _add_component_logpdf!(out, dk, samples[key], interp)
@@ -263,13 +267,17 @@ single-event prior. This is the per-component extension point of
 or a distribution type) when the difference has a cheaper form than the generic
 two-sided evaluation.
 
-The default skips the component entirely when `d_target === d_proposal`: egal
-distributions have identical log-densities, so their difference is exactly zero.
-Components built with `Λ`-independent constructors (isbits distributions such as
-fixed-bound `Uniform`s) hit this fast path on every evaluation; `Λ`-dependent
-components (e.g. an interpolated redshift prior) never compare egal and are
-computed. Overloads that skip a component bake in an exactness assumption owned by
-the population model; keep them in sync with `single_event_prior`.
+The default skips the component entirely when `d_target === d_proposal` and every
+cached proposal log-density is finite: egal distributions have identical
+log-densities on support, so their difference is exactly zero. Out-of-support
+samples yield `-Inf` on both sides; skipping would assign a zero log-ratio and
+mask invalid catalog points, so the fast path is taken only when
+`all(isfinite, proposal_logprob)`. Components built with `Λ`-independent
+constructors (isbits distributions such as fixed-bound `Uniform`s) hit this path
+on every in-support evaluation; `Λ`-dependent components (e.g. an interpolated
+redshift prior) never compare egal and are computed. Overloads that skip a
+component bake in an exactness assumption owned by the population model; keep
+them in sync with `single_event_prior`.
 """
 function logprobdiff!(
         out::AbstractVector,
@@ -281,7 +289,9 @@ function logprobdiff!(
         x,
         interp = nothing
 ) where {key}
-    d_target === d_proposal && return out
+    if d_target === d_proposal && all(isfinite, proposal_logprob)
+        return out
+    end
     length(proposal_logprob) == length(out) || throw(
         ArgumentError(
         "proposal logpdf length must match batch size for population prior field $(repr(key))",
