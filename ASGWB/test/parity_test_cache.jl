@@ -66,7 +66,7 @@ end
 function _write_posterior_catalog(dir)
     C = ModifiedPropagation{LambdaCDM}
     pop = ParityBNSPopulation()
-    Λ = _parity_hyperparameters(C, pop, (γ = 2.7, κ = 5.7, zpeak = 2.0))
+    Λ = _parity_hyperparameters(C, pop, (γ = 2.7, κ = 3.0, zpeak = 2.0))
 
     samples = _make_bns_samples(
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
@@ -85,7 +85,7 @@ end
 function _write_full_intrinsic_catalog(dir)
     C = ModifiedPropagation{LambdaCDM}
     pop = ParityBNSPopulation()
-    Λ = _parity_hyperparameters(C, pop, (γ = 2.7, κ = 5.7, zpeak = 2.0))
+    Λ = _parity_hyperparameters(C, pop, (γ = 2.7, κ = 3.0, zpeak = 2.0))
 
     samples = _make_bns_samples(
         [1.8, 2.2, 1.4, 2.4], [1.2, 1.7, 1.1, 1.3], [0.1, 0.2, 0.3, 0.5];
@@ -187,7 +187,7 @@ function parity_problem_context(variant::Symbol, detectors)
     Λ = variant == :w0cdm ?
         _parity_hyperparameters_w0(C, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5)) :
         if variant == :posterior || variant == :full_intrinsic
-        _parity_hyperparameters(C, pop, (γ = 2.7, κ = 5.7, zpeak = 2.0))
+        _parity_hyperparameters(C, pop, (γ = 2.7, κ = 3.0, zpeak = 2.0))
     else
         _parity_hyperparameters(C, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5))
     end

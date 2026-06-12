@@ -82,6 +82,12 @@ function merger_rate_per_sec(
     return n_events / observation_time_sec
 end
 
+"""
+    madau_dickinson_source_frame_distribution(z; γ, κ, zpeak) -> Real
+
+Source-frame merger-rate density at redshift `z` under the Madau–Dickinson model.
+The denominator exponent is `γ + κ` (so `κ` is the increment beyond `γ`).
+"""
 function madau_dickinson_source_frame_distribution(
         z::Real;
         γ::Real,
@@ -89,8 +95,9 @@ function madau_dickinson_source_frame_distribution(
         zpeak::Real
 )
     one_plus_z = 1 + z
-    return ((one_plus_z^γ) / (1 + (one_plus_z / (1 + zpeak))^κ)) *
-           (1 + (1 + zpeak)^(-κ))
+    denom_exp = γ + κ
+    return ((one_plus_z^γ) / (1 + (one_plus_z / (1 + zpeak))^denom_exp)) *
+           (1 + (1 + zpeak)^(-denom_exp))
 end
 
 # ---------------------------------------------------------------------------
@@ -110,7 +117,7 @@ struct MadauDickinsonSourceFrame end
     source_frame_distribution(::MadauDickinsonSourceFrame, z, Λ) -> Real
 
 Source-frame merger-rate density at redshift `z` under the Madau–Dickinson model.
-Reads `γ`, `κ`, `zpeak` from `Λ`.
+Reads `γ`, `κ`, `zpeak` from `Λ`; the denominator exponent is `γ + κ`.
 """
 function source_frame_distribution(::MadauDickinsonSourceFrame, z::Real, Λ::NamedTuple)
     return madau_dickinson_source_frame_distribution(z; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)

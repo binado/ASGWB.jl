@@ -138,7 +138,7 @@ begin
     fiducials = (;
         cosmology_parameters...,
         γ = 2.7,
-        κ = 5.7,
+        κ = 3.0,
         zpeak = 2.0
     )
 
