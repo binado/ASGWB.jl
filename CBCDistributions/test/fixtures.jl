@@ -21,6 +21,33 @@ function CBCDistributions.single_event_prior(
     return product_distribution((x = Uniform(0.0, Λ.α), y = Uniform(0.0, Λ.β)))
 end
 
+# Population with a custom per-component `logprobdiff!` override: the `:y` factor is
+# declared as cancelling regardless of the target/proposal distributions.
+struct SkipYPop <: PopulationModel end
+
+CBCDistributions.hyperparameters(::SkipYPop) = (:α, :β)
+
+function CBCDistributions.single_event_prior(
+        ::SkipYPop,
+        cache::CosmologyCache,
+        Λ::NamedTuple
+)
+    return product_distribution((x = Uniform(0.0, Λ.α), y = Uniform(0.0, Λ.β)))
+end
+
+function CBCDistributions.logprobdiff!(
+        out::AbstractVector,
+        ::SkipYPop,
+        ::Val{:y},
+        d_target,
+        d_proposal,
+        proposal_logprob::AbstractVector{<:Real},
+        x,
+        interp = nothing
+)
+    return out
+end
+
 function cosmology_hyperprior(::Type{LambdaCDM})
     return product_distribution((
         H0 = Uniform(20.0, 140.0),
@@ -42,7 +69,8 @@ function cosmology_hyperprior(::Type{W0WaCDM})
     ))
 end
 
-function cosmology_hyperprior(::Type{<:ModifiedPropagation{C}}) where {C <: AbstractCosmology}
+function cosmology_hyperprior(::Type{<:ModifiedPropagation{C}}) where {C <:
+                                                                       AbstractCosmology}
     return product_distribution(merge(
         cosmology_hyperprior(C).dists,
         (Ξ₀ = Uniform(0.5, 5.0), Ξₙ = Uniform(0.05, 3.0))

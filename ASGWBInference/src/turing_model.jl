@@ -68,9 +68,9 @@ end
         eltype = nothing
     )
 
-    c = cosmology(C, Λc)
-    event_prior = single_event_prior(problem.population_model, c, Λc)
-    weights = compute_importance_weights(problem, c, event_prior, ctx)
+    cache = CosmologyCache(cosmology(C, Λc), ctx.redshift_grid)
+    event_prior = single_event_prior(problem.population_model, cache, Λc)
+    weights = compute_importance_weights(problem, cache, event_prior, ctx)
     rate = merger_rate(
         event_prior,
         ctx.local_merger_rate,

@@ -6,7 +6,7 @@ export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
        madau_dickinson_source_frame_distribution,
        SampleInterpolant, _interpolate_at_sample, _cdf_at_sample,
        luminosity_distance_at_sample,
-       build_redshift_prior, cosmology_and_redshift_prior,
+       build_redshift_prior,
        RedshiftInterpolatedDistribution, _normalized_log_density,
        redshift_logpdf_eltype,
        MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior,
@@ -117,10 +117,24 @@ function source_frame_distribution(::MadauDickinsonSourceFrame, z::Real, Λ::Nam
 end
 
 """
+    redshift_prior(sf_model, cache::CosmologyCache, Λ) -> RedshiftInterpolatedDistribution
+
+Build the detector-frame redshift prior from a prebuilt [`CosmologyCache`](@ref),
+reusing its cumulative ∫1/E integral (and grid) rather than recomputing them. This
+is the form the hot path calls so the same cache is shared with importance
+weighting instead of being rebuilt per evaluation.
+"""
+function redshift_prior(sf_model, cache::CosmologyCache, Λ::NamedTuple)
+    sfn = z -> source_frame_distribution(sf_model, z, Λ)
+    return RedshiftInterpolatedDistribution(build_redshift_prior(sfn, cache))
+end
+
+"""
     redshift_prior(sf_model, cosmo, Λ; z_grid) -> RedshiftInterpolatedDistribution
 
-Build the detector-frame redshift prior using `sf_model` to evaluate the
-source-frame merger-rate density.  `z_grid` defaults to [`DEFAULT_Z_GRID`](@ref).
+Convenience form that builds a [`CosmologyCache`](@ref) on `z_grid` (default
+[`DEFAULT_Z_GRID`](@ref)) and delegates to the cache method. Use when no cache is
+already on hand.
 """
 function redshift_prior(
         sf_model,
@@ -128,9 +142,7 @@ function redshift_prior(
         Λ::NamedTuple;
         z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
 )
-    cache = CosmologyCache(cosmo, z_grid)
-    sfn = z -> source_frame_distribution(sf_model, z, Λ)
-    return RedshiftInterpolatedDistribution(build_redshift_prior(sfn, cache))
+    return redshift_prior(sf_model, CosmologyCache(cosmo, z_grid), Λ)
 end
 
 # ---------------------------------------------------------------------------
@@ -290,6 +302,31 @@ end
 function Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real)
     insupport(d, value) || return -Inf
     return redshift_log_prob(d.prior, value)
+end
+
+# Opt-in batched log-density for the importance-weight hot path: the proposal
+# redshifts are fixed and live on the prior's grid, so `interp` carries their
+# precomputed cell index and within-cell fraction. This skips the per-sample grid
+# search (`searchsortedlast`) that the scalar `logpdf` path repeats every gradient
+# evaluation, and hoists the normalization out of the loop. `field` (the sample
+# redshifts) is unused: the locations are baked into `interp`.
+function _add_component_logpdf!(
+        out::AbstractVector,
+        d::RedshiftInterpolatedDistribution,
+        field::AbstractVector,
+        interp::SampleInterpolant
+)
+    length(out) == length(interp.bin_idx) ||
+        throw(ArgumentError("sample interpolant length must match batch size"))
+    prior = d.prior
+    y = prior.dN_dz.y
+    norm = redshift_integral(prior)
+    tiny = floatmin(real(eltype(out)))
+    @inbounds for i in eachindex(out)
+        pdf_i = _interpolate_at_sample(y, interp, i)
+        out[i] += _normalized_log_density(pdf_i, norm, tiny)
+    end
+    return out
 end
 
 function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)

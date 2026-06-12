@@ -10,7 +10,7 @@ export ModifiedPropagation, base_cosmology
 export PopulationModel, single_event_prior,
        full_hyperparameters,
        canonical_hyperparameters, validate_hyperparameters,
-       batched_logpdf
+       batched_logpdf, component_logpdfs, logprobdiff, logprobdiff!
 export CumulativeIntegral1D, interpolate, cdf, normalizer
 export stack_source_masses
 export MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior, DEFAULT_Z_GRID

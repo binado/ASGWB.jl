@@ -6,8 +6,7 @@ using LinearAlgebra
 # carries `1/D_L,fid²`, so multiplying by `dl_fid_sq / (D_L,θ² · Ξ_θ²)` recovers the
 # physically correct `1/D_gw,θ²` dilution.
 @inline function _importance_weight_at_sample(
-        target_log_prob::AbstractVector,
-        proposal_log_prob::AbstractVector{<:Real},
+        log_ratio::AbstractVector,
         dl_fid_sq::AbstractVector{<:Real},
         z::AbstractVector{<:Real},
         redshift_grid::AbstractVector{<:Real},
@@ -15,33 +14,32 @@ using LinearAlgebra
         cosmology_cache::CosmologyCache,
         sample_index::Integer
 )
-    log_ratio = target_log_prob[sample_index] - proposal_log_prob[sample_index]
     d_l = luminosity_distance_at_sample(
         cosmology_cache, interp, redshift_grid, z, sample_index)
     Ξ_theta = gw_em_distance_ratio(z[sample_index], cosmology_cache.cosmology)
-    return exp(log_ratio) * dl_fid_sq[sample_index] / (d_l^2 * Ξ_theta^2)
+    return exp(log_ratio[sample_index]) * dl_fid_sq[sample_index] / (d_l^2 * Ξ_theta^2)
 end
 
 # Shared kernel for both the naive and cached `compute_importance_weights` methods. Inputs
 # are explicit arrays so the only difference between the two backends is where the fiducial
-# caches come from (recomputed vs read from a `ModelContext`). Built with `map` over the
-# index range: this keeps the result type stable (a properly-typed empty vector for n == 0,
-# rather than a `Union` with `Float64[]`) so the AD/`Dual` likelihood path stays inferrable.
+# caches come from (recomputed vs read from a `ModelContext`) and how `log_ratio` (per-sample
+# `log p_target − log p_proposal`) was produced (`logprobdiff` vs full two-sided
+# `batched_logpdf`). Built with `map` over the index range: this keeps the result type stable
+# (a properly-typed empty vector for n == 0, rather than a `Union` with `Float64[]`) so the
+# AD/`Dual` likelihood path stays inferrable.
 function _importance_weights_core(
-        target_log_prob::AbstractVector,
-        proposal_log_prob::AbstractVector{<:Real},
+        log_ratio::AbstractVector,
         dl_fid_sq::AbstractVector{<:Real},
         z::AbstractVector{<:Real},
         redshift_grid::AbstractVector{<:Real},
         interp::SampleInterpolant,
         cosmology_cache::CosmologyCache
 )
-    length(z) == length(target_log_prob) ||
+    length(z) == length(log_ratio) ||
         throw(ArgumentError("population prior logpdf length must match proposal sample count"))
     return map(eachindex(z)) do i
         _importance_weight_at_sample(
-            target_log_prob, proposal_log_prob, dl_fid_sq, z, redshift_grid, interp,
-            cosmology_cache, i)
+            log_ratio, dl_fid_sq, z, redshift_grid, interp, cosmology_cache, i)
     end
 end
 
@@ -58,35 +56,45 @@ function compute_importance_weights(
         Λ::NamedTuple,
         ctx::ModelContext
 ) where {C <: AbstractCosmology}
-    c = cosmology(C, Λ)
-    prior = single_event_prior(problem.population_model, c, Λ)
-    return compute_importance_weights(problem, c, prior, ctx)
+    cache = CosmologyCache(cosmology(C, Λ), ctx.redshift_grid)
+    prior = single_event_prior(problem.population_model, cache, Λ)
+    return compute_importance_weights(problem, cache, prior, ctx)
 end
 
 """
-    compute_importance_weights(problem, c, prior, ctx::ModelContext) -> Vector
+    compute_importance_weights(problem, cache::CosmologyCache, prior, ctx::ModelContext) -> Vector
 
-Importance weights from an already-built cosmology `c` and single-event `prior`. Callers
-that also need `prior` (e.g. the likelihood, which derives the merger rate from it) build
-the prior — and its embedded redshift `CosmologyCache` — only once per evaluation instead of
-once per atomic call. This is the bare form the forward model calls directly.
+Importance weights from a prebuilt `cache` and single-event `prior`. The forward model
+builds the cache once, shares it with `single_event_prior` (which uses it for the redshift
+prior), and passes it here for the per-sample luminosity distance — so the cumulative
+cosmology integral is computed once per evaluation rather than rebuilt in both places. This
+is the bare form the forward model calls directly.
 """
 function compute_importance_weights(
         problem::ImportanceSamplingProblem,
-        c::AbstractCosmology,
+        cache::CosmologyCache,
         prior,
         ctx::ModelContext
 )
-    cosmology_cache = CosmologyCache(c, ctx.redshift_grid)
-    target_log_prob = batched_logpdf(prior, problem.samples)
-    return _importance_weights_core(
-        target_log_prob,
+    # `logprobdiff` skips components whose target distribution is egal to the fiducial
+    # proposal's (Λ-independent factors cancel exactly), and the redshift component reuses
+    # the precomputed per-sample grid locations to skip the grid search every gradient
+    # evaluation.
+    log_ratio = logprobdiff(
+        problem.population_model,
+        prior,
+        ctx.proposal_prior,
         ctx.proposal_log_prob,
+        problem.samples,
+        (; redshift = ctx.sample_interpolant)
+    )
+    return _importance_weights_core(
+        log_ratio,
         ctx.dl_fid_sq,
         problem.samples.redshift,
         ctx.redshift_grid,
         ctx.sample_interpolant,
-        cosmology_cache
+        cache
     )
 end
 
@@ -95,8 +103,9 @@ end
 
 Naive importance weights: recompute the fiducial proposal caches (`proposal_log_prob`,
 `dl_fid_sq`, redshift interpolant) from scratch at `problem.fiducial_hyperparameters`,
-then weight at `Λ`. Slower than the `ctx` method but free of any precomputed state, so it
-serves as the correctness oracle for the cached path.
+then weight at `Λ`. Slower than the `ctx` method but free of any precomputed state — it
+deliberately uses the full two-sided `batched_logpdf` rather than `logprobdiff`, so it
+serves as the correctness oracle for the cached path (including its component skipping).
 """
 function compute_importance_weights(
         problem::ImportanceSamplingProblem,
@@ -111,13 +120,11 @@ function compute_importance_weights(
     redshift_grid = collect(Float64, DEFAULT_Z_GRID)
     interp = SampleInterpolant(z, redshift_grid)
 
-    c = cosmology(C, Λ)
-    cosmology_cache = CosmologyCache(c, redshift_grid)
-    prior = single_event_prior(problem.population_model, c, Λ)
-    target_log_prob = batched_logpdf(prior, problem.samples)
+    cosmology_cache = CosmologyCache(cosmology(C, Λ), redshift_grid)
+    prior = single_event_prior(problem.population_model, cosmology_cache, Λ)
+    log_ratio = batched_logpdf(prior, problem.samples) .- proposal_log_prob
     return _importance_weights_core(
-        target_log_prob,
-        proposal_log_prob,
+        log_ratio,
         dl_fid_sq,
         z,
         redshift_grid,

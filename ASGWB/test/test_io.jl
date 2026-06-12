@@ -96,7 +96,8 @@ end
     pop = problem.population_model
     Λ = fiducial_hyperparameters(problem)
 
-    @test all(isfinite, ctx.proposal_log_prob)
+    @test keys(ctx.proposal_log_prob) == keys(ctx.proposal_prior.dists)
+    @test all(lp -> all(isfinite, lp), values(ctx.proposal_log_prob))
     @test all(isfinite, ctx.dl_fid_sq)
     @test all(>(0), ctx.dl_fid_sq)
 

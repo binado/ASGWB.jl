@@ -66,8 +66,9 @@ end
 
 Gaussian in-band log-likelihood of the SGWB spectral density at `Λ`. Inlines the
 `weights → rate → Sₕ` sequence using the cached atomics and `ctx` masks/scales. Builds the
-`single_event_prior` once and shares it between weights and rate (avoids rebuilding its
-redshift `CosmologyCache` twice per ForwardDiff gradient step).
+redshift `CosmologyCache` once and shares it between `single_event_prior` and
+`compute_importance_weights`, so its cumulative cosmology integral is not rebuilt per
+ForwardDiff gradient step.
 """
 function loglikelihood(
         Λ::NamedTuple,
@@ -76,9 +77,9 @@ function loglikelihood(
         ctx::ModelContext;
         observed::AbstractVector{<:Real} = ctx.fiducial_spectral_density
 ) where {C <: AbstractCosmology}
-    c = cosmology(C, Λ)
-    prior = single_event_prior(problem.population_model, c, Λ)
-    weights = compute_importance_weights(problem, c, prior, ctx)
+    cache = CosmologyCache(cosmology(C, Λ), ctx.redshift_grid)
+    prior = single_event_prior(problem.population_model, cache, Λ)
+    weights = compute_importance_weights(problem, cache, prior, ctx)
     rate = merger_rate(
         prior,
         ctx.local_merger_rate,

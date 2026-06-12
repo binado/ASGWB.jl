@@ -1,24 +1,20 @@
 # Profile the ASGWB Turing log-density to find the bottleneck
-# inside a NUTS gradient evaluation, before deciding whether to refactor
-# the cosmology `quadgk` path.
+# inside a NUTS gradient evaluation.
 #
 # Run from the repository root, for example:
 #   julia --project=ASGWBInference scripts/profile_turing.jl --config-file=config/profile_turing.toml
 #
 # Optional: --seconds=2.0 --profile-samples=500 --alloc --profile-out=profile.dat
 #
-# Sites under investigation:
-#   - CBCDistributions/src/cosmology.jl   quadgk inside comoving_distance
-#   - ASGWB/src/redshift.jl               differential_comoving_volume on z_grid
-#   - ASGWB/src/reconstruction.jl, importance.jl   luminosity_distance per proposal sample
-#   - ASGWBInference/src/turing_model.jl  DynamicPPL model being profiled
+# The catalog is a mandatory real `catalog.h5`, loaded with `load_catalog` exactly
+# as the production notebooks do. Test fixtures are deliberately *not* supported:
+# their tiny sample/frequency counts (e.g. 2 samples, 3 bins) make the fixed-cost
+# redshift-prior build dominate, which is wildly unrepresentative of production
+# runs (~10⁴ samples, ~10² bins) and produces misleading bottleneck rankings.
 #
 # This script is *measurement only*: it does not edit any ASGWB/src/ files.
 
 module ASGWBProfileCLI
-
-const _REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
-const _PARITY_TEST_CACHE = joinpath(_REPO_ROOT, "ASGWB", "test", "parity_test_cache.jl")
 
 using Distributions: logpdf, product_distribution, Uniform
 using ASGWB
@@ -62,14 +58,12 @@ using Statistics: mean
 using TOML
 using Turing: DynamicPPL
 
-include(_PARITY_TEST_CACHE)
-
 struct BNSPopulationModel <: PopulationModel end
 
 hyperparameters(::BNSPopulationModel) = (:γ, :κ, :zpeak)
 
-function single_event_prior(::BNSPopulationModel, cosmo::AbstractCosmology, Λ::NamedTuple)
-    z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ)
+function single_event_prior(::BNSPopulationModel, cache::CosmologyCache, Λ::NamedTuple)
+    z_d = redshift_prior(MadauDickinsonSourceFrame(), cache, Λ)
     spin = AlignedSpinChiSimple()
     return product_distribution((
         mass = OrderedUniformSourceMassPair(),
@@ -117,14 +111,16 @@ function _require_string_array(settings::Dict, key::AbstractString)
 end
 
 function _resolve_catalog_path(catalog_path::String, base::AbstractString)
-    if startswith(catalog_path, "parity:")
-        dir = resolve_parity_catalog_dir(catalog_path)
-        dir === nothing && throw(
-            ArgumentError("unknown parity catalog alias $(repr(catalog_path))"),
-        )
-        return joinpath(dir, "catalog.h5")
-    end
-    return isabspath(catalog_path) ? catalog_path : normpath(joinpath(base, catalog_path))
+    resolved = isabspath(catalog_path) ? catalog_path :
+               normpath(joinpath(base, catalog_path))
+    isfile(resolved) || throw(
+        ArgumentError(
+        "catalog file not found: $(repr(resolved)). The profiler requires a real " *
+        "catalog.h5 (loaded like the production notebooks); test fixtures are not " *
+        "supported because their tiny sample counts give misleading bottlenecks.",
+    ),
+    )
+    return resolved
 end
 
 function _load_observed_spectral_density(path::AbstractString, expected_len::Int)

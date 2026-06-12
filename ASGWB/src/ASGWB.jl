@@ -126,7 +126,10 @@ export OrderedUniformSourceMassPair,
        AlignedSpinChiSimple,
        BNS_LAMBDA_HIGH,
        RedshiftInterpolatedDistribution,
-       batched_logpdf
+       batched_logpdf,
+       component_logpdfs,
+       logprobdiff,
+       logprobdiff!
 
 # Importance sampling
 export compute_importance_weights,

@@ -39,8 +39,10 @@ redshift(problem::ImportanceSamplingProblem) = redshift(problem.samples)
 Flat catalog-derived cache of all `Λ`-independent derived state for an [`ImportanceSamplingProblem`](@ref),
 built once by [`build_model_context`](@ref) and reused by every likelihood/model call:
 
-- proposal caches at the fiducial point: `proposal_log_prob`, `dl_fid_sq` (squared EM
-  luminosity distance at the fiducial cosmology),
+- proposal caches at the fiducial point: `proposal_prior` (the fiducial
+  `single_event_prior` itself, used by [`logprobdiff`](@ref) for the egal component
+  skip), `proposal_log_prob` (a `NamedTuple` of per-component log-density vectors),
+  and `dl_fid_sq` (squared EM luminosity distance at the fiducial cosmology),
 - redshift state: `redshift_grid` and the proposal `sample_interpolant`,
 - detector/observation state grouped in [`ObservationContext`](@ref),
 - `local_merger_rate` (events Gpc⁻³ yr⁻¹), and
@@ -51,8 +53,9 @@ a different `C` would silently mix mismatched caches. Coherence is guaranteed by
 construction: `build_model_context` and the model that uses it close over a single literal
 `C`.
 """
-struct ModelContext
-    proposal_log_prob::Vector{Float64}
+struct ModelContext{P <: ProductNamedTupleDistribution, L <: NamedTuple}
+    proposal_prior::P
+    proposal_log_prob::L
     dl_fid_sq::Vector{Float64}
     redshift_grid::Vector{Float64}
     sample_interpolant::SampleInterpolant

@@ -31,8 +31,11 @@ function _importance_type_test_fixture(n::Integer)
     interp = SampleInterpolant(samples.redshift, z_grid)
     obs = ObservationContext(
         [1.0, 2.0], [1.0, 1.0], [1.0, 1.0], BitVector([true, true]), 1.0, 1.0)
+    cache_fid = CosmologyCache(cosmology(_IMP_C, Λ), z_grid)
+    proposal_prior = single_event_prior(_IMP_POP, cache_fid, Λ)
+    proposal_log_prob = component_logpdfs(proposal_prior, samples, (; redshift = interp))
     ctx = ModelContext(
-        zeros(n), ones(n), z_grid, interp, obs, 1.0, [0.0, 0.0])
+        proposal_prior, proposal_log_prob, ones(n), z_grid, interp, obs, 1.0, [0.0, 0.0])
     return problem, ctx, Λ
 end
 

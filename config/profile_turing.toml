@@ -1,4 +1,7 @@
-catalog_path = "parity:posterior"
+# Mandatory real catalog, resolved relative to this config file. Provide a
+# production-scale `catalog.h5` at the repo root (same convention as the
+# notebooks); test fixtures are intentionally unsupported here.
+catalog_path = "../catalog.h5"
 detectors = ["H1", "L1"]
 seed = 1
 local_merger_rate = 1e-7

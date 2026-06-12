@@ -35,10 +35,11 @@ Build the `Λ`-independent [`ModelContext`](@ref) for `problem` at cosmology fam
 mask). `detectors` must contain at least two [`Detector`](@ref)s; the network effective PSD
 and Gaussian bin scales are computed from tabulated PSDs and overlap-reduction functions.
 
-The proposal caches (`proposal_log_prob`, `dl_fid_sq`) are recomputed at the fiducial
-cosmology `cosmology(C, Λ_fid)`, so stale on-disk values are never trusted. The raw catalog
-`fluxes` are used directly (no `(D_L/D_gw)²` pre-scaling). The `fiducial_spectral_density` is
-produced by running the inline `weights → rate → Sₕ` sequence at the fiducial point.
+The proposal caches (`proposal_prior`, the per-component `proposal_log_prob`, `dl_fid_sq`)
+are recomputed at the fiducial cosmology `cosmology(C, Λ_fid)`, so stale on-disk values are
+never trusted. The raw catalog `fluxes` are used directly (no `(D_L/D_gw)²` pre-scaling).
+The `fiducial_spectral_density` is produced by running the inline `weights → rate → Sₕ`
+sequence at the fiducial point.
 """
 function build_model_context(
         problem::ImportanceSamplingProblem,
@@ -85,30 +86,41 @@ function build_model_context(
     observation = build_observation_context(all_freq, det_vec, mask, obs_sec, obs_yr)
 
     dl_fid_sq = _reconstruct_dl_fid_sq(z, C, Λ_fid)
-    proposal_log_prob = _reconstruct_proposal_log_prob(
-        problem.samples, C, problem.population_model, Λ_fid)
 
     redshift_grid = collect(Float64, z_grid)
     interp = SampleInterpolant(z, redshift_grid)
     local_rate = Float64(local_merger_rate)
 
+    # Fiducial proposal prior and its per-component log-densities, computed with the same
+    # interpolant the hot path uses for the target redshift logpdf, so the redshift
+    # log-ratio at Λ_fid is exactly zero (bitwise-identical arithmetic on both sides).
+    cosmology_cache_fid = CosmologyCache(cosmology(C, Λ_fid), redshift_grid)
+    proposal_prior = single_event_prior(
+        problem.population_model, cosmology_cache_fid, Λ_fid)
+    proposal_log_prob = component_logpdfs(
+        proposal_prior, problem.samples, (; redshift = interp))
+
     # Fiducial spectral density: weights → rate → Sₕ at Λ_fid, through the same kernels the
     # likelihood uses, so the stored observed data matches the live forward model exactly.
     fs = try
-        c_fid = cosmology(C, Λ_fid)
-        cosmology_cache = CosmologyCache(c_fid, redshift_grid)
-        prior_fid = single_event_prior(problem.population_model, c_fid, Λ_fid)
-        weights_fid = _importance_weights_core(
-            batched_logpdf(prior_fid, problem.samples),
+        log_ratio_fid = logprobdiff(
+            problem.population_model,
+            proposal_prior,
+            proposal_prior,
             proposal_log_prob,
+            problem.samples,
+            (; redshift = interp)
+        )
+        weights_fid = _importance_weights_core(
+            log_ratio_fid,
             dl_fid_sq,
             z,
             redshift_grid,
             interp,
-            cosmology_cache
+            cosmology_cache_fid
         )
         rate_fid = merger_rate_per_sec(
-            prior_fid.dists.redshift.prior, local_rate, obs_yr, obs_sec)
+            proposal_prior.dists.redshift.prior, local_rate, obs_yr, obs_sec)
         spectral_density(problem.fluxes, rate_fid; weights = weights_fid)
     catch err
         throw(
@@ -120,6 +132,7 @@ function build_model_context(
     end
 
     return ModelContext(
+        proposal_prior,
         proposal_log_prob,
         dl_fid_sq,
         redshift_grid,
