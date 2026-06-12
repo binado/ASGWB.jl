@@ -29,7 +29,7 @@ CBCDistributions.hyperparameters(::SkipYPop) = (:α, :β)
 
 function CBCDistributions.single_event_prior(
         ::SkipYPop,
-        cosmo::AbstractCosmology,
+        cache::CosmologyCache,
         Λ::NamedTuple
 )
     return product_distribution((x = Uniform(0.0, Λ.α), y = Uniform(0.0, Λ.β)))
