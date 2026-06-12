@@ -15,7 +15,7 @@
     "chi0": 1.1,
     "chin": 0.2,
     "gamma": 2.9,
-    "kappa": 6.0,
+    "kappa": 3.1,
     "z_peak": 2.2
   },
   "sampler": {

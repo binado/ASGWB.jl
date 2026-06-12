@@ -6,6 +6,27 @@ if !@isdefined ParityBNSPopulation
     include(joinpath(@__DIR__, "fixture_population.jl"))
 end
 
+function _madau_dickinson_with_denom_exp(z, γ, denom_exp, zpeak)
+    one_plus_z = 1 + z
+    return ((one_plus_z^γ) / (1 + (one_plus_z / (1 + zpeak))^denom_exp)) *
+           (1 + (1 + zpeak)^(-denom_exp))
+end
+
+@testset "Madau–Dickinson κ reparametrization" begin
+    γ, κ, zpeak = 2.7, 3.0, 2.0
+    denom_exp = γ + κ
+    z_samples = [0.0, 0.5, zpeak, 3.0]
+
+    @test madau_dickinson_source_frame_distribution(0.0; γ, κ, zpeak) ≈ 1.0
+    for z in z_samples
+        @test madau_dickinson_source_frame_distribution(z; γ, κ, zpeak) ≈
+              _madau_dickinson_with_denom_exp(z, γ, denom_exp, zpeak)
+    end
+    @test source_frame_distribution(
+        MadauDickinsonSourceFrame(), 1.0, (; γ, κ, zpeak)) ≈
+          madau_dickinson_source_frame_distribution(1.0; γ, κ, zpeak)
+end
+
 @testset "sample interpolation helpers" begin
     C = ModifiedPropagation{LambdaCDM}
     pop = ParityBNSPopulation()

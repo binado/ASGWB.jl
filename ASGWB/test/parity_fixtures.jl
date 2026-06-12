@@ -21,7 +21,7 @@ const PARITY_THETA = canonical_hyperparameters(
         Ξ₀ = 1.1,
         Ξₙ = 0.2,
         γ = 2.9,
-        κ = 6.0,
+        κ = 3.1,
         zpeak = 2.2
     )
 )

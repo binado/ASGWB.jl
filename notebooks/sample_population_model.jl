@@ -62,7 +62,7 @@ begin
         Ωm = 0.3096,
         # Madau–Dickinson source-frame SFR
         γ = 2.7,
-        κ = 5.7,
+        κ = 3.0,
         zpeak = 2.0,
         # Promoted population bounds
         m_low = 1.1,        # BNS_MASS_LOW
