@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-ASGWB.jl is a Julia package for astrophysical stochastic gravitational-wave background modeling and inference. The package entry point is `ASGWB/src/ASGWB.jl`, which includes and exports the public API (physics, likelihoods, importance caches). Turing/AdvancedHMC model wrappers and sampling helpers live in the sibling package `ASGWBInference/` (see `ASGWBInference/src/InferenceImpl.jl`). Core modules live in `ASGWB/src/`, with detector-specific code under `ASGWB/src/detector/`. Tests live in `ASGWB/test/` and are listed from `ASGWB/test/runtests.jl`. Detector definitions and noise curves are stored in `ASGWB/assets/detector/`. **Production MCMC is notebook-first** (see `notebooks/mcmc_pluto.jl`): callers define a concrete [`PopulationModel`](ASGWB/src/models/base.jl), load a waveform catalog with [`load_catalog`](ASGWB/src/catalog/io.jl), build an [`ImportanceSamplingProblem`](ASGWB/src/inference_types.jl) and [`ModelContext`](ASGWB/src/context.jl), then sample via `ASGWBInference.build_turing_model`. Developer utilities (profiling, chain stacking, benchmarks) live in `scripts/` (for example `stack_partial_chains.jl` and `profile_turing.jl`). Pluto and Jupytext notebooks are under `notebooks/`.
+ASGWB.jl is a Julia package for astrophysical stochastic gravitational-wave background modeling and inference. The package entry point is `ASGWB/src/ASGWB.jl`, which includes and exports the public API (physics, likelihoods, importance caches). Turing/AdvancedHMC model wrappers and sampling helpers live in the sibling package `ASGWBInference/` (see `ASGWBInference/src/InferenceImpl.jl`). Core modules live in `ASGWB/src/`, with detector-specific code under `ASGWB/src/detector/`. Tests live in `ASGWB/test/` and are listed from `ASGWB/test/runtests.jl`. Detector definitions and noise curves are stored in `ASGWB/assets/detector/`. **Production MCMC is notebook-first** (see `notebooks/mcmc.jl`): callers define a concrete [`PopulationModel`](ASGWB/src/models/base.jl), load a waveform catalog with [`load_catalog`](ASGWB/src/catalog/io.jl), build an [`ImportanceSamplingProblem`](ASGWB/src/inference_types.jl) and [`ModelContext`](ASGWB/src/context.jl), then sample via `ASGWBInference.build_turing_model`. Developer utilities (profiling, chain stacking, benchmarks) live in `scripts/` (for example `stack_partial_chains.jl` and `profile_turing.jl`). Pluto and Jupytext notebooks are under `notebooks/`.
 
 Note: the package is still in the prototyping phase, so breaking changes are allowed and backwards compatibility is not a concern.
 
@@ -10,8 +10,8 @@ Note: the package is still in the prototyping phase, so breaking changes are all
 
 - `just fmt`: format the repository using JuliaFormatter.
 - `just test`: run the package test suite through `Pkg.test()`.
-- `just pluto`: instantiate the notebook environment and launch Pluto on `notebooks/mcmc_pluto.jl`.
-- `julia --project=notebooks -e 'using Pkg; Pkg.instantiate()'` then open `notebooks/mcmc_pluto.jl` in Pluto or Jupyter for the canonical MCMC workflow.
+- `just pluto`: instantiate the notebook environment and launch Pluto.
+- `julia --project=notebooks -e 'using Pkg; Pkg.instantiate()'` then open `notebooks/mcmc.jl` in Pluto for the canonical MCMC workflow.
 
 If `just` is unavailable, use the Julia commands in the `justfile`, for example `julia --project=ASGWB -e 'using Pkg; Pkg.test()'`.
 
