@@ -1,7 +1,7 @@
 # Example MCMC run config for scripts/run_mcmc.jl.
 # Copy this file per experiment; the runner never edits notebooks/mcmc.jl.
-# Cosmology family and population are fixed in the script
-# (ModifiedPropagation{W0CDM} + BNSPopulationModel).
+# Cosmology family and importance adapter are fixed in the script
+# (W0CDM + ModifiedPropagation + BNSMadauDickinsonImportanceModel).
 
 version = 1
 

@@ -21,15 +21,16 @@ end
 
 # ╔═╡ a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
 md"""
-## Population model
+## Importance model
 
-Inference requires specifying a population model, parametrized by a vector ``\Lambda`` ,  which characterizes the distribution of the intrinsic parameters ``p(\theta | \Lambda)``.
+Inference requires an importance adapter, parametrized by a vector ``\Lambda``, which
+characterizes the distribution of the intrinsic parameters ``p(\theta | \Lambda)``.
 
 The canonical adapter is `BNSMadauDickinsonImportanceModel{C, P}` from
 `AstroSGWBImportanceModels`. It implements the two-method inference contract:
 
 - **`hyperparameters(model)`** — declares the joint hyperparameter names: cosmology (`C`), propagation (`P`), and the Madau–Dickinson redshift parameters `:γ`, `:κ`, `:zpeak`.
-- **`merger_rate_and_log_weights(model, Λ, samples)`** — inlines the redshift log-ratio, importance weights, and rate normalization. For this BNS population the Λ-independent mass/spin/tidal priors cancel exactly, so only the redshift + distance/propagation terms survive (mirroring Python `mcmc.py`).
+- **`merger_rate_and_log_weights(model, Λ, samples)`** — inlines the redshift log-ratio, importance weights, and rate normalization. For this BNS population the Λ-independent mass/spin/tidal priors cancel exactly, so only the redshift + distance/propagation terms survive.
 
 `bns_samples_from_catalog` keeps only the catalog columns the weight loop reads (`redshift` and `luminosity_distance`); when the catalog omits `luminosity_distance` it is generated once from redshift at the fiducial cosmology, so the `samples` NamedTuple stays the single source of truth for the EM distance.
 """

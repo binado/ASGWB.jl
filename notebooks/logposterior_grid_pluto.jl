@@ -10,14 +10,16 @@ md"""
 
 Sampler-free posterior visualization: builds the conditioned Turing model with the same canonical adapter as `mcmc.jl`, wraps it with `DynamicPPL.LogDensityFunction` (non-linked ⇒ physical-space logposterior, no Jacobian), and evaluates the **logposterior on a regular grid** over the free (sampled) parameters. Plots the result as a 1-D line or 2-D heatmap with CairoMakie.
 
-Since `observed = fiducial_spectral_density`, the surface peaks at the fiducial point — useful for checking posterior geometry and identifiability before or without running HMC.
+With `observed = fiducial_spectral_density`, the likelihood is largest at the fiducial
+point (flat priors); the full log-posterior also includes the prior. Useful for checking
+posterior geometry and identifiability before or without running HMC.
 
 ## Environment
 
 The first code cell runs `Pkg.activate(@__DIR__)`, so this notebook uses [notebooks/Project.toml](Project.toml). From the repository root:
 
 ```bash
-julia -e 'using Pluto; Pluto.run(notebook="notebooks/logposterior_grid_pluto.jl")'
+julia --project=notebooks -e 'using Pkg; Pkg.instantiate(); using Pluto; Pluto.run(notebook="notebooks/logposterior_grid_pluto.jl")'
 ```
 
 Provide **`catalog.h5`** at the repo root (or change `catalog_path` in the config cell). Set **`sample_only`** to a 1- or 2-element `Tuple` of hyperparameter symbols (e.g. `(:H0,)` or `(:H0, :w0)`).

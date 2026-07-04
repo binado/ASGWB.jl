@@ -2,8 +2,8 @@
     hyperparameters(model)
 
 Return the complete collection of hyperparameter names used by `model`. Model authors
-implement this method for their prepared model type. Every name must be a unique `Symbol`;
-the order has no semantic meaning.
+implement this method for their prepared model type. Must return a `Tuple{Vararg{Symbol}}`
+of unique names; the order has no semantic meaning.
 """
 function hyperparameters end
 

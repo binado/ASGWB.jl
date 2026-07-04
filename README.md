@@ -8,7 +8,7 @@ The root repository is organized as a monorepo comprised of different small pack
 
 | Path | Role |
 |------|------|
-| [`AstroSGWB/`](AstroSGWB/) | Core library: cosmology-aware hyperparameters, redshift and spectral-density evaluation, detector PSDs/ORFs, likelihoods, catalog I/O |
+| [`AstroSGWB/`](AstroSGWB/) | Core library: redshift and spectral-density evaluation, detector PSDs/ORFs, catalog I/O (re-exports cosmology helpers) |
 | [`AstroSGWBInference/`](AstroSGWBInference/) | Inference layer on top of `AstroSGWB`: Turing model construction, log-posterior helpers, chain I/O |
 | [`AstroSGWBImportanceModels/`](AstroSGWBImportanceModels/) | Canonical concrete importance adapters, including the BNS Madau–Dickinson model used by production workflows |
 | [`CBCDistributions/`](CBCDistributions/) | Shared population-distribution building blocks and the optional `PopulationModel` contract |

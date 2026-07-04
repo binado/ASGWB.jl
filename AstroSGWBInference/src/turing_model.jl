@@ -24,7 +24,7 @@ function condition_turing_model(
     sample_only === nothing && return turing_model
     isempty(sample_only) && throw(
         ArgumentError(
-        "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
+        "sample_only must not be empty; omit the argument or pass `nothing` to sample every hyperparameter",
     ),
     )
     _validate_subset(sample_only, order)

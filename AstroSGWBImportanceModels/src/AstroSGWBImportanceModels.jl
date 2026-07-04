@@ -94,8 +94,9 @@ end
         local_merger_rate, observation_time, z_grid=DEFAULT_Z_GRID)
 
 Precompute the Float64 proposal caches for the canonical BNS Madau–Dickinson importance
-adapter. Returns the prepared model directly. Construct detector state separately with
-`AstroSGWB.build_observation_context`.
+adapter. `local_merger_rate` is the local merger rate in events per year; `observation_time`
+is the observation duration in years (Julian year). Returns the prepared model directly.
+Construct detector state separately with `AstroSGWB.build_observation_context`.
 """
 function prepare_bns_madau_dickinson_model(
         samples::NamedTuple,
