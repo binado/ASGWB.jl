@@ -35,6 +35,6 @@ export BNSMadauDickinsonImportanceModel,
        bns_samples_from_catalog,
        prepare_bns_madau_dickinson_model
 
-include("models/bns_madau_dickinson_modified_propagation/bns_madau_dickinson.jl")
+include("models/bns_madau_dickinson.jl")
 
 end
