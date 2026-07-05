@@ -71,7 +71,6 @@ end
 @testset "catalog inputs are explicit" begin
     loaded = _load_variant(:importance_context)
 
-    @test loaded.pop isa ParityBNSPopulation
     @test redshift(loaded.samples) ≈ [0.1, 0.2]
     @test loaded.samples.luminosity_distance ≈ [430.0, 880.0]
     @test loaded.fluxes ≈ Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
@@ -83,17 +82,13 @@ end
     @test Λ.γ == 2.7
 end
 
-@testset "prepared model reconstructs derived caches" begin
+@testset "parity context constructs catalog and observation data" begin
     loaded = _load_variant(:importance_context)
-    model = loaded.model
     observation = loaded.observation
 
-    @test length(model.proposal_log_pdf) == length(loaded.samples.redshift)
-    @test all(isfinite, model.proposal_log_pdf)
     @test all(isfinite, loaded.samples.luminosity_distance)
     @test all(>(0), loaded.samples.luminosity_distance)
 
-    @test length(model.z_grid) == length(DEFAULT_Z_GRID)
     @test observation.frequencies ≈ [0.0, 20.0, 40.0]
     @test observation.in_band_mask == BitVector([false, true, true])
     @test length(observation.effective_psd) == length(observation.frequencies)
@@ -101,6 +96,4 @@ end
           observation.sgwb_scale[observation.in_band_mask]
     @test observation.observation_time == 1.0
     @test year_to_second(observation.observation_time) ≈ 365.25 * 24 * 3600
-    @test model.local_merger_rate == 161.0
-
 end

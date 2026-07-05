@@ -170,14 +170,12 @@ end
 
 """
     parity_problem_context(variant, detectors)
-        -> (; pop, fluxes, samples, fiducials, model, observation, cosmology_type, propagation_type)
+        -> (; fluxes, samples, fiducials, observation)
 
-Load the parity catalog for `variant`, restructure its samples, and assemble the
-out-of-package prepared model ([`PreparedParityModel`](@ref)) plus its
-[`ObservationContext`](@ref). The raw catalog `fluxes`, restructured `samples`, and
-fiducials are returned explicitly. The cosmology and propagation families are returned for
-tests that still construct family-token hyperparameter orders, but they are *not* part of
-the inference surface.
+Load the parity catalog for `variant`, restructure its samples, and build its
+[`ObservationContext`](@ref). Physical importance-model preparation is tested by
+`AstroSGWBImportanceModels`; this core fixture only owns catalog, sample, and observation
+data.
 """
 function parity_problem_context(variant::Symbol, detectors)
     dir = parity_catalog_dir(variant)
@@ -195,25 +193,14 @@ function parity_problem_context(variant::Symbol, detectors)
     catalog = loaded.catalog
     samples = parity_bns_samples_from_catalog(catalog.samples)
     kw = parity_observation_kwargs(variant)
-    prepared = prepare_parity_model(
-        pop,
-        samples,
-        Λ,
-        C,
-        P,
-        loaded.metadata.grid,
-        detectors,
-        kw.observation_time,
-        kw.local_merger_rate
-    )
+    observation = build_observation_context(
+        frequencies(loaded.metadata.grid), Vector{Detector}(collect(detectors)),
+        in_band_mask(loaded.metadata.grid), kw.observation_time)
     return (;
-        pop = pop,
         fluxes = catalog.fluxes,
         samples = samples,
         fiducials = Λ,
-        model = prepared.model,
-        observation = prepared.observation,
-        cosmology_type = C, propagation_type = P)
+        observation = observation)
 end
 
 """

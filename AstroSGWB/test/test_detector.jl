@@ -86,7 +86,7 @@ end
     @test all(isfinite, scale) && all(scale .> 0)
 end
 
-@testset "prepared model reconstructs effective_psd from detectors" begin
+@testset "parity observation reconstructs effective_psd from detectors" begin
     if !@isdefined parity_catalog_dir
         include(joinpath(@__DIR__, "parity_test_cache.jl"))
     end
@@ -99,7 +99,7 @@ end
     @test length(obs.sgwb_scale) == length(obs.frequencies)
 end
 
-@testset "prepared model observation is deterministic for the same paths and detectors" begin
+@testset "parity observation is deterministic for the same paths and detectors" begin
     if !@isdefined parity_catalog_dir
         include(joinpath(@__DIR__, "parity_test_cache.jl"))
     end

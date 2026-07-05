@@ -47,3 +47,7 @@ jobs:
         with:
           project: AstroSGWBInference
           coverage: false
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          project: AstroSGWBImportanceModels
+          coverage: false

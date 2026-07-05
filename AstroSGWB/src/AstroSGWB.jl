@@ -10,12 +10,11 @@ per-sample intrinsic parameters with precomputed luminosity distances, and a
 `(nfreq, nsamples)` per-sample flux matrix `|h_+|² + |h_×|²` (before the
 fiducial `(D_L/D_gw)²` factor).
 
-Callers define their population model, fiducial hyperparameters, and catalog sample
-adapter in Julia, then pass raw catalog `fluxes`, restructured `samples`, and fiducials
-explicitly. The
-cosmology-specific derived caches (proposal log-prob, `dl_fid_sq`, redshift interpolant)
-live on a caller-owned *prepared model*, assembled from the exported kernels; the
-detector/observation state lives in an [`ObservationContext`](@ref).
+Callers define an importance adapter (or use one from `AstroSGWBImportanceModels`),
+fiducial hyperparameters, and a catalog sample adapter in Julia, then pass raw catalog
+`fluxes`, restructured `samples`, and fiducials explicitly. Prepared importance models
+cache proposal log-probabilities, redshift interpolants, and rate metadata; detector
+state lives separately in an [`ObservationContext`](@ref).
 
 Inference state is a flat hyperparameter `NamedTuple`. The caller-owned model contract and
 Turing integration live in `AstroSGWBInference`; this package provides the reusable physics
@@ -31,7 +30,6 @@ import Cosmology: cosmology, cosmology_type, gravitational_wave_distance,
                   propagation, propagation_type
 
 include("types.jl")
-include("models/base.jl")
 include("catalog/grid.jl")
 include("catalog/catalog.jl")
 include("catalog/io.jl")
@@ -49,7 +47,6 @@ include("diagnostics.jl")
 export ObservationContext,
        canonical_hyperparameters,
        validate_hyperparameters,
-       validate_subset,
        CATALOG_SOURCE_TYPE_ATTR,
        CATALOG_SOURCE_TYPE_BNS,
        CumulativeIntegral1D,

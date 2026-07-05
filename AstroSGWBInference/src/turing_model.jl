@@ -3,6 +3,16 @@ using LinearAlgebra: Diagonal
 using Turing
 using Turing: DynamicPPL
 
+function _validate_subset(subset::Tuple{Vararg{Symbol}}, order)
+    for symbol in subset
+        symbol in order ||
+            throw(ArgumentError("subset contains $(repr(symbol)); expected symbols from $(Tuple(order))"))
+    end
+    length(unique(subset)) == length(subset) ||
+        throw(ArgumentError("subset must not repeat symbols"))
+    return subset
+end
+
 function condition_turing_model(
         turing_model,
         theta0::NamedTuple,
@@ -14,10 +24,10 @@ function condition_turing_model(
     sample_only === nothing && return turing_model
     isempty(sample_only) && throw(
         ArgumentError(
-        "sample_only must not be empty; omit the key or use null to sample every hyperparameter",
+        "sample_only must not be empty; omit the argument or pass `nothing` to sample every hyperparameter",
     ),
     )
-    validate_subset(sample_only, order)
+    _validate_subset(sample_only, order)
     fixed = Tuple(s for s in order if s ∉ sample_only)
     isempty(fixed) && return turing_model
     return turing_model | (; (s => theta0[s] for s in fixed)...)

@@ -2,8 +2,8 @@
     hyperparameters(model)
 
 Return the complete collection of hyperparameter names used by `model`. Model authors
-implement this method for their prepared model type. Every name must be a unique `Symbol`;
-the order has no semantic meaning.
+implement this method for their prepared model type. Must return a `Tuple{Vararg{Symbol}}`
+of unique names; the order has no semantic meaning.
 """
 function hyperparameters end
 
@@ -17,9 +17,11 @@ per catalog sample.
 function merger_rate_and_log_weights end
 
 function _hyperparameter_names(model)
-    names = Tuple(hyperparameters(model))
-    all(name -> name isa Symbol, names) || throw(
-        ArgumentError("hyperparameters(model) must contain only Symbols; got $(repr(names))"),
+    names = hyperparameters(model)
+    names isa Tuple{Vararg{Symbol}} || throw(
+        ArgumentError(
+        "hyperparameters(model) must return a Tuple of Symbols; got $(repr(names))",
+    ),
     )
     length(unique(names)) == length(names) || throw(
         ArgumentError("hyperparameters(model) must contain unique names; got $(repr(names))"),

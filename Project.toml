@@ -1,20 +1,23 @@
 [workspace]
-projects = ["Cosmology", "AstroSGWB", "AstroSGWBInference", "CBCDistributions", "notebooks"]
+projects = ["Cosmology", "AstroSGWB", "AstroSGWBInference", "AstroSGWBImportanceModels", "CBCDistributions", "notebooks"]
 
 [deps]
 AstroSGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+AstroSGWBImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
 CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
 Cosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
 
 [extras]
 AstroSGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+AstroSGWBImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
 CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
 Cosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
 
 [sources]
 AstroSGWB = {path = "AstroSGWB"}
 AstroSGWBInference = {path = "AstroSGWBInference"}
+AstroSGWBImportanceModels = {path = "AstroSGWBImportanceModels"}
 CBCDistributions = {path = "CBCDistributions"}
 Cosmology = {path = "Cosmology"}

@@ -8,10 +8,12 @@ The root repository is organized as a monorepo comprised of different small pack
 
 | Path | Role |
 |------|------|
-| [`AstroSGWB/`](AstroSGWB/) | Core library: cosmology-aware hyperparameters, redshift and spectral-density evaluation, detector PSDs/ORFs, likelihoods, catalog I/O |
+| [`AstroSGWB/`](AstroSGWB/) | Core library: redshift and spectral-density evaluation, detector PSDs/ORFs, catalog I/O (re-exports cosmology helpers) |
 | [`AstroSGWBInference/`](AstroSGWBInference/) | Inference layer on top of `AstroSGWB`: Turing model construction, log-posterior helpers, chain I/O |
-| [`CBCDistributions/`](CBCDistributions/) | Shared building blocks: ΛCDM / *w*CDM cosmology, redshift distributions, `PopulationModel` contract, and related `Distributions.jl` helpers used by `AstroSGWB`. |
-| [`notebooks/`](notebooks/) | **Canonical MCMC workflows** (Pluto / Jupytext): inline population model, `load_catalog`, NUTS sampling, diagnostics. |
+| [`AstroSGWBImportanceModels/`](AstroSGWBImportanceModels/) | Canonical concrete importance adapters, including the BNS Madau–Dickinson model used by production workflows |
+| [`CBCDistributions/`](CBCDistributions/) | Shared population-distribution building blocks and the optional `PopulationModel` contract |
+| [`Cosmology/`](Cosmology/) | Cosmology and GW-propagation models, distances, and reusable interpolation caches |
+| [`notebooks/`](notebooks/) | **Canonical MCMC workflows** (Pluto / Jupytext): model configuration, `load_catalog`, NUTS sampling, diagnostics. |
 | [`config/`](config/) | TOML for developer scripts and headless MCMC runs (e.g. [`config/mcmc/example.toml`](config/mcmc/example.toml)). |
 | [`scripts/`](scripts/) | Developer utilities (profiling, chain tools, benchmarks) and [`scripts/run_mcmc.jl`](scripts/run_mcmc.jl) for config-driven cluster runs. |
 
@@ -25,7 +27,8 @@ cd AstroSGWB.jl
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
-That resolves all workspace members (`AstroSGWB`, `AstroSGWBInference`, `CBCDistributions`, `notebooks`) and their shared manifest.
+That resolves all workspace members, including `AstroSGWBImportanceModels`, and their
+shared manifest.
 
 Run tests:
 
@@ -34,6 +37,7 @@ just test
 # or
 julia --project=AstroSGWB -e 'using Pkg; Pkg.test()'
 julia --project=AstroSGWBInference -e 'using Pkg; Pkg.test()'
+julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
 ```
 
 ## MCMC inference
@@ -41,10 +45,16 @@ julia --project=AstroSGWBInference -e 'using Pkg; Pkg.test()'
 ### Data and model assembly
 
 1. Provide a waveform **catalog** HDF5 file (`catalog.h5`) at the repo root or set `catalog_path` in the notebook. Catalogs store per-sample intrinsic parameters and a `(nfreq, nsamples)` flux matrix `|h₊|² + |h×|²` (before fiducial `(D_L/D_gw)²` scaling). Use [`AstroSGWB.load_catalog`](AstroSGWB/src/catalog/io.jl) / [`AstroSGWB.save_catalog`](AstroSGWB/src/catalog/io.jl).
-2. Define a concrete [`PopulationModel`](CBCDistributions/src/population_model.jl) subtype in Julia (`hyperparameters`, `single_event_prior`) and build hyperparameter priors with `product_distribution(...)` (see the notebook cells).
-3. Restructure catalog columns into the `NamedTuple` expected by `single_event_prior` (see `bns_samples_from_catalog` in the notebook).
+2. Select an importance adapter. The built-in BNS Madau–Dickinson path is
+   `AstroSGWBImportanceModels.BNSMadauDickinsonImportanceModel`; custom caller-owned
+   adapters remain supported through the same two-method inference contract.
+3. Restructure catalog columns with
+   `AstroSGWBImportanceModels.bns_samples_from_catalog` (or a custom adapter).
 4. Keep the catalog fluxes, restructured samples, and fiducial hyperparameters as explicit values; these are passed directly to forward-model and inference helpers.
-5. Assemble a caller-owned **prepared model** that implements the `AstroSGWBInference` contract — `hyperparameters(model)` and `merger_rate_and_log_weights(model, Λ, samples)` — by holding the proposal caches, `dl_fid_sq`, redshift interpolant, and merger-rate settings; build the matching detector/observation state with `build_observation_context` → [`ObservationContext`](AstroSGWB/src/detector/observation.jl). The canonical reference implementations are `prepare_parity_model` / `PreparedParityModel` in [`AstroSGWB/test/fixture_population.jl`](AstroSGWB/test/fixture_population.jl) and `prepare_bns_model` / `BNSPreparedModel` in [`scripts/run_mcmc.jl`](scripts/run_mcmc.jl).
+5. Prepare the built-in model with `prepare_bns_madau_dickinson_model(...)`, or assemble
+   a caller-owned model implementing `AstroSGWBInference.hyperparameters(model)` and
+   `merger_rate_and_log_weights(model, Λ, samples)`. Build detector state separately with
+   `build_observation_context` → [`ObservationContext`](AstroSGWB/src/detector/observation.jl).
 6. Sample with `AstroSGWBInference.build_turing_model(model, fluxes, samples, fiducials, observation, prior)`, `condition_turing_model`, and Turing NUTS; save chains via `AstroSGWBInference.atomic_save_chain`. If you omit an `observed` spectrum, `build_turing_model` synthesizes one via `fiducial_spectral_density(model, fluxes, samples, fiducials)` so the modified-propagation factors `Ξ(z)` are applied consistently.
 
 Waveform generation is not part of the Julia packages; see [scripts/generate_waveforms.py](./scripts/generate_waveforms.py) for a standalone Python accumulator (legacy layout).
@@ -63,7 +73,10 @@ Edit fiducials, hyperprior bounds, detectors, and sampler settings in the notebo
 
 ### Headless MCMC (config-driven)
 
-[`scripts/run_mcmc.jl`](scripts/run_mcmc.jl) mirrors the sampling cells of [`notebooks/mcmc_pluto.jl`](notebooks/mcmc_pluto.jl) but reads run-specific settings from a TOML file. Cosmology family (`W0CDM`), GW propagation family (`ModifiedPropagation`), population model (`BNSPopulationModel`), and hyperprior bounds are fixed in the script (`prepare_bns_model` / `BNSPreparedModel`), matching the notebook.
+[`scripts/run_mcmc.jl`](scripts/run_mcmc.jl) mirrors the sampling cells of
+[`notebooks/mcmc.jl`](notebooks/mcmc.jl) but reads run-specific settings from a TOML file.
+The cosmology family (`W0CDM`), GW propagation family (`ModifiedPropagation`), built-in
+BNS Madau–Dickinson adapter, and hyperprior bounds are fixed in the script.
 
 **One-time setup** (separate Julia project at [`scripts/run/`](scripts/run/)):
 

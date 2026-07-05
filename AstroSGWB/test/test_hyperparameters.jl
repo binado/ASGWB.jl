@@ -1,6 +1,5 @@
 using Test
 using AstroSGWB
-using Distributions: product_distribution, Normal, ProductNamedTupleDistribution
 
 if !@isdefined ParityBNSPopulation
     include(joinpath(@__DIR__, "fixture_population.jl"))
@@ -12,34 +11,6 @@ end
     order = full_hyperparameters(C, P, pop)
     expected_order = (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
     @test order == expected_order
-
-    # ProductNamedTupleDistribution setup
-    dists = (; (k => Normal(0.0, 1.0) for k in expected_order)...)
-    prior = product_distribution(dists)
-
-    @testset "validate_subset" begin
-        @test validate_subset((:H0, :Ωm), order) === (:H0, :Ωm)
-        @test validate_subset((:H0, :Ωm), prior) === (:H0, :Ωm)
-        @test validate_subset((:H0, :Ωm), expected_order) === (:H0, :Ωm)
-
-        @test validate_subset((), order) === ()
-        @test validate_subset((), prior) === ()
-        @test validate_subset((), expected_order) === ()
-
-        nt = (H0 = 70.0, Ωm = 0.3)
-        @test validate_subset(nt, order) === nt
-        @test validate_subset(nt, prior) === nt
-        @test validate_subset(nt, expected_order) === nt
-
-        @test_throws ArgumentError validate_subset((:invalid_key,), order)
-        @test_throws ArgumentError validate_subset((:invalid_key,), prior)
-        @test_throws ArgumentError validate_subset((:invalid_key,), expected_order)
-        @test_throws ArgumentError validate_subset((invalid_key = 1.0,), order)
-
-        @test_throws ArgumentError validate_subset((:H0, :H0), order)
-        @test_throws ArgumentError validate_subset((:H0, :H0), prior)
-        @test_throws ArgumentError validate_subset((:H0, :H0), expected_order)
-    end
 
     @testset "validate_hyperparameters" begin
         ok_nt = (; (k => 1.0 for k in expected_order)...)

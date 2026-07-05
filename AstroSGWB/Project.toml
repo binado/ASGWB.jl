@@ -9,7 +9,6 @@ CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
 Comonicon = "863f3e99-da2a-4334-8734-de3dacbe5542"
 Cosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
-Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
@@ -38,8 +37,9 @@ TOML = "1.0.3"
 julia = "1.12"
 
 [extras]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "NPZ"]
+test = ["Test", "Distributions", "NPZ"]

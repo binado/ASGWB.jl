@@ -1,16 +1,7 @@
 using Test
-using Turing
-using Distributions: product_distribution, Uniform
-using AstroSGWBInference: build_turing_model, hyperparameters,
-                          merger_rate_and_log_weights
+using Distributions: Uniform, product_distribution
+using AstroSGWBInference: build_turing_model, hyperparameters
 import AstroSGWBInference: hyperparameters, merger_rate_and_log_weights
-
-if !@isdefined parity_catalog_dir
-    include(joinpath(@__DIR__, "..", "..", "AstroSGWB", "test", "parity_test_cache.jl"))
-end
-if !@isdefined PARITY_PRIORS
-    include(joinpath(@__DIR__, "..", "..", "AstroSGWB", "test", "parity_fixtures.jl"))
-end
 
 struct InvalidNamesModel{Names}
     names::Names
@@ -18,56 +9,57 @@ end
 
 hyperparameters(model::InvalidNamesModel) = model.names
 function merger_rate_and_log_weights(::InvalidNamesModel, Λ, samples)
-    (1.0, zeros(length(samples.redshift)))
+    return (1.0, zeros(length(samples.redshift)))
 end
 
 @testset "caller-owned model hyperparameter contract" begin
-    loaded = parity_problem_context(:posterior, [Detector("H1"), Detector("L1")])
-    model = loaded.model
-    expected = Set(hyperparameters(model))
+    problem = local_problem_context()
+    expected = Set(hyperparameters(problem.model))
 
     reversed_prior = product_distribution((;
-        (name => PARITY_PRIORS.dists[name]
-    for name in reverse(keys(PARITY_PRIORS.dists)))...))
+        (name => problem.prior.dists[name]
+    for name in reverse(keys(problem.prior.dists)))...))
     reversed_fiducials = (;
-        (name => loaded.fiducials[name] for name in reverse(keys(loaded.fiducials)))...)
+        (name => problem.fiducials[name] for name in reverse(keys(problem.fiducials)))...)
 
     @test Set(keys(reversed_prior.dists)) == expected
-    @test keys(reversed_prior.dists) != hyperparameters(model)
+    @test keys(reversed_prior.dists) != hyperparameters(problem.model)
     @test build_turing_model(
-        model,
-        loaded.fluxes,
-        loaded.samples,
+        problem.model,
+        problem.fluxes,
+        problem.samples,
         reversed_fiducials,
-        loaded.observation,
+        problem.observation,
         reversed_prior
     ) !== nothing
 
-    missing_prior = product_distribution((;
-        (name => PARITY_PRIORS.dists[name]
-    for name in keys(PARITY_PRIORS.dists) if name != :zpeak)...))
-    extra_prior = product_distribution(merge(PARITY_PRIORS.dists, (extra = Uniform(0, 1),)))
-    missing_fiducials = Base.structdiff(loaded.fiducials, NamedTuple{(:zpeak,)})
-    extra_fiducials = merge(loaded.fiducials, (extra = 1.0,))
+    missing_prior = product_distribution((rate_scale = problem.prior.dists.rate_scale,))
+    extra_prior = product_distribution(merge(problem.prior.dists, (extra = Uniform(0, 1),)))
+    missing_fiducials = (rate_scale = problem.fiducials.rate_scale,)
+    extra_fiducials = merge(problem.fiducials, (extra = 1.0,))
 
     @test_throws ArgumentError build_turing_model(
-        model, loaded.fluxes, loaded.samples, loaded.fiducials,
-        loaded.observation, missing_prior)
+        problem.model, problem.fluxes, problem.samples, problem.fiducials,
+        problem.observation, missing_prior)
     @test_throws ArgumentError build_turing_model(
-        model, loaded.fluxes, loaded.samples, loaded.fiducials,
-        loaded.observation, extra_prior)
+        problem.model, problem.fluxes, problem.samples, problem.fiducials,
+        problem.observation, extra_prior)
     @test_throws ArgumentError build_turing_model(
-        model, loaded.fluxes, loaded.samples, missing_fiducials,
-        loaded.observation, PARITY_PRIORS)
+        problem.model, problem.fluxes, problem.samples, missing_fiducials,
+        problem.observation, problem.prior)
     @test_throws ArgumentError build_turing_model(
-        model, loaded.fluxes, loaded.samples, extra_fiducials,
-        loaded.observation, PARITY_PRIORS)
+        problem.model, problem.fluxes, problem.samples, extra_fiducials,
+        problem.observation, problem.prior)
 
-    for invalid in (InvalidNamesModel((:x, :x)), InvalidNamesModel((:x, "y")))
+    for invalid in (
+        InvalidNamesModel((:x, :x)),
+        InvalidNamesModel((:x, "y")),
+        InvalidNamesModel([:x])
+    )
         err = try
             build_turing_model(
-                invalid, loaded.fluxes, loaded.samples, (x = 1.0,),
-                loaded.observation, product_distribution((x = Uniform(0, 2),)))
+                invalid, problem.fluxes, problem.samples, (x = 1.0,),
+                problem.observation, product_distribution((x = Uniform(0, 2),)))
             nothing
         catch exception
             exception

@@ -3,7 +3,6 @@ module InferenceImpl
 using AstroSGWB
 using AstroSGWB:
                  ObservationContext,
-                 validate_subset,
                  normalized_ess,
                  spectral_snr_squared,
                  frequency_bin_width,
@@ -12,7 +11,7 @@ using Distributions: MvNormal, ProductNamedTupleDistribution, logpdf
 using LinearAlgebra: Diagonal
 using Turing
 
-include("model.jl")
+include("models/base.jl")
 include("likelihood.jl")
 include("turing_model.jl")
 

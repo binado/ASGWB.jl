@@ -8,16 +8,18 @@ using InteractiveUtils
 md"""
 # Logposterior Grid (Pluto)
 
-Sampler-free posterior visualization: builds the conditioned Turing model from the same inline setup as `mcmc.jl`, wraps it with `DynamicPPL.LogDensityFunction` (non-linked ⇒ physical-space logposterior, no Jacobian), and evaluates the **logposterior on a regular grid** over the free (sampled) parameters. Plots the result as a 1-D line or 2-D heatmap with CairoMakie.
+Sampler-free posterior visualization: builds the conditioned Turing model with the same canonical adapter as `mcmc.jl`, wraps it with `DynamicPPL.LogDensityFunction` (non-linked ⇒ physical-space logposterior, no Jacobian), and evaluates the **logposterior on a regular grid** over the free (sampled) parameters. Plots the result as a 1-D line or 2-D heatmap with CairoMakie.
 
-Since `observed = fiducial_spectral_density`, the surface peaks at the fiducial point — useful for checking posterior geometry and identifiability before or without running HMC.
+With `observed = fiducial_spectral_density`, the likelihood is largest at the fiducial
+point (flat priors); the full log-posterior also includes the prior. Useful for checking
+posterior geometry and identifiability before or without running HMC.
 
 ## Environment
 
 The first code cell runs `Pkg.activate(@__DIR__)`, so this notebook uses [notebooks/Project.toml](Project.toml). From the repository root:
 
 ```bash
-julia -e 'using Pluto; Pluto.run(notebook="notebooks/logposterior_grid_pluto.jl")'
+julia --project=notebooks -e 'using Pkg; Pkg.instantiate(); using Pluto; Pluto.run(notebook="notebooks/logposterior_grid_pluto.jl")'
 ```
 
 Provide **`catalog.h5`** at the repo root (or change `catalog_path` in the config cell). Set **`sample_only`** to a 1- or 2-element `Tuple` of hyperparameter symbols (e.g. `(:H0,)` or `(:H0, :w0)`).
@@ -31,35 +33,18 @@ begin
     using AstroSGWB
     using AstroSGWB:
                      Detector,
-                     ObservationContext,
-                     CosmologyCache,
-                     GridQuery,
-                     DEFAULT_Z_GRID,
-                     FrequencyGrid,
                      frequencies,
                      in_band_mask,
                      build_observation_context,
-                     cosmology,
-                     propagation,
-                     luminosity_distance,
-                     build_redshift_prior,
-                     source_frame_distribution,
-                     redshift_integral,
-                     redshift_logpdf_eltype,
-                     _normalized_log_density,
-                     interpolate,
-                     luminosity_distance_at_sample,
-                     gw_em_distance_ratio,
-                     merger_rate_per_sec,
                      load_catalog,
-                     MadauDickinsonSourceFrame,
                      W0CDM,
-                     ModifiedPropagation,
-                     spectral_density
+                     ModifiedPropagation
     using AstroSGWBInference: build_turing_model, condition_turing_model,
                               fiducial_spectral_density
-    import AstroSGWBInference: hyperparameters, merger_rate_and_log_weights
-    import Cosmology
+    using AstroSGWBInference: hyperparameters
+    using AstroSGWBImportanceModels:
+                                     bns_samples_from_catalog,
+                                     prepare_bns_madau_dickinson_model
     using Distributions: Uniform, product_distribution
     using Turing
     using Turing: DynamicPPL
@@ -78,107 +63,6 @@ end
 
 # ╔═╡ ab6c5d4e-7f8a-4b9c-bd0e-2f3a4b5c6d7e
 begin
-    # Slim BNS importance model (mirrors Python mcmc.py). The six-component single-event
-    # prior collapses to a single redshift log-ratio (mass/spin/tidal are Λ-independent and
-    # cancel exactly) plus a distance and propagation factor, so
-    # `merger_rate_and_log_weights` inlines the redshift + importance-weight math over the
-    # load-bearing Cosmology / CBCDistributions kernels. Background cosmology `C` and
-    # propagation `P` stay compile-time type parameters (cosmology-agnostic dispatch).
-
-    "Joint hyperparameter names for the model with cosmology `C`, propagation `P`."
-    function bns_order(::Type{C}, ::Type{P}) where {C, P}
-        (Cosmology.hyperparameters(C)...,
-            Cosmology.propagation_hyperparameters(P)..., :γ, :κ, :zpeak)
-    end
-
-    struct BNSImportanceModel{C, P}
-        z_grid::Vector{Float64}
-        query::GridQuery                  # hoists per-sample grid search out of the AD loop
-        proposal_log_pdf::Vector{Float64} # fiducial redshift log-density, computed once
-        local_merger_rate::Float64
-        observation_time::Float64
-    end
-
-    hyperparameters(::BNSImportanceModel{C, P}) where {C, P} = bns_order(C, P)
-
-    function prepare_bns_model(
-            samples::NamedTuple,
-            fiducials::NamedTuple,
-            ::Type{C},
-            ::Type{P},
-            grid::FrequencyGrid,
-            detectors::AbstractVector{<:Detector},
-            observation_time::Real,
-            local_merger_rate::Real;
-            z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
-    ) where {C, P}
-        z = samples.redshift
-        observation = build_observation_context(
-            frequencies(grid), Vector{Detector}(collect(detectors)),
-            in_band_mask(grid), Float64(observation_time))
-        zg = collect(Float64, z_grid)
-        query = GridQuery(z, zg)
-
-        # Fiducial proposal redshift log-density, evaluated once (≙ mcmc.py `log_p_proposal`).
-        prior_fid = build_redshift_prior(
-            zz -> source_frame_distribution(MadauDickinsonSourceFrame(), zz, fiducials),
-            CosmologyCache(cosmology(C, fiducials), zg))
-        norm_fid = redshift_integral(prior_fid)
-        tiny = floatmin(Float64)
-        proposal_log_pdf = [_normalized_log_density(
-                                interpolate(prior_fid.dN_dz, query, i), norm_fid, tiny)
-                            for i in eachindex(z)]
-
-        model = BNSImportanceModel{C, P}(zg, query, proposal_log_pdf,
-            Float64(local_merger_rate), Float64(observation_time))
-        return (; model = model, observation = observation)
-    end
-
-    function merger_rate_and_log_weights(
-            m::BNSImportanceModel{C, P}, Λ::NamedTuple, samples
-    ) where {C, P}
-        z = samples.redshift
-        d_l_fid = samples.luminosity_distance    # EM distance at fiducial; flux ∝ 1/d_l_fid²
-        cache = CosmologyCache(cosmology(C, Λ), m.z_grid)
-        prop = propagation(P, Λ)
-
-        prior = build_redshift_prior(             # target detector-frame dN/dz on the grid
-            zz -> source_frame_distribution(MadauDickinsonSourceFrame(), zz, Λ), cache)
-        norm = redshift_integral(prior)
-        tiny = floatmin(real(eltype(prior.dN_dz.y)))  # AD-safe (Dual under ForwardDiff)
-
-        # Preallocate to the promoted element type so the explicit loop stays type-stable
-        # under ForwardDiff. Promote the redshift logpdf eltype with the propagation factor
-        # to also cover the Ξ-only-sampled case; `zero(eltype(z))` is empty-safe.
-        T = promote_type(redshift_logpdf_eltype(prior),
-            typeof(gw_em_distance_ratio(zero(eltype(z)), prop)))
-        log_weights = Vector{T}(undef, length(z))
-        @inbounds for i in eachindex(z)           # single fused pass (≙ mcmc.py weights)
-            log_p_target = _normalized_log_density(
-                interpolate(prior.dN_dz, m.query, i), norm, tiny)
-            d_l_θ = luminosity_distance_at_sample(cache, m.query, z, i)
-            Ξ_θ = gw_em_distance_ratio(z[i], prop)
-            log_weights[i] = (log_p_target - m.proposal_log_pdf[i]) +
-                             2 * log(d_l_fid[i]) - 2 * log(d_l_θ) - 2 * log(Ξ_θ)
-        end
-
-        rate = merger_rate_per_sec(prior, m.local_merger_rate, m.observation_time)
-        return (rate, log_weights)
-    end
-
-    # Restructure catalog columns into the slim `samples` the weight loop reads. The
-    # `samples` NamedTuple is the single source of truth for the fiducial EM distance: if
-    # the catalog ships a `luminosity_distance` column it is used as-is, otherwise it is
-    # generated once from redshift at the fiducial cosmology `C`.
-    function bns_samples_from_catalog(
-            catalog_samples::NamedTuple, ::Type{C}, fiducials::NamedTuple) where {C}
-        z = copy(catalog_samples.redshift)
-        d_l = haskey(catalog_samples, :luminosity_distance) ?
-              copy(catalog_samples.luminosity_distance) :
-              luminosity_distance.(z, cosmology(C, fiducials))
-        return (redshift = z, luminosity_distance = d_l)
-    end
-
     _repo_root = normpath(joinpath(@__DIR__, ".."))
 
     catalog_path = joinpath(_repo_root, "catalog.h5")
@@ -228,20 +112,18 @@ begin
     catalog = loaded.catalog
     C = W0CDM
     P = ModifiedPropagation
-    @info Cosmology.hyperparameters(C)
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
-    prepared = prepare_bns_model(
+    prepared_model = prepare_bns_madau_dickinson_model(
         samples,
         fiducials,
         C,
-        P,
-        loaded.metadata.grid,
-        detectors,
-        observation_time_yr,
-        local_merger_rate
+        P;
+        observation_time = observation_time_yr,
+        local_merger_rate = local_merger_rate
     )
-    prepared_model = prepared.model
-    observation = prepared.observation
+    observation = build_observation_context(
+        frequencies(loaded.metadata.grid), detectors,
+        in_band_mask(loaded.metadata.grid), observation_time_yr)
     order = hyperparameters(prepared_model)
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)

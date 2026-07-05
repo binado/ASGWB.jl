@@ -1,0 +1,30 @@
+name = "AstroSGWBImportanceModels"
+uuid = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
+version = "0.1.0"
+
+[deps]
+AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
+Cosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
+
+[sources]
+AstroSGWB = {path = "../AstroSGWB"}
+AstroSGWBInference = {path = "../AstroSGWBInference"}
+CBCDistributions = {path = "../CBCDistributions"}
+Cosmology = {path = "../Cosmology"}
+
+[compat]
+AstroSGWBInference = "0.1.0"
+CBCDistributions = "0.1.0"
+Cosmology = "0.1.0"
+julia = "1.12"
+
+[extras]
+AstroSGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
+
+[targets]
+test = ["AstroSGWB", "Distributions", "ForwardDiff", "Test", "Turing"]
