@@ -95,7 +95,9 @@ end
     # residual vanishes and the joint collapses to prior + Gaussian
     # normalization -- but only if the synthesized data and the model that
     # scores it used the same averaging mode.
-    zero_residual_logjoint = logpdf(problem.prior, problem.fiducials) -
+    zero_residual_logjoint = sum(
+        logpdf(problem.prior[k], problem.fiducials[k])
+    for k in keys(problem.prior)) -
                              0.5 * sum(log.(2π .* σ .^ 2))
 
     @testset "both paths agree for every mode" begin

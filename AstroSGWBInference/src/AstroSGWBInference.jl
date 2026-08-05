@@ -22,7 +22,7 @@ which keeps full dispatch and type parameters -- and an ad-hoc model is a plain 
     weights_fn = (Λ, samples) -> (1e-7 * Λ.rate_scale,
                                   fill(Λ.weight_shift, length(samples.redshift)))
 
-Hyperparameter *names* are declared by the prior, not by the model: `keys(prior.dists)`
+Hyperparameter *names* are declared by the prior, not by the model: `keys(prior)`
 alone determines what is sampled. A name the callable needs but the prior omits surfaces
 as a `KeyError` on `Λ.name` at the first evaluation, before the sampler burns wall clock.
 """

@@ -3,7 +3,7 @@ using AstroSGWB
 using AstroSGWBImportanceModels
 using AstroSGWBInference
 using Cosmology
-using Distributions: Uniform, product_distribution
+using Distributions: Uniform
 using ForwardDiff
 using Turing
 
@@ -242,7 +242,7 @@ end
         BitVector([false, true, true]),
         1.0
     )
-    prior = product_distribution((
+    prior = (
         H0 = Uniform(20.0, 140.0),
         Ωm = Uniform(0.05, 0.95),
         Ξ₀ = Uniform(0.5, 5.0),
@@ -250,7 +250,7 @@ end
         γ = Uniform(0.5, 10.0),
         κ = Uniform(0.05, 10.0),
         zpeak = Uniform(0.05, 10.0)
-    ))
+    )
     turing_model = build_turing_model(
         model, fluxes, SAMPLES, FIDUCIALS, observation, prior)
 

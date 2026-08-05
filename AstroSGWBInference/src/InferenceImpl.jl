@@ -10,7 +10,7 @@ using AstroSGWB:
                  spectral_snr_squared,
                  frequency_bin_width,
                  year_to_second
-using Distributions: MvNormal, ProductNamedTupleDistribution, logpdf
+using Distributions: MvNormal, logpdf
 using LinearAlgebra: Diagonal
 using Turing
 

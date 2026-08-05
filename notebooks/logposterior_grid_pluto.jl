@@ -45,7 +45,7 @@ begin
     using AstroSGWBImportanceModels:
                                      bns_samples_from_catalog,
                                      prepare_bns_madau_dickinson_model
-    using Distributions: Uniform, product_distribution
+    using Distributions: Uniform
     using Turing
     using Turing: DynamicPPL
     using Random
@@ -102,7 +102,7 @@ begin
         κ = Uniform(0.05, 10.0),
         zpeak = Uniform(0.05, 10.0)
     )
-    hyperprior = product_distribution(hyperprior_dists)
+    hyperprior = hyperprior_dists
 end
 
 # ╔═╡ bc7d6e5f-8a9b-4c0d-8e1f-3a4b5c6d7e8f

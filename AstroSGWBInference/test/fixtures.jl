@@ -1,4 +1,4 @@
-using Distributions: Uniform, product_distribution
+using Distributions: Uniform
 
 # S1: the model contract is a callable, so an ad-hoc model is three lines of arithmetic --
 # no struct, no method definitions on foreign generics, no import.
@@ -9,10 +9,10 @@ const LOCAL_FLUXES = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
 const LOCAL_SAMPLES = (redshift = [0.1, 0.2],)
 const LOCAL_FIDUCIALS = (rate_scale = 1.0, weight_shift = 0.0)
 const LOCAL_THETA = (rate_scale = 1.1, weight_shift = 0.05)
-const LOCAL_PRIOR = product_distribution((
+const LOCAL_PRIOR = (
     rate_scale = Uniform(0.5, 1.5),
     weight_shift = Uniform(-0.2, 0.2)
-))
+)
 const LOCAL_OBSERVATION = ObservationContext(
     [0.0, 20.0, 40.0],
     [Inf, 1.0, 1.0],

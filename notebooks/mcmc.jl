@@ -110,7 +110,7 @@ begin
         κ = Uniform(0.05, 10.0),
         zpeak = Uniform(0.05, 10.0)
     )
-    hyperprior = product_distribution(hyperprior_dists)
+    hyperprior = hyperprior_dists
 
     # Defining cosmology and propagation. Background expansion `C` and GW propagation `P`
     # are orthogonal axes (use `GR` for standard propagation).
@@ -383,7 +383,7 @@ begin
     using AstroSGWBInference: build_turing_model, condition_turing_model
     using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
     using AstroSGWBInference.ChainIO: atomic_save_chain
-    using Distributions: Uniform, product_distribution
+    using Distributions: Uniform
     using Turing
     using AdvancedHMC
     using ADTypes

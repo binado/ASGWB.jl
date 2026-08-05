@@ -35,11 +35,11 @@ function logposterior(
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
         observation::ObservationContext,
-        prior::ProductNamedTupleDistribution,
+        prior::NamedTuple,
         observed::AbstractVector{<:Real};
         average_mode::AbstractAverageMode = AnalyticInclination()
 )
-    return logpdf(prior, Λ) +
+    return sum(logpdf(prior[k], Λ[k]) for k in keys(prior)) +
            loglikelihood(
         Λ, weights_fn, fluxes, samples, observation, observed; average_mode)
 end

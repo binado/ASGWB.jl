@@ -36,7 +36,7 @@ using AstroSGWBInference:
                           validate_fiducials
 using ADTypes: AutoForwardDiff
 using AdvancedHMC: DenseEuclideanMetric
-using Distributions: Uniform, product_distribution
+using Distributions: Uniform
 using FlexiChains: VNChain
 using Turing
 using Random
@@ -62,7 +62,7 @@ const P = ModifiedPropagation
 const AVERAGE_MODE = nothing
 
 # Hard-coded hyperprior bounds (matching notebooks/mcmc.jl).
-const HYPERPRIOR = product_distribution((
+const HYPERPRIOR = (
     H0 = Uniform(20.0, 140.0),
     Ωm = Uniform(0.05, 0.95),
     w0 = Uniform(-3, 1),
@@ -71,7 +71,7 @@ const HYPERPRIOR = product_distribution((
     γ = Uniform(0.5, 10.0),
     κ = Uniform(0.05, 10.0),
     zpeak = Uniform(0.05, 10.0)
-))
+)
 
 # --------------------------------------------------------------------------
 # Materialization helpers
@@ -133,7 +133,7 @@ function run_mcmc(config_file::String)
     # S2: the prior is the declaration of what the model takes. There is no longer a
     # `hyperparameters(model)` to ask, and no need for one -- a fiducial key the model
     # reads but the config omits throws from `Λ.name` at prepare time, before NUTS starts.
-    order = keys(HYPERPRIOR.dists)
+    order = keys(HYPERPRIOR)
     @info "model" cosmology=string(C) propagation=string(P) order
     fiducials = _fiducials_namedtuple(cfg, order)
     sample_only = _resolve_sample_only(cfg, order)

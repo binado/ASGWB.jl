@@ -16,7 +16,7 @@
 
 module AstroSGWBProfileCLI
 
-using Distributions: logpdf, product_distribution, Uniform
+using Distributions: logpdf, Uniform
 using AstroSGWB
 using AstroSGWBInference: build_turing_model, fiducial_spectral_density, logposterior
 using AstroSGWBImportanceModels:
@@ -112,7 +112,7 @@ function _uniform_bounds(priors_tbl::Dict, key::AbstractString)
 end
 
 function _priors_from_toml(priors_tbl::Dict)
-    return product_distribution((
+    return (
         H0 = Uniform(_uniform_bounds(priors_tbl, "H0")...),
         Ωm = Uniform(_uniform_bounds(priors_tbl, "Omega_m")...),
         Ξ₀ = Uniform(_uniform_bounds(priors_tbl, "Xi_0")...),
@@ -120,7 +120,7 @@ function _priors_from_toml(priors_tbl::Dict)
         γ = Uniform(_uniform_bounds(priors_tbl, "gamma")...),
         κ = Uniform(_uniform_bounds(priors_tbl, "kappa")...),
         zpeak = Uniform(_uniform_bounds(priors_tbl, "z_peak")...)
-    ))
+    )
 end
 
 function _theta0_from_toml(init_tbl::Dict, order::Tuple{Vararg{Symbol}})
@@ -151,7 +151,7 @@ function _validate_init_in_priors(prior, init_tbl::Dict)
     )
         haskey(init_tbl, key) || continue
         v = Float64(init_tbl[key])
-        isfinite(logpdf(prior.dists[sym], v)) || throw(
+        isfinite(logpdf(prior[sym], v)) || throw(
             ArgumentError("init.$key = $v is outside the support of the corresponding prior"),
         )
     end
@@ -250,7 +250,7 @@ function _run(;
     C = LambdaCDM
     P = ModifiedPropagation
     # S2: the prior declares the hyperparameter names; there is no model to ask.
-    order = keys(priors.dists)
+    order = keys(priors)
     θ0 = _theta0_from_toml(init_tbl, order)
     samples = bns_samples_from_catalog(catalog.samples, C, θ0)
     # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
@@ -372,7 +372,8 @@ function _run(;
         $rate0;
         weights = $weights0
     )
-    suite["stage"]["prior"] = @benchmarkable logpdf($priors, $h)
+    suite["stage"]["prior"] = @benchmarkable sum(
+        logpdf($priors[k], $h[k]) for k in keys($priors))
     # Bare luminosity_distance broadcast — isolates per-sample distance work in
     # Catalog reconstruction and importance weighting.
     suite["stage"]["lumdist"] = @benchmarkable luminosity_distance.($z_samples, $c0)

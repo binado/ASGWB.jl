@@ -1,4 +1,4 @@
-using Distributions: MvNormal, ProductNamedTupleDistribution
+using Distributions: MvNormal
 using LinearAlgebra: Diagonal
 using Turing
 using Turing: DynamicPPL
@@ -16,10 +16,10 @@ end
 function condition_turing_model(
         turing_model,
         theta0::NamedTuple,
-        prior::ProductNamedTupleDistribution,
+        prior::NamedTuple,
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
 )
-    order = keys(prior.dists)
+    order = keys(prior)
     sample_only === nothing && return turing_model
     isempty(sample_only) && throw(
         ArgumentError(
@@ -52,11 +52,10 @@ end
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
         observation::ObservationContext,
-        prior::ProductNamedTupleDistribution,
+        prior::NamedTuple,
         observed_in_band::AbstractVector{<:Real}
 )
-    order = keys(prior.dists)
-    Λ ~ to_submodel(sample_hyperparameters(order, prior.dists), false)
+    Λ ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
     forward = _forward_model(weights_fn, fluxes, samples, Λ; average_mode)
     Sh = forward.spectral_density
 
@@ -88,7 +87,7 @@ Build the Turing model scoring `weights_fn` against `observed` (synthesized at
 `fiducial_hyperparameters` when omitted). `weights_fn(Λ, samples) -> (rate, log_weights)`
 is the whole model contract; see the `AstroSGWBInference` module docstring.
 
-`keys(prior.dists)` alone declares which hyperparameters are sampled and in what order.
+`keys(prior)` alone declares which hyperparameters are sampled and in what order.
 A key the model needs but the prior omits surfaces as a `KeyError` on `Λ.name` at the
 first evaluation, before the sampler burns wall clock.
 """
@@ -98,7 +97,7 @@ function build_turing_model(
         samples::NamedTuple,
         fiducial_hyperparameters::NamedTuple,
         observation::ObservationContext,
-        prior::ProductNamedTupleDistribution;
+        prior::NamedTuple;
         track::Bool = false,
         observed::Union{Nothing, AbstractVector{<:Real}} = nothing,
         average_mode::AbstractAverageMode = AnalyticInclination()
