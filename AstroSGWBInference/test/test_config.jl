@@ -1,6 +1,5 @@
 using Test
-using AstroSGWBInference: MCMCConfig, SamplerConfig, load_config, save_config,
-                          validate_fiducials
+using AstroSGWBInference: MCMCConfig, SamplerConfig, load_config, save_config
 
 function example_config(; sample_only = [:H0])
     sampler = SamplerConfig(3000, 3000, 0.9, "ForwardDiff", 0)
@@ -140,24 +139,4 @@ end
     bad_obs = example_dict()
     bad_obs["observation_time"] = 0.0
     @test_throws ArgumentError MCMCConfig(bad_obs)
-end
-
-@testset "validate_fiducials matches model order" begin
-    cfg = example_config()
-    order = (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak, :R₀)
-    @test validate_fiducials(cfg, order) === nothing
-
-    # Extra expected key (model wants one the config lacks).
-    @test_throws ArgumentError validate_fiducials(cfg, (order..., :extra))
-
-    # Typo in a fiducial key is caught.
-    typo_fiducials = copy(cfg.fiducials)
-    delete!(typo_fiducials, :zpeak)
-    typo_fiducials[:z_peak] = 2.0
-    cfg_typo = MCMCConfig(
-        cfg.version, cfg.catalog_path, cfg.detectors, cfg.seed,
-        cfg.observation_time, cfg.sampler,
-        typo_fiducials, cfg.sample_only, cfg.output_dir, cfg.output_prefix
-    )
-    @test_throws ArgumentError validate_fiducials(cfg_typo, order)
 end

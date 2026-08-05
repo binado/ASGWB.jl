@@ -52,13 +52,12 @@ export forward_model,
        MCMCConfig,
        SamplerConfig,
        load_config,
-       save_config,
-       validate_fiducials
+       save_config
 
 include("chain_io.jl")
 include("config.jl")
 include("cli/stack_partial_chains.jl")
 using .ChainIO: atomic_save_chain
-using .Config: MCMCConfig, SamplerConfig, load_config, save_config, validate_fiducials
+using .Config: MCMCConfig, SamplerConfig, load_config, save_config
 
 end

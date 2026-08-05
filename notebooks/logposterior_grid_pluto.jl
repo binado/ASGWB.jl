@@ -88,7 +88,11 @@ begin
         cosmology_parameters...,
         γ = 2.7,
         κ = 3.0,
-        zpeak = 2.0
+        zpeak = 2.0,
+        # S7: the local merger rate (Gpc^-3 yr^-1) is an ordinary hyperparameter read as
+        # `Λ.R₀`, not a prepare-time keyword. Fixed here by default; add it to
+        # `hyperprior_dists` and `sample_only` to sample it.
+        R₀ = local_merger_rate
     )
 
     hyperprior_dists = (
@@ -122,14 +126,7 @@ begin
     fluxes = apply_gw_distance_correction(
         catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
 
-    prepared_model = prepare_bns_madau_dickinson_model(
-        samples,
-        fiducials,
-        C,
-        P;
-        observation_time = observation_time_yr,
-        local_merger_rate = local_merger_rate
-    )
+    prepared_model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
     observation = build_observation_context(
         catalog.frequencies, detectors, catalog.in_band_mask, observation_time_yr)
     # S2: the prior declares the hyperparameter names; there is no model to ask.

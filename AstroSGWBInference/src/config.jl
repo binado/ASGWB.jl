@@ -2,7 +2,7 @@ module Config
 
 using TOML
 
-export MCMCConfig, SamplerConfig, load_config, save_config, validate_fiducials
+export MCMCConfig, SamplerConfig, load_config, save_config
 
 """Current config schema version. Bump on any breaking layout change."""
 const SCHEMA_VERSION = 2
@@ -184,29 +184,6 @@ function save_config(cfg::MCMCConfig, path::AbstractString)
         TOML.print(io, d; sorted = true)
     end
     mv(tmp, path; force = true)
-    return nothing
-end
-
-"""
-    validate_fiducials(cfg::MCMCConfig, order)
-
-Check that the fiducial keys exactly match the model's expected hyperparameters,
-where the configured names match `hyperparameters(model)`. Kept separate from construction so
-`MCMCConfig` stays decoupled from the cosmology/propagation families and population
-model; the caller invokes it once all are in scope. Throws on any missing/extra/typo'd key
-(e.g. `zpeak` vs `z_peak`).
-"""
-function validate_fiducials(cfg::MCMCConfig, order)
-    expected = Set(Symbol.(order))
-    actual = Set(keys(cfg.fiducials))
-    if actual != expected
-        missing_keys = sort!(collect(setdiff(expected, actual)))
-        extra_keys = sort!(collect(setdiff(actual, expected)))
-        throw(ArgumentError(
-            "fiducial keys do not match model hyperparameters; " *
-            "missing = $missing_keys, extra = $extra_keys",
-        ))
-    end
     return nothing
 end
 
