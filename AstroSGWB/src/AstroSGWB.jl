@@ -8,9 +8,18 @@ sampling, redshift grids, and spectral-density forward models. Turing model cons
 The primary inference artifact is a **`waveform_catalog` v1 HDF5 file**, read by
 [`load_catalog`](@ref) into an [`SGWBCatalog`](@ref): per-sample source parameters,
 the shared frequency axis and in-band mask, and a `(nfreq, nsamples)` per-sample
-flux matrix `|h_+|² + |h_×|²` reduced from the stored complex polarizations
-(before the fiducial `(D_L/D_gw)²` factor). Format IO lives in `PlusCross.jl`, so
-the same file is consumed unchanged by the Python `astrogwb` package.
+flux matrix `|h_+|² + |h_×|²` reduced from the stored complex polarizations.
+Format IO lives in `PlusCross.jl`, so the same file is consumed unchanged by the
+Python `astrogwb` package.
+
+As loaded the flux matrix is referenced to the **electromagnetic** luminosity distance
+(before the fiducial `(D_L/D_gw)²` factor). Call
+[`apply_gw_distance_correction!`](@ref) at the fiducial propagation before preparing an
+importance model; the log-weights carry the compensating `+2 log Ξ_fid` term
+unconditionally, so skipping the call under a non-GR fiducial biases the fit by `Ξ_fid²`.
+The correction is **not idempotent**: an in-place call mutates the catalog it is given,
+so reactive/Pluto call sites should use the out-of-place
+[`apply_gw_distance_correction`](@ref).
 
 The catalog also carries the inclination-averaging convention: [`average_mode`](@ref)
 derives it from the `inclination` column, and it must be threaded to
@@ -31,7 +40,8 @@ module AstroSGWB
 using CBCDistributions
 using Cosmology
 import CBCDistributions: single_event_prior
-import Cosmology: cosmology, cosmology_type, gravitational_wave_distance,
+import Cosmology: apply_gw_distance_correction, apply_gw_distance_correction!,
+                  cosmology, cosmology_type, gravitational_wave_distance,
                   gw_em_distance_ratio, hyperparameters,
                   propagation, propagation_type
 
@@ -53,7 +63,7 @@ export ObservationContext,
        canonical_hyperparameters,
        validate_hyperparameters,
        CumulativeIntegral1D,
-       GridQuery,
+       GridInterpolator,
        interpolate,
        cdf,
        normalizer,
@@ -97,10 +107,14 @@ export E,
        CosmologyCache,
        comoving_distance,
        luminosity_distance,
-       luminosity_distance_at_sample,
        differential_comoving_volume,
+       distance_and_volume_grid,
+       trapz,
+       cumtrapz,
        gravitational_wave_distance,
        gw_em_distance_ratio,
+       apply_gw_distance_correction,
+       apply_gw_distance_correction!,
        hubble_constant_si,
        H0,
        Ωm
@@ -114,7 +128,6 @@ export madau_dickinson_source_frame_distribution,
        source_frame_distribution,
        DEFAULT_Z_GRID,
        redshift_log_prob,
-       redshift_logpdf_eltype,
        redshift_integral,
        expected_number_of_events,
        merger_rate_per_sec

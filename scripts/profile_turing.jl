@@ -28,12 +28,13 @@ using AstroSGWB:
                  merger_rate_per_sec,
                  spectral_density,
                  MadauDickinsonSourceFrame,
-                 CosmologyCache,
                  redshift,
                  canonical_hyperparameters,
                  cosmology,
                  luminosity_distance,
-                 build_redshift_prior,
+                 distance_and_volume_grid,
+                 detector_frame_merger_rate_density,
+                 trapz,
                  source_frame_distribution,
                  load_catalog,
                  average_mode,
@@ -253,6 +254,9 @@ function _run(;
     order = bns_madau_dickinson_hyperparameters(C, P)
     θ0 = _theta0_from_toml(init_tbl, order)
     samples = bns_samples_from_catalog(catalog.samples, C, θ0)
+    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
+    apply_gw_distance_correction!(catalog, propagation(P, θ0))
     fluxes = catalog.fluxes
     model = prepare_bns_madau_dickinson_model(
         samples,
@@ -305,9 +309,14 @@ function _run(;
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
     c0 = cosmology(C, h)
-    cache0 = CosmologyCache(c0, model.z_grid)
-    sfn0 = zz -> source_frame_distribution(MadauDickinsonSourceFrame(), zz, h)
-    redshift_prior0 = build_redshift_prior(sfn0, cache0)
+    # Mirrors what the importance model's hot path now does: one cosmology pass on the
+    # grid, then a trapezoid normalizer — no `CosmologyCache`, no `RedshiftPrior`.
+    grid0 = distance_and_volume_grid(c0, model.z_grid)
+    sfd0 = source_frame_distribution.(
+        Ref(MadauDickinsonSourceFrame()), model.z_grid, Ref(h))
+    dN_dz0 = detector_frame_merger_rate_density.(
+        model.z_grid, grid0.differential_comoving_volume, sfd0)
+    norm0 = trapz(model.z_grid, dN_dz0)
     rate0, log_weights0 = merger_rate_and_log_weights(model, h, samples)
     weights0 = exp.(log_weights0)
     z_samples = redshift(samples)
@@ -349,14 +358,14 @@ function _run(;
         gcsample = true)
 
     suite["stage"] = BenchmarkGroup()
-    suite["stage"]["redshift"] = @benchmarkable build_redshift_prior(
-        $sfn0, $cache0)
+    suite["stage"]["redshift"] = @benchmarkable distance_and_volume_grid(
+        $c0, $(model.z_grid))
     # The fused joint replaces the separate weight/rate atomics: it returns
     # (rate, log_weights) in one cosmology-specific pass.
     suite["stage"]["rate_and_log_weights"] = @benchmarkable merger_rate_and_log_weights(
         $model, $h, $samples)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
-        $redshift_prior0,
+        $norm0,
         $(model.local_merger_rate),
         $(model.observation_time)
     )

@@ -5,8 +5,7 @@ export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
        detector_frame_merger_rate_density, expected_number_of_events,
        madau_dickinson_source_frame_distribution,
        build_redshift_prior,
-       RedshiftInterpolatedDistribution, _normalized_log_density,
-       redshift_logpdf_eltype,
+       RedshiftInterpolatedDistribution,
        MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior,
        DEFAULT_Z_GRID
 
@@ -63,25 +62,40 @@ function expected_number_of_events(
 end
 
 """
-    merger_rate_per_sec(prior, local_merger_rate_gpc3_yr, observation_time) -> Float64
+    merger_rate_per_sec(redshift_integral_mpc3, local_merger_rate_gpc3_yr, observation_time)
+    merger_rate_per_sec(prior::RedshiftPrior, local_merger_rate_gpc3_yr, observation_time)
 
 Detector-frame merger rate in events/sec:
-`expected_number_of_events(local_rate, redshift_integral(prior), observation_time) /
+`expected_number_of_events(local_rate, redshift_integral, observation_time) /
 year_to_second(observation_time)`.
+
+The scalar form is what the importance-weighting hot path calls: it needs only the
+redshift integral, so it does not have to build a [`RedshiftPrior`](@ref) just to read
+`normalizer` back out of it. The `RedshiftPrior` form forwards to it and stays the entry
+point for the sampling path.
 
 `observation_time` is the observation duration in years (Julian year).
 """
 function merger_rate_per_sec(
-        prior::RedshiftPrior,
+        redshift_integral_mpc3::Real,
         local_merger_rate_gpc3_yr::Real,
         observation_time::Real
 )
     n_events = expected_number_of_events(
         local_merger_rate_gpc3_yr,
-        redshift_integral(prior),
+        redshift_integral_mpc3,
         observation_time
     )
     return n_events / year_to_second(observation_time)
+end
+
+function merger_rate_per_sec(
+        prior::RedshiftPrior,
+        local_merger_rate_gpc3_yr::Real,
+        observation_time::Real
+)
+    return merger_rate_per_sec(
+        redshift_integral(prior), local_merger_rate_gpc3_yr, observation_time)
 end
 
 """

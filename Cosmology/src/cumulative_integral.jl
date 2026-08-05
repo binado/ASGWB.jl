@@ -35,29 +35,59 @@ struct CumulativeIntegral1D{
 end
 
 """
-    CumulativeIntegral1D(x, f)
+    cumtrapz(x, y) -> AbstractVector
 
-Build a [`CumulativeIntegral1D`](@ref) by evaluating `f` at each node of `x`,
-building a `LinearInterpolation`, and computing nodal cumulative integrals as
-the prefix sum of trapezoids ``(x_{i+1}-x_i)(y_i+y_{i+1})/2`` (O(n), identical
-to the linear interpolant’s antiderivative on the nodes). `x` must be strictly
-increasing with length ≥ 2.
+Cumulative trapezoidal integral of `y` over nodes `x`, evaluated at each node:
+`out[1] = 0` and `out[i+1] = out[i] + (x[i+1] - x[i]) * (y[i] + y[i+1]) / 2`. Exact for
+the antiderivative of the linear interpolant through `(x, y)` at the nodes.
 
-Off-grid [`cdf`](@ref) queries use a direct analytic trapezoid lookup on the
-cached nodal values.
+`y` may carry `ForwardDiff.Dual` values; the output element type follows `y`.
+
+Shares its accumulation with [`trapz`](@ref), so `trapz(x, y) === last(cumtrapz(x, y))`
+bit-for-bit — the two are one formula, not two.
 """
-function _cumulative_at_nodes_trapezoid(x::AbstractVector{Float64}, y::AbstractVector)
+function cumtrapz(x::AbstractVector{<:Real}, y::AbstractVector)
     n = length(x)
     length(y) == n || throw(ArgumentError("x and y must have the same length"))
+    n >= 1 || throw(ArgumentError("cumtrapz requires at least one grid point"))
     cumulative = similar(y)
     @inbounds cumulative[1] = zero(y[1])
-    acc = cumulative[1]
+    acc = @inbounds cumulative[1]
     @inbounds for i in 1:(n - 1)
         dx = x[i + 1] - x[i]
         acc = acc + dx * (y[i] + y[i + 1]) * 0.5
         cumulative[i + 1] = acc
     end
     return cumulative
+end
+
+"""
+    trapz(x, y) -> Real
+
+Trapezoidal integral of `y` over nodes `x`. Accumulates left-to-right in exactly the
+order [`cumtrapz`](@ref) does, so `trapz(x, y) === last(cumtrapz(x, y))` bit-for-bit.
+
+That identity is load-bearing: the importance-model normalizer comes from `trapz` while
+`CumulativeIntegral1D`'s `normalizer` comes from `cumtrapz`, and a difference in
+summation order between them would show up as a spurious per-sample offset in the
+log-weights.
+"""
+function trapz(x::AbstractVector{<:Real}, y::AbstractVector)
+    n = length(x)
+    length(y) == n || throw(ArgumentError("x and y must have the same length"))
+    n >= 1 || throw(ArgumentError("trapz requires at least one grid point"))
+    acc = zero(@inbounds y[1])
+    @inbounds for i in 1:(n - 1)
+        dx = x[i + 1] - x[i]
+        acc = acc + dx * (y[i] + y[i + 1]) * 0.5
+    end
+    return acc
+end
+
+# Struct-facing alias, so `CumulativeIntegral1D.cumulative` and the free `cumtrapz`
+# cannot drift apart.
+function _cumulative_at_nodes_trapezoid(x::AbstractVector{Float64}, y::AbstractVector)
+    cumtrapz(x, y)
 end
 
 @inline function _linear_cell_integral(cumulative_at_left, y_lo, y_hi, dx, t)
@@ -77,6 +107,17 @@ function _cumulative_integral_from_values(
     return CumulativeIntegral1D(x_float, y, cumulative, itp)
 end
 
+"""
+    CumulativeIntegral1D(x, f)
+
+Build a [`CumulativeIntegral1D`](@ref) by evaluating `f` at each node of `x`,
+building a `LinearInterpolation`, and computing nodal cumulative integrals with
+[`cumtrapz`](@ref) (O(n), identical to the linear interpolant's antiderivative on the
+nodes). `x` must be strictly increasing with length ≥ 2.
+
+Off-grid [`cdf`](@ref) queries use a direct analytic trapezoid lookup on the
+cached nodal values.
+"""
 function CumulativeIntegral1D(x::AbstractVector{<:Real}, f)
     n = length(x)
     n >= 2 || throw(ArgumentError("CumulativeIntegral1D requires at least 2 grid points"))
@@ -143,83 +184,74 @@ Total integral of `f` over the grid, `last(c.cumulative)`.
 normalizer(c::CumulativeIntegral1D) = @inbounds c.cumulative[end]
 
 """
-    GridQuery
+    GridInterpolator(points, grid; check_bounds = false)
 
-Precomputed query plan for a fixed set of points located on a fixed grid. `bin_idx[i]`
-is the lower grid-cell index for query point `i`; `t[i]` is the within-cell fraction.
+Precomputed linear-interpolation plan for a fixed set of `points` on a fixed `grid`.
+Calling it on any grid-valued vector `y` (`length(y) == length(grid)`) returns
+`y` linearly interpolated at `points`:
 
-Built once for a set of points and reused across many [`CumulativeIntegral1D`](@ref)s that
-share the same grid but carry different (e.g. parameter-dependent) nodal values, so the
-per-point grid search is hoisted out of the hot path. Query a [`CumulativeIntegral1D`](@ref)
-with `interpolate(c, q, i)` (value) and `cdf(c, q, i)` (cumulative integral), the batched
-counterparts to the scalar `interpolate(c, x0)` / `cdf(c, x0)`.
+```julia
+interp = GridInterpolator(z_samples, z_grid)
+d_l    = interp(luminosity_distance_grid)
+p      = interp(dN_dz_grid)
+```
+
+One verb for one operation, applied to as many tabulated quantities as needed — the
+per-point `searchsortedlast` is paid once at construction and reused across every
+call and every likelihood evaluation sharing the grid.
+
+Out-of-grid points are **clamped** (both the cell index and the within-cell fraction),
+matching the Python stack; they do not extrapolate. Pass `check_bounds = true` to throw
+instead. General-purpose callers get the clamping primitive; setup paths that want loud
+failure do their own range check (see `prepare_bns_madau_dickinson_model`).
+
+`y` may carry `ForwardDiff.Dual` values; the output element type is
+`promote_type(eltype(y), Float64)` so the `Float64` fractions promote correctly and an
+empty `points` set still yields a concretely-typed empty vector.
 """
-struct GridQuery
-    bin_idx::Vector{Int}
+struct GridInterpolator
+    idx::Vector{Int}
     t::Vector{Float64}
+    # Grid length, so the `@inbounds` loop below can be justified by an O(1) check
+    # instead of trusting the caller to pass a vector of the right length.
+    n_grid::Int
 end
 
-"""
-    GridQuery(points, x)
-
-Precompute the lower cell index and within-cell fraction of each point in `points`
-on grid `x` (strictly increasing, length ≥ 2). Throws if a point lies outside
-`[x[1], x[end]]`.
-"""
-function GridQuery(points::AbstractVector{<:Real}, x::AbstractVector{<:Real})
-    n_grid = length(x)
+function GridInterpolator(
+        points::AbstractVector{<:Real},
+        grid::AbstractVector{<:Real};
+        check_bounds::Bool = false
+)
+    n_grid = length(grid)
     n_grid >= 2 || throw(ArgumentError("grid must contain at least two points"))
     n = length(points)
-    bin_idx = Vector{Int}(undef, n)
+    idx = Vector{Int}(undef, n)
     t = Vector{Float64}(undef, n)
-    x_min = @inbounds x[1]
-    x_max = @inbounds x[end]
-    @inbounds for i in 1:n
-        z = points[i]
-        (x_min <= z <= x_max) || throw(
-            ArgumentError("query point $(z) lies outside grid support [$x_min, $x_max]"),
-        )
-        idx = if z == x_max
-            n_grid - 1
-        else
-            searchsortedlast(x, z)
+    x_min = @inbounds grid[1]
+    x_max = @inbounds grid[end]
+    @inbounds for k in 1:n
+        z = points[k]
+        if check_bounds && !(x_min <= z <= x_max)
+            throw(ArgumentError(
+                "query point $(z) lies outside grid support [$x_min, $x_max]"))
         end
-        idx = max(1, min(idx, n_grid - 1))
-        dz = x[idx + 1] - x[idx]
-        bin_idx[i] = idx
-        t[i] = Float64((z - x[idx]) / dz)
+        i = clamp(searchsortedlast(grid, z), 1, n_grid - 1)
+        dx = grid[i + 1] - grid[i]
+        idx[k] = i
+        # Clamping `t` as well as `i` is what makes an out-of-grid point clamp rather
+        # than extrapolate linearly off the end of the grid.
+        t[k] = clamp(Float64((z - grid[i]) / dx), 0.0, 1.0)
     end
-    return GridQuery(bin_idx, t)
+    return GridInterpolator(idx, t, n_grid)
 end
 
-"""
-    interpolate(c::CumulativeIntegral1D, q::GridQuery, i) -> Real
-
-Linear interpolation of `c.y` at the `i`-th point of `q`, reusing the precomputed cell
-location. Batched, search-free counterpart to [`interpolate`](@ref)`(c, x0)`.
-"""
-@inline function interpolate(c::CumulativeIntegral1D, q::GridQuery, i::Integer)
-    @inbounds begin
-        idx = q.bin_idx[i]
-        ti = q.t[i]
-        y = c.y
-        return y[idx] + ti * (y[idx + 1] - y[idx])
+function (g::GridInterpolator)(y::AbstractVector)
+    length(y) == g.n_grid || throw(DimensionMismatch(
+        "GridInterpolator was built on a grid of $(g.n_grid) nodes but got $(length(y)) values"))
+    out = similar(y, promote_type(eltype(y), Float64), length(g.idx))
+    @inbounds for k in eachindex(g.idx)
+        i, t = g.idx[k], g.t[k]
+        out[k] = y[i] + t * (y[i + 1] - y[i])
     end
-end
-
-"""
-    cdf(c::CumulativeIntegral1D, q::GridQuery, i) -> Real
-
-Antiderivative of the linear interpolant from `c.x[1]` to the `i`-th point of `q`, reusing
-the precomputed cell location. Batched, search-free counterpart to [`cdf`](@ref)`(c, x0)`.
-"""
-@inline function cdf(c::CumulativeIntegral1D, q::GridQuery, i::Integer)
-    @inbounds begin
-        idx = q.bin_idx[i]
-        ti = q.t[i]
-        dx = c.x[idx + 1] - c.x[idx]
-        y_lo = c.y[idx]
-        y_hi = c.y[idx + 1]
-        return _linear_cell_integral(c.cumulative[idx], y_lo, y_hi, dx, ti)
-    end
+    return out
 end

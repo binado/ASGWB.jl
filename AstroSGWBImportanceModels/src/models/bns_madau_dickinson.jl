@@ -4,15 +4,27 @@
 Prepared BNS importance model using a Madau–Dickinson source-frame merger rate,
 background cosmology `C`, and GW propagation model `P`. Detector state is intentionally
 kept in a separate `AstroSGWB.ObservationContext`.
+
+`log_Ξ_fid` is `log Ξ(z_i)` at the **fiducial** propagation, captured at prepare time
+because `merger_rate_and_log_weights` only ever sees the live `Λ`. It enters the
+log-weights as `+2 log Ξ_fid`, which is the term that makes the weights consistent with a
+flux matrix re-referenced to the fiducial GW distance by
+[`apply_gw_distance_correction!`](@ref). The two must be applied together.
 """
 struct BNSMadauDickinsonImportanceModel{
     C <: AbstractCosmology, P <: AbstractPropagation}
     z_grid::Vector{Float64}
-    query::GridQuery
+    interp::GridInterpolator
     proposal_log_pdf::Vector{Float64}
+    log_Ξ_fid::Vector{Float64}
     local_merger_rate::Float64
     observation_time::Float64
 end
+
+const _NON_GR_FIDUCIAL_NOTICE = "BNS model: non-GR fiducial propagation; log-weights " *
+                                "carry the +2 log Ξ_fid term — the flux matrix must " *
+                                "have been passed through apply_gw_distance_correction! " *
+                                "at the same fiducials"
 
 """
     bns_madau_dickinson_hyperparameters(C, P) -> Tuple{Vararg{Symbol}}
@@ -60,6 +72,12 @@ Precompute the Float64 proposal caches for the canonical BNS Madau–Dickinson i
 adapter. `local_merger_rate` is the local merger rate in events per year; `observation_time`
 is the observation duration in years (Julian year). Returns the prepared model directly.
 Construct detector state separately with `AstroSGWB.build_observation_context`.
+
+The returned model's log-weights are referenced to the **fiducial GW** luminosity
+distance, so the flux matrix passed alongside must have been through
+[`apply_gw_distance_correction!`](@ref) at the same `fiducials`. Under a `GR` (or
+`Ξ₀ = 1`) fiducial both are no-ops; otherwise a mismatch is a silent `Ξ_fid²` bias, and
+this function emits an `@info` reminder.
 """
 function prepare_bns_madau_dickinson_model(
         samples::NamedTuple,
@@ -72,23 +90,70 @@ function prepare_bns_madau_dickinson_model(
 ) where {C <: AbstractCosmology, P <: AbstractPropagation}
     z = samples.redshift
     zg = collect(Float64, z_grid)
-    query = GridQuery(z, zg)
-    prior_fid = build_redshift_prior(
-        zz -> source_frame_distribution(MadauDickinsonSourceFrame(), zz, fiducials),
-        CosmologyCache(cosmology(C, fiducials), zg))
-    norm_fid = redshift_integral(prior_fid)
-    tiny = floatmin(Float64)
-    proposal_log_pdf = [_normalized_log_density(
-                            interpolate(prior_fid.dN_dz, query, i), norm_fid, tiny)
-                        for i in eachindex(z)]
+
+    # Decision B: `GridInterpolator` itself clamps (it is a general-purpose primitive with
+    # Python-matching numerics), but a proposal sample outside the integration grid is a
+    # setup error, so report it loudly here. `all` on an empty collection is `true`, so
+    # preparing against an empty sample set still works.
+    all(zg[1] .<= z .<= zg[end]) || throw(ArgumentError(
+        "proposal redshifts must lie inside the integration grid " *
+        "[$(zg[1]), $(zg[end])]; got extrema $(extrema(z))"))
+    interp = GridInterpolator(z, zg)
+
+    proposal_log_pdf = _bns_grid_terms(C, fiducials, zg, interp).log_p::Vector{Float64}
+
+    # `Float64[...]` is load-bearing: a `Vector{Dual}` field here would poison the
+    # ForwardDiff fast path in `AstroSGWB.spectral_density`, which dispatches on
+    # `fluxes::AbstractMatrix{<:Real}`.
+    prop_fid = propagation(P, fiducials)
+    log_Ξ_fid = Float64[log(gw_em_distance_ratio(zi, prop_fid)) for zi in z]
+
+    # The call-site correction and this field are computed independently, so a call site
+    # that forgets `apply_gw_distance_correction!` under a non-GR fiducial is wrong by
+    # Ξ_fid² with no error. Never fires on a Ξ₀ = 1 corpus.
+    if any(!iszero, log_Ξ_fid)
+        @info _NON_GR_FIDUCIAL_NOTICE Ξ_fid=extrema(exp, log_Ξ_fid)
+    end
 
     return BNSMadauDickinsonImportanceModel{C, P}(
         zg,
-        query,
+        interp,
         proposal_log_pdf,
+        log_Ξ_fid,
         Float64(local_merger_rate),
         Float64(observation_time)
     )
+end
+
+"""
+    _bns_grid_terms(C, Λ, zg, interp) -> (; log_p, d_l, norm)
+
+Single source of truth for the detector-frame redshift log-density at the proposal
+samples, the interpolated EM luminosity distances, and the redshift normalizer.
+
+`prepare_bns_madau_dickinson_model` calls it with `Float64` fiducials and
+[`merger_rate_and_log_weights`](@ref) calls it with the live (possibly `ForwardDiff.Dual`)
+`Λ`. Sharing one code path is what makes `log_p_target - proposal_log_pdf` **exactly**
+`0.0` at `Λ == fiducials`; writing the formula twice would let accumulation order diverge
+by an ulp, and every posterior would then carry a spurious per-sample offset.
+"""
+function _bns_grid_terms(
+        ::Type{C},
+        Λ::NamedTuple,
+        zg::AbstractVector{<:Real},
+        interp::GridInterpolator
+) where {C <: AbstractCosmology}
+    g = distance_and_volume_grid(cosmology(C, Λ), zg)
+    sfd = source_frame_distribution.(Ref(MadauDickinsonSourceFrame()), zg, Ref(Λ))
+    dN_dz = detector_frame_merger_rate_density.(zg, g.differential_comoving_volume, sfd)
+    norm = trapz(zg, dN_dz)
+    tiny = floatmin(real(eltype(dN_dz)))
+    # Hoisted out of the broadcast: `@. interp(x)` would apply the functor elementwise.
+    p = interp(dN_dz)
+    # Decision C: the `max(…, tiny)` floor keeps NUTS away from NaN gradients where the
+    # density underflows. One broadcast, inside the adapter that needs it.
+    log_p = @. log(max(p / max(norm, tiny), tiny))
+    return (; log_p, d_l = interp(g.luminosity_distance), norm)
 end
 
 function merger_rate_and_log_weights(
@@ -96,28 +161,16 @@ function merger_rate_and_log_weights(
         Λ::NamedTuple,
         samples
 ) where {C <: AbstractCosmology, P <: AbstractPropagation}
-    z = samples.redshift
-    d_l_fid = samples.luminosity_distance
-    cache = CosmologyCache(cosmology(C, Λ), model.z_grid)
-    prop = propagation(P, Λ)
+    length(samples.redshift) == length(model.proposal_log_pdf) || throw(DimensionMismatch(
+        "model was prepared for $(length(model.proposal_log_pdf)) samples but got " *
+        "$(length(samples.redshift))"))
 
-    prior = build_redshift_prior(
-        zz -> source_frame_distribution(MadauDickinsonSourceFrame(), zz, Λ), cache)
-    norm = redshift_integral(prior)
-    tiny = floatmin(real(eltype(prior.dN_dz.y)))
+    t = _bns_grid_terms(C, Λ, model.z_grid, model.interp)
+    Ξ_θ = gw_em_distance_ratio.(samples.redshift, Ref(propagation(P, Λ)))
+    log_weights = @. t.log_p - model.proposal_log_pdf +
+                     2 * (log(samples.luminosity_distance) - log(t.d_l) - log(Ξ_θ) +
+                      model.log_Ξ_fid)
 
-    T = promote_type(redshift_logpdf_eltype(prior),
-        typeof(gw_em_distance_ratio(zero(eltype(z)), prop)))
-    log_weights = Vector{T}(undef, length(z))
-    @inbounds for i in eachindex(z)
-        log_p_target = _normalized_log_density(
-            interpolate(prior.dN_dz, model.query, i), norm, tiny)
-        d_l_θ = luminosity_distance_at_sample(cache, model.query, z, i)
-        Ξ_θ = gw_em_distance_ratio(z[i], prop)
-        log_weights[i] = (log_p_target - model.proposal_log_pdf[i]) +
-                         2 * log(d_l_fid[i]) - 2 * log(d_l_θ) - 2 * log(Ξ_θ)
-    end
-
-    rate = merger_rate_per_sec(prior, model.local_merger_rate, model.observation_time)
+    rate = merger_rate_per_sec(t.norm, model.local_merger_rate, model.observation_time)
     return (rate, log_weights)
 end

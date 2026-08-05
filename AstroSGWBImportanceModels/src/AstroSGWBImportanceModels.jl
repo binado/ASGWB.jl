@@ -10,25 +10,21 @@ module AstroSGWBImportanceModels
 import AstroSGWBInference: hyperparameters, merger_rate_and_log_weights
 using CBCDistributions:
                         DEFAULT_Z_GRID,
-                        GridQuery,
                         MadauDickinsonSourceFrame,
-                        _normalized_log_density,
-                        build_redshift_prior,
-                        interpolate,
+                        detector_frame_merger_rate_density,
                         merger_rate_per_sec,
-                        redshift_integral,
-                        redshift_logpdf_eltype,
                         source_frame_distribution
 import Cosmology
 using Cosmology:
                  AbstractCosmology,
                  AbstractPropagation,
-                 CosmologyCache,
+                 GridInterpolator,
                  cosmology,
+                 distance_and_volume_grid,
                  gw_em_distance_ratio,
                  luminosity_distance,
-                 luminosity_distance_at_sample,
-                 propagation
+                 propagation,
+                 trapz
 
 export BNSMadauDickinsonImportanceModel,
        bns_madau_dickinson_hyperparameters,

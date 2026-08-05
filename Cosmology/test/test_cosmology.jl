@@ -57,6 +57,48 @@ end
     end
 end
 
+@testset "apply_gw_distance_correction" begin
+    z = [0.1, 0.5, 2.0]
+    fluxes = Float64[1.0 2.0 3.0
+                     4.0 5.0 6.0]
+    p_mod = ModifiedPropagation(1.4, 0.7)
+
+    # GR is a true no-op and the bang form hands back the same object.
+    gr_in = copy(fluxes)
+    @test apply_gw_distance_correction!(gr_in, z, GR()) === gr_in
+    @test gr_in == fluxes
+
+    # ModifiedPropagation divides column j by Ξ(z[j])².
+    expected = reduce(hcat,
+        [fluxes[:, j] ./ gw_em_distance_ratio(z[j], p_mod)^2 for j in eachindex(z)])
+    @test apply_gw_distance_correction(fluxes, z, p_mod) ≈ expected
+    # Ξ₀ = 1 makes ModifiedPropagation exactly the identity too.
+    @test apply_gw_distance_correction(fluxes, z, ModifiedPropagation(1.0, 0.7)) == fluxes
+
+    # Out-of-place never aliases or mutates its input; the bang form mutates in place.
+    untouched = copy(fluxes)
+    out = apply_gw_distance_correction(fluxes, z, p_mod)
+    @test out !== fluxes
+    @test fluxes == untouched
+    bang_target = copy(fluxes)
+    @test apply_gw_distance_correction!(bang_target, z, p_mod) === bang_target
+    @test bang_target ≈ expected
+
+    # Not idempotent: a second application squares the factor. Documented, and the
+    # reason notebook call sites use the out-of-place form.
+    @test apply_gw_distance_correction!(copy(expected), z, p_mod) ≈
+          reduce(hcat,
+        [fluxes[:, j] ./ gw_em_distance_ratio(z[j], p_mod)^4 for j in eachindex(z)])
+
+    # A redshift vector that does not match the flux columns (e.g. a subsetted sample
+    # set) is caught rather than silently correcting only a prefix — including under GR.
+    @test_throws DimensionMismatch apply_gw_distance_correction!(copy(fluxes), z[1:2],
+        p_mod)
+    @test_throws DimensionMismatch apply_gw_distance_correction!(copy(fluxes), z[1:2],
+        GR())
+    @test_throws DimensionMismatch apply_gw_distance_correction(fluxes, [z; 3.0], p_mod)
+end
+
 @testset "cosmology hyperparameters and cosmology" begin
     @test hyperparameters(LambdaCDM) == (:H0, :Ωm)
     @test hyperparameters(W0CDM) == (:H0, :Ωm, :w0)
@@ -265,38 +307,153 @@ end
     end
 end
 
-@testset "GridQuery batched accessors" begin
+@testset "trapz / cumtrapz" begin
+    # Linear integrand: the trapezoidal rule is exact, so compare to the antiderivative.
+    x = [0.0, 1.0, 2.0]
+    y = @. 2.0 + 3.0 * x
+    @test cumtrapz(x, y) ≈ [0.0, 2.0 + 1.5, 4.0 + 6.0]
+    @test trapz(x, y) ≈ 2.0 * 2.0 + 1.5 * 2.0^2
+
+    # The load-bearing identity: same accumulation order, so bit-for-bit equal.
+    xr = collect(LinRange(1e-3, 20.0, 256))
+    yr = @. exp(-xr) * (2 + sin(7xr))
+    @test trapz(xr, yr) === last(cumtrapz(xr, yr))
+    @test cumtrapz(xr, yr)[1] == 0.0
+
+    # …and equal to what `CumulativeIntegral1D` stores, which now shares the same kernel.
+    @test cumtrapz(xr, yr) == CumulativeIntegral1D(xr, yr).cumulative
+    @test trapz(xr, yr) === normalizer(CumulativeIntegral1D(xr, yr))
+
+    @test_throws ArgumentError trapz([0.0, 1.0], [1.0])
+    @test_throws ArgumentError cumtrapz([0.0, 1.0], [1.0])
+
+    # Duals propagate and the eltype follows `y`.
+    yd = ForwardDiff.Dual{Nothing}.(yr, 1.0)
+    @test eltype(cumtrapz(xr, yd)) <: ForwardDiff.Dual
+    @test trapz(xr, yd) isa ForwardDiff.Dual
+end
+
+@testset "distance_and_volume_grid" begin
+    z_grid = collect(LinRange(1e-3, 20.0, 256))
+
+    # The load-bearing test: agreement with the `CosmologyCache` scalar path at every
+    # node. NOT against quadgk — `luminosity_distance(z, ::AbstractCosmology)` and
+    # `luminosity_distance(z, ::CosmologyCache)` differ by ~1% at z = 0.1 because this
+    # grid starts at 1e-3 rather than 0, which is a separate (real) systematic.
+    for c in (LambdaCDM(67.0, 0.315), W0CDM(67.0, 0.315, -0.9),
+        W0WaCDM(67.0, 0.315, -0.9, 0.2))
+        g = distance_and_volume_grid(c, z_grid)
+        cache = CosmologyCache(c, z_grid)
+        @test g.comoving_distance ≈ comoving_distance.(z_grid, Ref(cache)) rtol = 1e-12
+        @test g.luminosity_distance ≈ luminosity_distance.(z_grid, Ref(cache)) rtol = 1e-12
+        # `d_h · d_c² · inv_E` vs `d_h · d_c² / E(z)`: equal to ~1 ulp, and that ulp is
+        # exactly the saved `E(z)` evaluation.
+        @test g.differential_comoving_volume ≈
+              differential_comoving_volume.(z_grid, Ref(cache)) rtol = 1e-12
+    end
+
+    # ForwardDiff through the cosmology parameters, matching the cache path.
+    for (name, build, x0) in (
+        (:Ωm, v -> LambdaCDM(67.0, v), 0.315),
+        (:H0, v -> LambdaCDM(v, 0.315), 67.0)
+    )
+        f_grid = v -> sum(distance_and_volume_grid(build(v), z_grid).luminosity_distance)
+        f_cache = v -> sum(luminosity_distance.(z_grid, Ref(CosmologyCache(build(v),
+            z_grid))))
+        d = ForwardDiff.derivative(f_grid, x0)
+        @test isfinite(d)
+        @test d != 0.0
+        @test d ≈ ForwardDiff.derivative(f_cache, x0) rtol = 1e-12
+    end
+end
+
+@testset "GridInterpolator" begin
     c = LambdaCDM(67.0, 0.315)
     z_grid = collect(LinRange(0.0, 2.0, 101))
-    cache = CosmologyCache(c, z_grid)
-    ci = cache.inv_E_integral
-    samples = [0.0, 0.137, 0.9, 2.0]
-    query = GridQuery(samples, z_grid)
+    ci = CumulativeIntegral1D(z_grid, w -> inv(E(w, c)))
+    points = [0.0, 0.137, 0.9, 2.0]
 
-    @testset "batched interpolate/cdf match scalar verbs" begin
-        @test [interpolate(ci, query, i) for i in eachindex(samples)] ≈
-              [interpolate(ci, z) for z in samples]
-        @test [cdf(ci, query, i) for i in eachindex(samples)] ≈
-              [cdf(ci, z) for z in samples]
-    end
-
-    @testset "luminosity_distance_at_sample matches scalar cache path" begin
-        @test [luminosity_distance_at_sample(cache, query, samples, i)
-               for i in eachindex(samples)] ≈
-              [luminosity_distance(z, cache) for z in samples]
-    end
-
-    @testset "out-of-grid points throw" begin
-        @test_throws ArgumentError GridQuery([-0.1], z_grid)
-        @test_throws ArgumentError GridQuery([2.1], z_grid)
-    end
-
-    @testset "ForwardDiff Duals propagate through batched cdf" begin
-        f = Ωm -> begin
-            cache2 = CosmologyCache(LambdaCDM(67.0, Ωm), z_grid)
-            sum(luminosity_distance_at_sample(cache2, query, samples, i)
-            for i in eachindex(samples))
+    @testset "batched interpolation matches the scalar verb" begin
+        interp = GridInterpolator(points, z_grid)
+        # Cross-check against the scalar `interpolate(c, x0)`, the coverage the deleted
+        # `interpolate(c, ::GridQuery, i)` testset used to provide.
+        @test interp(ci.y) ≈ [interpolate(ci, z) for z in points]
+        # Bit-for-bit against the formula itself: `y[i] + t*(y[i+1] - y[i])`, no `muladd`
+        # (which could contract to an FMA and shift the last bit).
+        expected_ci = map(points) do z
+            i = clamp(searchsortedlast(z_grid, z), 1, length(z_grid) - 1)
+            t = (z - z_grid[i]) / (z_grid[i + 1] - z_grid[i])
+            ci.y[i] + t * (ci.y[i + 1] - ci.y[i])
         end
-        @test isfinite(ForwardDiff.derivative(f, 0.315))
+        @test interp(ci.y) == expected_ci
+
+        # A plain functor over any grid-valued vector, not just `ci.y`.
+        g = distance_and_volume_grid(c, z_grid)
+        expected = map(points) do z
+            i = clamp(searchsortedlast(z_grid, z), 1, length(z_grid) - 1)
+            t = (z - z_grid[i]) / (z_grid[i + 1] - z_grid[i])
+            y = g.luminosity_distance
+            y[i] + t * (y[i + 1] - y[i])
+        end
+        @test interp(g.luminosity_distance) == expected
+    end
+
+    @testset "plain linear d_L, not the exact within-cell antiderivative" begin
+        # Decision A. Interpolating the tabulated `d_L` linearly is NOT the same as
+        # `luminosity_distance(z, c, ci)`, which integrates 1/E exactly within the cell.
+        # Linear-interpolation error is O(Δz²·f″) in absolute terms, but d_L → 0 as
+        # z → 0, so the *relative* error carries a 1/z factor and is largest at low z.
+        # This is the intended behaviour — it matches the Python stack — so pin it.
+        interp = GridInterpolator(points, z_grid)
+        g = distance_and_volume_grid(c, z_grid)
+        linear = interp(g.luminosity_distance)
+        exact = [luminosity_distance(z, c, ci) for z in points]
+
+        # Nodes agree exactly (t == 0 kills both interpolants' cell terms).
+        @test linear[1] == exact[1]
+        @test linear[4] ≈ exact[4] rtol = 1e-13
+        # Mid-cell at low z: linear over-estimates by O(1e-4) relative here (Δz = 0.02);
+        # on DEFAULT_Z_GRID (Δz ≈ 0.0784) the same effect reaches O(1e-2).
+        @test linear[2] != exact[2]
+        @test linear[2] ≈ exact[2] rtol = 1e-3
+        @test linear[2] > exact[2]
+    end
+
+    @testset "clamps out-of-grid points in both directions" begin
+        interp = GridInterpolator([-5.0, 7.0], z_grid)
+        y = collect(Float64, 1:101)
+        # Clamped, not extrapolated: the grid's own endpoint values come back.
+        @test interp(y) == [y[1], y[end]]
+        @test_throws ArgumentError GridInterpolator([-0.1], z_grid; check_bounds = true)
+        @test_throws ArgumentError GridInterpolator([2.1], z_grid; check_bounds = true)
+        @test_throws ArgumentError GridInterpolator([0.5], [1.0])
+    end
+
+    @testset "empty points give a concretely-typed empty vector" begin
+        interp = GridInterpolator(Float64[], z_grid)
+        out = interp(ci.y)
+        @test isempty(out)
+        @test eltype(out) === Float64
+        dual_y = ForwardDiff.Dual{Nothing}.(ci.y, 1.0)
+        @test eltype(interp(dual_y)) <: ForwardDiff.Dual
+        # Integer-valued grids promote rather than truncating against the Float64 t.
+        @test eltype(GridInterpolator([0.5], [0.0, 1.0])(collect(1:2))) === Float64
+        @test GridInterpolator([0.5], [0.0, 1.0])(collect(1:2)) == [1.5]
+    end
+
+    @testset "ForwardDiff propagates through interpolated values" begin
+        interp = GridInterpolator(points, z_grid)
+        f = Ωm -> sum(interp(distance_and_volume_grid(LambdaCDM(67.0, Ωm),
+            z_grid).luminosity_distance))
+        d = ForwardDiff.derivative(f, 0.315)
+        @test isfinite(d)
+        h = 1e-6
+        @test d ≈ (f(0.315 + h) - f(0.315 - h)) / (2h) rtol = 1e-6
+        @test eltype(interp(ForwardDiff.Dual{Nothing}.(ci.y, 1.0))) <: ForwardDiff.Dual
+    end
+
+    @testset "length mismatch against the grid is caught" begin
+        interp = GridInterpolator(points, z_grid)
+        @test_throws DimensionMismatch interp(collect(Float64, 1:100))
     end
 end

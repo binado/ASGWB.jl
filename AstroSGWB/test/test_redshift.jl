@@ -52,17 +52,23 @@ end
         cosmology_cache
     )
     samples = [0.0, 0.137, 0.9, 2.0]
-    query = GridQuery(samples, z_grid)
+    interp = GridInterpolator(samples, z_grid)
 
-    @test [interpolate(redshift_prior_dist.dN_dz, query, i)
-           for i in eachindex(samples)] ≈
+    # Batched interpolation of a *physical* dN_dz grid agrees with the scalar verb.
+    @test interp(redshift_prior_dist.dN_dz.y) ≈
           [interpolate(redshift_prior_dist.dN_dz, z) for z in samples]
-    @test [cdf(cosmology_cache.inv_E_integral, query, i)
-           for i in eachindex(samples)] ≈
-          [cdf(cosmology_cache.inv_E_integral, z) for z in samples]
-    @test [luminosity_distance_at_sample(cosmology_cache, query, samples, i)
-           for i in eachindex(samples)] ≈
-          [luminosity_distance(z, cosmology_cache) for z in samples]
-    @test_throws ArgumentError GridQuery([-0.1], z_grid)
-    @test_throws ArgumentError GridQuery([2.1], z_grid)
+
+    # Interpolating the tabulated distances is the inference hot path's `d_L`. It is
+    # deliberately linear rather than the exact within-cell antiderivative
+    # `luminosity_distance(z, cache)` uses, so agreement is loose at low z by design.
+    grid = distance_and_volume_grid(cosmo, z_grid)
+    @test interp(grid.luminosity_distance) ≈
+          [luminosity_distance(z, cosmology_cache) for z in samples] rtol = 1e-3
+
+    # The sampling path still routes through CosmologyCache + the exact antiderivative.
+    @test [cdf(cosmology_cache.inv_E_integral, z) for z in samples] ≈
+          [comoving_distance(z, cosmo) / cosmology_cache.d_h for z in samples] rtol = 1e-3
+
+    @test_throws ArgumentError GridInterpolator([-0.1], z_grid; check_bounds = true)
+    @test_throws ArgumentError GridInterpolator([2.1], z_grid; check_bounds = true)
 end

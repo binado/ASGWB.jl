@@ -138,6 +138,16 @@ begin
         catalog.samples, :inclination)
 
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
+
+    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
+    # The out-of-place form is deliberate: Pluto re-runs cells reactively and the
+    # correction is not idempotent, so mutating `catalog.fluxes` here would compound to
+    # Ξ⁻⁴, Ξ⁻⁶, ... on every re-execution. Downstream cells use `fluxes`, not
+    # `catalog.fluxes`.
+    fluxes = apply_gw_distance_correction(
+        catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
+
     model = prepare_bns_madau_dickinson_model(
         samples,
         fiducials,
@@ -230,7 +240,7 @@ function plot_fiducial_omega_gw(model, fluxes, samples, fiducials, observation)
 end
 
 # ╔═╡ 5f9a8b7c-0e1d-4a2f-3b6c-7d8e9f0a1b2c
-plot_fiducial_omega_gw(model, catalog.fluxes, samples, fiducials, observation)
+plot_fiducial_omega_gw(model, fluxes, samples, fiducials, observation)
 
 # ╔═╡ ccf43d43-7f31-41e9-85db-12842561973c
 md"""
@@ -254,7 +264,7 @@ begin
         @info "starting NUTS" nadapts=sampler.nadapts nsamples=sampler.nsamples target_acceptance=sampler.target_acceptance ad_backend=sampler.ad_backend sample_only=sample_only_tup
         turing_model = build_turing_model(
             model,
-            catalog.fluxes,
+            fluxes,
             samples,
             fiducials,
             observation,

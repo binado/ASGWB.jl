@@ -117,6 +117,13 @@ begin
     C = W0CDM
     P = ModifiedPropagation
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
+
+    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
+    # Out-of-place on purpose: the correction is not idempotent and Pluto re-runs cells.
+    fluxes = apply_gw_distance_correction(
+        catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
+
     prepared_model = prepare_bns_madau_dickinson_model(
         samples,
         fiducials,
@@ -137,7 +144,7 @@ begin
 
     @info "using fiducial in-band spectrum from cache as observed data"
     observed = fiducial_spectral_density(
-        prepared_model, catalog.fluxes, samples, fiducials;
+        prepared_model, fluxes, samples, fiducials;
         average_mode = resolved_average_mode)
 
     nothing
@@ -153,7 +160,7 @@ Wrap the conditioned Turing model with `DynamicPPL.LogDensityFunction` (non-link
 # ╔═╡ de9f8a7b-0c1d-4e2f-8031-5c6d7e8f9a0b
 begin
     model = build_turing_model(
-        prepared_model, catalog.fluxes, samples, fiducials, observation, hyperprior;
+        prepared_model, fluxes, samples, fiducials, observation, hyperprior;
         track = false, observed = observed, average_mode = resolved_average_mode)
     conditioned = condition_turing_model(model, fiducials, hyperprior, sample_only_tup)
     lf = DynamicPPL.LogDensityFunction(conditioned)

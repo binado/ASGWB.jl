@@ -2,8 +2,15 @@
     SGWBCatalog{S<:NamedTuple}
 
 Waveform catalog reduced for SGWB inference: the shared frequency axis, per-sample
-per-frequency polarization power `|h₊|² + |h×|²` (before the fiducial `(D_L/D_gw)²`
-scaling), and the per-sample source parameters that produced it.
+per-frequency polarization power `|h₊|² + |h×|²`, and the per-sample source parameters
+that produced it.
+
+As loaded, `fluxes` is referenced to the **electromagnetic** luminosity distance, i.e.
+before the fiducial `(D_L/D_gw)²` scaling. Callers re-reference it to the fiducial GW
+distance with [`apply_gw_distance_correction!`](@ref) before preparing an importance
+model; after an in-place call the field is no longer EM-referenced, and because the
+correction is not idempotent a second call on the same object squares the factor. Use
+the out-of-place [`apply_gw_distance_correction`](@ref) where a cell or block may re-run.
 
 `samples` is a NamedTuple whose keys are the source-parameter column names (e.g.
 `:mass_1_source`, `:redshift`, `:inclination`, ...). `fluxes` has shape
@@ -25,6 +32,21 @@ end
 
 nsamples(c::SGWBCatalog) = size(c.fluxes, 2)
 nfreq(c::SGWBCatalog) = size(c.fluxes, 1)
+
+"""
+    apply_gw_distance_correction!(catalog::SGWBCatalog, prop) -> catalog
+
+Re-reference `catalog.fluxes` in place to the fiducial GW luminosity distance, pairing
+the flux matrix with the catalog's own `redshift` column. This is the form to prefer at
+call sites: it removes the one way the correction can go mechanically wrong, namely
+pairing the flux matrix with a redshift vector that has been subsetted or reordered.
+
+Not idempotent — see [`Cosmology.apply_gw_distance_correction!`](@ref).
+"""
+function apply_gw_distance_correction!(c::SGWBCatalog, prop::AbstractPropagation)
+    apply_gw_distance_correction!(c.fluxes, c.samples.redshift, prop)
+    return c
+end
 
 """
     average_mode(catalog::SGWBCatalog) -> AbstractAverageMode

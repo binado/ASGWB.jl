@@ -234,6 +234,11 @@ function parity_problem_context(variant::Symbol, detectors)
         _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5))
     end
     samples = parity_bns_samples_from_catalog(catalog.samples)
+    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # `+2 log Ξ_fid` term the importance model's log-weights carry. Every parity variant
+    # uses Ξ₀ = 1, so this is currently a no-op; the bang form is safe because each call
+    # re-reads `catalog.h5` from scratch.
+    apply_gw_distance_correction!(catalog, propagation(P, Λ))
     kw = parity_observation_kwargs(variant)
     observation = build_observation_context(
         catalog.frequencies, Vector{Detector}(collect(detectors)),
