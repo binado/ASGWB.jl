@@ -126,8 +126,16 @@ begin
     end
 
     @info "loading catalog" catalog_path detectors = join((d.name for d in detectors), ",")
-    loaded = load_catalog(catalog_path)
-    catalog = loaded.catalog
+    catalog = load_catalog(catalog_path)
+
+    # Inclination-averaging convention derived from the catalog's `inclination`
+    # column: all-zero means face-on waveforms (analytic 2/5 average), anything
+    # else means the catalog already averages over ι. A catalog with no such
+    # column falls back to `AnalyticInclination()`. Replace with an explicit
+    # `AnalyticInclination()` / `CatalogInclination()` to override.
+    resolved_average_mode = average_mode(catalog)
+    @info "average mode" mode=string(resolved_average_mode) has_inclination_column=haskey(
+        catalog.samples, :inclination)
 
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
     model = prepare_bns_madau_dickinson_model(
@@ -139,8 +147,7 @@ begin
         local_merger_rate = local_merger_rate
     )
     observation = build_observation_context(
-        frequencies(loaded.metadata.grid), detectors,
-        in_band_mask(loaded.metadata.grid), observation_time)
+        catalog.frequencies, detectors, catalog.in_band_mask, observation_time)
     order = hyperparameters(model)
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
@@ -252,7 +259,8 @@ begin
             fiducials,
             observation,
             hyperprior;
-            track = false
+            track = false,
+            average_mode = resolved_average_mode
         )
         conditioned = condition_turing_model(
             turing_model,
@@ -345,10 +353,11 @@ begin
     using AstroSGWB
     using AstroSGWB:
                      Detector,
-                     frequencies,
-                     in_band_mask,
                      build_observation_context,
                      load_catalog,
+                     average_mode,
+                     AnalyticInclination,
+                     CatalogInclination,
                      W0CDM,
                      ModifiedPropagation,
                      spectral_density,

@@ -62,3 +62,8 @@ AstroSGWBInference/out-test/
 AstroSGWBInference/build/
 AstroSGWBInference/deps/build.log
 AstroSGWBInference/deps/parity_precompile.h5
+
+# Cross-language catalog parity fixture (generate with
+# `../astrogwb/.venv/bin/python3 scripts/generate_catalog_parity_fixture.py`)
+AstroSGWB/test/fixtures/catalog_parity_reference.h5
+AstroSGWB/test/fixtures/catalog_parity_reference.npz

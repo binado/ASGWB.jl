@@ -1,12 +1,21 @@
 # Test-only synthetic catalog fixtures. Include after `using AstroSGWB` (see `runtests.jl`).
 
+import PlusCross
+
 if !@isdefined ParityBNSPopulation
     include(joinpath(@__DIR__, "fixture_population.jl"))
 end
 
-const _PARITY_COMMAND = "AstroSGWB/test/parity_test_cache.jl (generated test catalog)"
-const _PARITY_GIT_REVISION = "parity-snapshots"
-const _PARITY_FREQUENCY_GRID = FrequencyGrid(0.05, 80.0, 20.0, 15.0, 40.0)
+const _PARITY_APPROXIMANT = "IMRPhenomPV2_NRTidalv2"
+
+# The frequency axis and band edges are stored in the catalog file, not derived
+# from `(duration, sampling_frequency)`, so they are written out literally here.
+# The mask these produce is `[false, true, true]`.
+const _PARITY_FREQUENCIES = [0.0, 20.0, 40.0]
+const _PARITY_MINIMUM_FREQUENCY = 15.0
+const _PARITY_MAXIMUM_FREQUENCY = 40.0
+const _PARITY_REFERENCE_FREQUENCY = 20.0
+const _PARITY_SAMPLING_FREQUENCY = 80.0
 
 function _parity_hyperparameters(C, P, pop, overrides::NamedTuple = NamedTuple())
     defaults = (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
@@ -28,6 +37,8 @@ function _write_parity_catalog!(dir::String, variant::Symbol)
         _write_full_intrinsic_catalog(dir)
     elseif variant == :importance_context || variant == :posterior_v2_minimal
         _write_importance_context_catalog(dir)
+    elseif variant == :sampled_inclination
+        _write_sampled_inclination_catalog(dir)
     elseif variant == :w0cdm
         _write_w0cdm_catalog(dir)
     else
@@ -36,9 +47,47 @@ function _write_parity_catalog!(dir::String, variant::Symbol)
     return dir
 end
 
-function _write_catalog_h5(dir, catalog)
+"""
+    parity_polarizations(cached_flux) -> (plus, cross)
+
+Synthesize complex polarizations whose power `|h₊|² + |h×|²` reproduces
+`cached_flux`. The v1 format stores the fundamental artifact rather than the
+reduction, so fixtures that want a particular flux must back-solve for one.
+
+Putting all the power in `h₊` makes `plus = sqrt(cached_flux)` the obvious
+choice; note that `abs2 ∘ sqrt` is only bit-exact when the square root is
+exactly representable (0.0, 1.0, 3.5, 4.0 among the values used here) and is
+otherwise correct to 1 ulp, so compare recovered fluxes with `≈`.
+"""
+function parity_polarizations(cached_flux::AbstractMatrix{<:Real})
+    return ComplexF64.(sqrt.(cached_flux)), zeros(ComplexF64, size(cached_flux))
+end
+
+"""
+    _write_catalog_h5(dir, samples, cached_flux; inclination=nothing) -> String
+
+Write a `waveform_catalog` v1 fixture reducing to `cached_flux`. `inclination`
+defaults to an all-zero column, so [`average_mode`](@ref) derives
+`AnalyticInclination()`; pass a non-zero column to exercise the other branch.
+"""
+function _write_catalog_h5(dir, samples::NamedTuple, cached_flux::AbstractMatrix{<:Real};
+        inclination = nothing)
     path = joinpath(dir, "catalog.h5")
-    save_catalog(path, catalog)
+    n = size(cached_flux, 2)
+    incl = isnothing(inclination) ? zeros(n) : collect(Float64, inclination)
+    plus, cross = parity_polarizations(cached_flux)
+    catalog = PlusCross.WaveformCatalog(;
+        frequencies = _PARITY_FREQUENCIES,
+        plus = plus,
+        cross = cross,
+        source_parameters = merge(samples, (inclination = incl,)),
+        approximant = _PARITY_APPROXIMANT,
+        minimum_frequency = _PARITY_MINIMUM_FREQUENCY,
+        maximum_frequency = _PARITY_MAXIMUM_FREQUENCY,
+        reference_frequency = _PARITY_REFERENCE_FREQUENCY,
+        sampling_frequency = _PARITY_SAMPLING_FREQUENCY
+    )
+    PlusCross.save_catalog(path, catalog)
     return path
 end
 
@@ -72,13 +121,8 @@ function _write_posterior_catalog(dir)
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
     )
-    grid = _PARITY_FREQUENCY_GRID
     cached_flux = Float64[0.0 0.0; 1.0 4.0; 2.0 5.0]
-    metadata = WaveformCatalogMetadata(
-        "IMRPhenomPV2_NRTidalv2", :BNS, grid, _PARITY_GIT_REVISION, _PARITY_COMMAND
-    )
-    catalog = WaveformCatalog(samples, cached_flux)
-    _write_catalog_h5(dir, WaveformCatalogFile(catalog, metadata))
+    _write_catalog_h5(dir, samples, cached_flux)
     return dir
 end
 
@@ -95,15 +139,10 @@ function _write_full_intrinsic_catalog(dir)
         lambda2 = [300.0, 600.0, 700.0, 1500.0],
         luminosity_distances = [430.0, 880.0, 1350.0, 2300.0]
     )
-    grid = _PARITY_FREQUENCY_GRID
     cached_flux = Float64[0.0 0.0 0.0 0.0
                           1.0 1.5 2.0 2.5
                           2.0 2.5 3.0 3.5]
-    metadata = WaveformCatalogMetadata(
-        "IMRPhenomPV2_NRTidalv2", :BNS, grid, _PARITY_GIT_REVISION, _PARITY_COMMAND
-    )
-    catalog = WaveformCatalog(samples, cached_flux)
-    _write_catalog_h5(dir, WaveformCatalogFile(catalog, metadata))
+    _write_catalog_h5(dir, samples, cached_flux)
     return dir
 end
 
@@ -116,13 +155,22 @@ function _write_importance_context_catalog(dir)
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
     )
-    grid = _PARITY_FREQUENCY_GRID
     cached_flux = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
-    metadata = WaveformCatalogMetadata(
-        "IMRPhenomPV2_NRTidalv2", :BNS, grid, _PARITY_GIT_REVISION, _PARITY_COMMAND
+    _write_catalog_h5(dir, samples, cached_flux)
+    return dir
+end
+
+"""
+Same payload as [`_write_importance_context_catalog`](@ref) but with a sampled
+`inclination` column, so [`average_mode`](@ref) derives `CatalogInclination()`.
+"""
+function _write_sampled_inclination_catalog(dir)
+    samples = _make_bns_samples(
+        [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
+        luminosity_distances = [430.0, 880.0]
     )
-    catalog = WaveformCatalog(samples, cached_flux)
-    _write_catalog_h5(dir, WaveformCatalogFile(catalog, metadata))
+    cached_flux = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    _write_catalog_h5(dir, samples, cached_flux; inclination = [0.0, 0.7])
     return dir
 end
 
@@ -135,13 +183,8 @@ function _write_w0cdm_catalog(dir)
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
     )
-    grid = _PARITY_FREQUENCY_GRID
     cached_flux = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
-    metadata = WaveformCatalogMetadata(
-        "IMRPhenomPV2_NRTidalv2", :BNS, grid, _PARITY_GIT_REVISION, _PARITY_COMMAND
-    )
-    catalog = WaveformCatalog(samples, cached_flux)
-    _write_catalog_h5(dir, WaveformCatalogFile(catalog, metadata))
+    _write_catalog_h5(dir, samples, cached_flux)
     return dir
 end
 
@@ -179,7 +222,7 @@ data.
 """
 function parity_problem_context(variant::Symbol, detectors)
     dir = parity_catalog_dir(variant)
-    loaded = load_catalog(joinpath(dir, "catalog.h5"))
+    catalog = load_catalog(joinpath(dir, "catalog.h5"))
     pop = ParityBNSPopulation()
     C = variant == :w0cdm ? W0CDM : LambdaCDM
     P = ModifiedPropagation
@@ -190,17 +233,17 @@ function parity_problem_context(variant::Symbol, detectors)
     else
         _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5))
     end
-    catalog = loaded.catalog
     samples = parity_bns_samples_from_catalog(catalog.samples)
     kw = parity_observation_kwargs(variant)
     observation = build_observation_context(
-        frequencies(loaded.metadata.grid), Vector{Detector}(collect(detectors)),
-        in_band_mask(loaded.metadata.grid), kw.observation_time)
+        catalog.frequencies, Vector{Detector}(collect(detectors)),
+        catalog.in_band_mask, kw.observation_time)
     return (;
         fluxes = catalog.fluxes,
         samples = samples,
         fiducials = Λ,
-        observation = observation)
+        observation = observation,
+        average_mode = average_mode(catalog))
 end
 
 """
@@ -210,7 +253,8 @@ Return the directory containing `catalog.h5` for `variant`.
 The catalog is generated lazily on first call.
 
 Variants: `:posterior`, `:full_intrinsic`, `:importance_context`,
-`:posterior_v2_minimal` (alias for `:importance_context`), `:w0cdm`.
+`:posterior_v2_minimal` (alias for `:importance_context`), `:sampled_inclination`,
+`:w0cdm`.
 """
 function parity_catalog_dir(variant::Symbol)
     get(_PARITY_CATALOG_DIRS, variant) do
@@ -230,6 +274,8 @@ function resolve_parity_catalog_dir(path::AbstractString)
         return parity_catalog_dir(:importance_context)
     elseif path == "parity:posterior_v2_minimal"
         return parity_catalog_dir(:posterior_v2_minimal)
+    elseif path == "parity:sampled_inclination"
+        return parity_catalog_dir(:sampled_inclination)
     elseif path == "parity:w0cdm"
         return parity_catalog_dir(:w0cdm)
     end

@@ -16,8 +16,9 @@ using AstroSGWB
 using AstroSGWB:
                  canonical_hyperparameters,
                  load_catalog,
-                 frequencies,
-                 in_band_mask,
+                 average_mode,
+                 AnalyticInclination,
+                 CatalogInclination,
                  build_observation_context,
                  ModifiedPropagation,
                  W0CDM,
@@ -48,6 +49,18 @@ using Dates: now, format
 # propagation `P` are now orthogonal axes.
 const C = W0CDM
 const P = ModifiedPropagation
+
+# Inclination-averaging convention of the catalog. `nothing` derives it from the
+# catalog's own `inclination` column via `AstroSGWB.average_mode`: an all-zero
+# column means face-on waveforms and the analytic 2/5 average, anything else
+# means the catalog already averages over ι. Set this to `AnalyticInclination()`
+# or `CatalogInclination()` to override the derived value.
+#
+# A catalog with no `inclination` column at all falls back to
+# `AnalyticInclination()`. Every gwmock-pop catalog emits the column, so that
+# fallback only bites on hand-built or pre-gwmock files -- the resolved value is
+# logged below so a surprising fallback is visible in the run log.
+const AVERAGE_MODE = nothing
 
 # Hard-coded hyperprior bounds (matching notebooks/mcmc.jl).
 const HYPERPRIOR = product_distribution((
@@ -127,8 +140,10 @@ function run_mcmc(config_file::String)
     Random.seed!(cfg.seed)
 
     @info "loading catalog" catalog_path detectors=join((d.name for d in detectors), ",")
-    loaded = load_catalog(catalog_path)
-    catalog = loaded.catalog
+    catalog = load_catalog(catalog_path)
+    resolved_average_mode = AVERAGE_MODE === nothing ? average_mode(catalog) : AVERAGE_MODE
+    @info "average mode" mode=string(resolved_average_mode) derived=(AVERAGE_MODE===nothing) has_inclination_column=haskey(
+        catalog.samples, :inclination)
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
     model = prepare_bns_madau_dickinson_model(
         samples,
@@ -139,8 +154,7 @@ function run_mcmc(config_file::String)
         local_merger_rate = cfg.local_merger_rate
     )
     observation = build_observation_context(
-        frequencies(loaded.metadata.grid), detectors,
-        in_band_mask(loaded.metadata.grid), cfg.observation_time)
+        catalog.frequencies, detectors, catalog.in_band_mask, cfg.observation_time)
     @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(
         samples.redshift,
     )
@@ -163,7 +177,8 @@ function run_mcmc(config_file::String)
         fiducials,
         observation,
         HYPERPRIOR;
-        track = true
+        track = true,
+        average_mode = resolved_average_mode
     )
     conditioned = condition_turing_model(
         turing_model,

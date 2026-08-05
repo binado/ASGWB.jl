@@ -8,7 +8,10 @@ using .InferenceImpl:
                       build_turing_model,
                       condition_turing_model,
                       loglikelihood,
-                      logposterior
+                      logposterior,
+                      AbstractAverageMode,
+                      AnalyticInclination,
+                      CatalogInclination
 
 export hyperparameters,
        merger_rate_and_log_weights,
@@ -17,6 +20,9 @@ export hyperparameters,
        condition_turing_model,
        loglikelihood,
        logposterior,
+       AbstractAverageMode,
+       AnalyticInclination,
+       CatalogInclination,
        atomic_save_chain,
        MCMCConfig,
        SamplerConfig,

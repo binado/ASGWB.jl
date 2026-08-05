@@ -36,8 +36,7 @@ using AstroSGWB:
                  build_redshift_prior,
                  source_frame_distribution,
                  load_catalog,
-                 frequencies,
-                 in_band_mask,
+                 average_mode,
                  build_observation_context,
                  ModifiedPropagation,
                  LambdaCDM,
@@ -246,13 +245,15 @@ function _run(;
     t0 = time()
 
     @info "loading catalog" catalog_path detectors=join((d.name for d in detectors), ",")
-    loaded = load_catalog(catalog_path)
+    catalog = load_catalog(catalog_path)
+    resolved_average_mode = average_mode(catalog)
+    @info "average mode" mode = string(resolved_average_mode)
     C = LambdaCDM
     P = ModifiedPropagation
     order = bns_madau_dickinson_hyperparameters(C, P)
     θ0 = _theta0_from_toml(init_tbl, order)
-    samples = bns_samples_from_catalog(loaded.catalog.samples, C, θ0)
-    fluxes = loaded.catalog.fluxes
+    samples = bns_samples_from_catalog(catalog.samples, C, θ0)
+    fluxes = catalog.fluxes
     model = prepare_bns_madau_dickinson_model(
         samples,
         θ0,
@@ -262,13 +263,13 @@ function _run(;
         local_merger_rate = local_merger_rate
     )
     observation = build_observation_context(
-        frequencies(loaded.metadata.grid), detectors,
-        in_band_mask(loaded.metadata.grid), observation_time)
+        catalog.frequencies, detectors, catalog.in_band_mask, observation_time)
     @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing
         @info "using fiducial spectrum from catalog as observed data"
-        fiducial_spectral_density(model, fluxes, samples, θ0)
+        fiducial_spectral_density(
+            model, fluxes, samples, θ0; average_mode = resolved_average_mode)
     else
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
         _load_observed_spectral_density(
@@ -295,7 +296,8 @@ function _run(;
         observation,
         priors;
         track = false,
-        observed = observed
+        observed = observed,
+        average_mode = resolved_average_mode
     )
     lf, z0_turing = _build_turing_logdensity(turing_model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)

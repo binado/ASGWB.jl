@@ -1,7 +1,9 @@
 using HDF5
+using NPZ
 using Distributions: Uniform, logpdf
 using Test
 using AstroSGWB
+import PlusCross
 
 if !@isdefined parity_catalog_dir
     include(joinpath(@__DIR__, "parity_test_cache.jl"))
@@ -13,8 +15,7 @@ function _load_variant(variant::Symbol)
     return parity_problem_context(variant, _TEST_LOAD_DETS)
 end
 
-@testset "save_catalog/load_catalog round-trip" begin
-    grid = FrequencyGrid(1.0, 4.0, 2.0, 1.0, 2.0)
+@testset "waveform_catalog v1 round-trip" begin
     samples = (
         mass_1_source = [1.4, 1.4],
         mass_2_source = [1.2, 1.2],
@@ -23,49 +24,107 @@ end
         chi_2 = [0.0, 0.0],
         lambda_1 = [100.0, 100.0],
         lambda_2 = [100.0, 100.0],
-        luminosity_distance = [430.0, 880.0]
+        luminosity_distance = [430.0, 880.0],
+        inclination = [0.0, 0.0]
     )
-    fluxes = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
-    meta = WaveformCatalogMetadata("IMRPhenomPV2", :BNS, grid, "rev", "cmd")
-    catalog = WaveformCatalog(samples, fluxes)
-    file = WaveformCatalogFile(catalog, meta)
+    # Both polarizations carry power here, unlike the parity fixtures, so the
+    # `|h₊|² + |h×|²` reduction is exercised rather than trivially `|h₊|²`.
+    plus = ComplexF64[0.0 0.0; 1.0+0.0im 0.0+1.0im; 2.0+0.0im 1.0+1.0im]
+    cross = ComplexF64[0.0 0.0; 0.0+0.0im 1.0+0.0im; 1.0+0.0im 0.0+2.0im]
+    expected_fluxes = abs2.(plus) .+ abs2.(cross)
 
     path, io = mktemp()
     close(io)
     try
-        save_catalog(path, file)
-        loaded = load_catalog(path)
-        @test Set(keys(loaded.catalog.samples)) == Set(keys(catalog.samples))
-        for k in keys(catalog.samples)
-            @test loaded.catalog.samples[k] ≈ catalog.samples[k]
+        PlusCross.save_catalog(
+            path,
+            PlusCross.WaveformCatalog(;
+                frequencies = [0.0, 1.0, 2.0],
+                plus = plus,
+                cross = cross,
+                source_parameters = samples,
+                approximant = "IMRPhenomPV2",
+                minimum_frequency = 1.0,
+                maximum_frequency = 2.0,
+                reference_frequency = 2.0,
+                sampling_frequency = 4.0
+            )
+        )
+        catalog = load_catalog(path)
+
+        @test catalog isa SGWBCatalog
+        @test Set(keys(catalog.samples)) == Set(keys(samples))
+        for k in keys(samples)
+            @test catalog.samples[k] == samples[k]
         end
-        @test loaded.catalog.fluxes ≈ catalog.fluxes
-        @test loaded.metadata.approximant == meta.approximant
-        @test loaded.metadata.source_type == meta.source_type
-        @test loaded.metadata.grid.duration == grid.duration
-        @test loaded.metadata.grid.sampling_frequency == grid.sampling_frequency
-        @test loaded.metadata.grid.minimum_frequency == grid.minimum_frequency
-        @test loaded.metadata.grid.maximum_frequency == grid.maximum_frequency
+        @test catalog.fluxes == expected_fluxes
+        @test catalog.frequencies == [0.0, 1.0, 2.0]
+        @test catalog.in_band_mask == BitVector([false, true, true])
+        @test catalog.approximant == "IMRPhenomPV2"
+        @test size(catalog.fluxes) == (3, 2)
+
+        # The polarizations themselves survive HDF5 byte-for-byte; only the
+        # derived flux is subject to the reduction's rounding.
+        raw = PlusCross.load_catalog(path)
+        @test raw.plus == plus
+        @test raw.cross == cross
     finally
         rm(path; force = true)
     end
 end
 
-@testset "FrequencyGrid validation" begin
-    @test FrequencyGrid(1.0, 4.0, 2.0, 1.0).maximum_frequency == 2.0
-
-    @test_throws ArgumentError FrequencyGrid(0.0, 4.0, 2.0, 1.0, 2.0)
-    @test_throws ArgumentError FrequencyGrid(1.0, 0.0, 2.0, 1.0, 2.0)
-    @test_throws ArgumentError FrequencyGrid(1.0, 4.0, 2.0, -1.0, 2.0)
-    @test_throws ArgumentError FrequencyGrid(1.0, 4.0, 2.0, 2.0, 2.0)
-    @test_throws ArgumentError FrequencyGrid(1.0, 4.0, 2.0, 1.0, 3.0)
+@testset "load_catalog rejects a non-v1 file" begin
+    path, io = mktemp()
+    close(io)
+    try
+        HDF5.h5open(path, "w") do f
+            HDF5.attributes(f)["format_name"] = "something_else"
+        end
+        @test_throws ArgumentError load_catalog(path)
+    finally
+        rm(path; force = true)
+    end
 end
 
-@testset "WaveformCatalog shape validation" begin
-    @test WaveformCatalog((redshift = [0.1, 0.2],), zeros(3, 2)) isa WaveformCatalog
-    @test WaveformCatalog((x = [1.0], y = [2.0]), zeros(2, 1)) isa WaveformCatalog
-    @test_throws ArgumentError WaveformCatalog((x = [1.0], y = [2.0, 3.0]), zeros(2, 2))
-    @test_throws ArgumentError WaveformCatalog((redshift = [0.1, 0.2],), zeros(3, 3))
+# Cross-language parity: both repos read the *same* file. Regenerate from the
+# repo root with the astrogwb checkout's interpreter (see the script docstring)::
+#   ../astrogwb/.venv/bin/python3 scripts/generate_catalog_parity_fixture.py
+@testset "flux reduction matches the Python astrogwb stack" begin
+    h5_path = joinpath(@__DIR__, "fixtures", "catalog_parity_reference.h5")
+    npz_path = joinpath(@__DIR__, "fixtures", "catalog_parity_reference.npz")
+    if !(isfile(h5_path) && isfile(npz_path))
+        # Fixtures are not committed (see comment above).
+        @test_skip false
+    else
+        catalog = load_catalog(h5_path)
+        reference = NPZ.npzread(npz_path)
+
+        # `polarization_power` already returns `(nfreq, nsamples)`, the same
+        # orientation HDF5.jl gives Julia, so no transpose is involved.
+        @test size(catalog.fluxes) == size(reference["fluxes"])
+        @test catalog.frequencies ≈ vec(reference["frequencies"])
+        @test catalog.in_band_mask == BitVector(vec(reference["in_band_mask"]))
+
+        # Julia's `abs2(z)` computes `re² + im²`; NumPy's `abs(z)**2` squares a
+        # `hypot`, so the two agree to a few ulp rather than bit-for-bit.
+        @test catalog.fluxes≈reference["fluxes"] rtol=1.0e-13
+    end
+end
+
+@testset "average_mode is derived from the inclination column" begin
+    @test average_mode(load_catalog(joinpath(
+        parity_catalog_dir(:importance_context), "catalog.h5"))) ===
+          AnalyticInclination()
+    @test average_mode(load_catalog(joinpath(
+        parity_catalog_dir(:sampled_inclination), "catalog.h5"))) ===
+          CatalogInclination()
+
+    # A catalog with no `inclination` column falls back to the face-on
+    # convention of the legacy generator.
+    no_column = SGWBCatalog(
+        [0.0, 1.0], zeros(2, 2), (redshift = [0.1, 0.2],),
+        BitVector([false, true]), "IMRPhenomPV2")
+    @test average_mode(no_column) === AnalyticInclination()
 end
 
 @testset "catalog inputs are explicit" begin

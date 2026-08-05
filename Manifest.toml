@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "27ad805a020e05bbd4660c654cba9ff75a542de7"
+project_hash = "b3326267f2df600304e0a3bca1eb5a21728ecf8f"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "d9aaef7c63466eee4de23b4d9dad03629df54bea"
@@ -219,7 +219,7 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 version = "1.11.0"
 
 [[deps.AstroSGWB]]
-deps = ["BenchmarkTools", "CBCDistributions", "Comonicon", "Cosmology", "DataInterpolations", "ForwardDiff", "HDF5", "JSON3", "LinearAlgebra", "QuadGK", "Random", "Statistics", "TOML"]
+deps = ["BenchmarkTools", "CBCDistributions", "Comonicon", "Cosmology", "DataInterpolations", "ForwardDiff", "HDF5", "JSON3", "LinearAlgebra", "PlusCross", "QuadGK", "Random", "Statistics", "TOML"]
 path = "AstroSGWB"
 uuid = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 version = "0.3.0"
@@ -1980,6 +1980,15 @@ deps = ["ColorSchemes", "Colors", "Dates", "PrecompileTools", "Printf", "Random"
 git-tree-sha1 = "26ca162858917496748aad52bb5d3be4d26a228a"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.4.4"
+
+[[deps.PlusCross]]
+deps = ["HDF5"]
+git-tree-sha1 = "1e7d64c88e703da2645ede54ecdaa70086cf6568"
+repo-rev = "main"
+repo-subdir = "julia/PlusCross"
+repo-url = "https://github.com/binado/pluscross"
+uuid = "ae16bef0-4439-4e7d-b5cb-83deb77b8e07"
+version = "0.2.0"
 
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"

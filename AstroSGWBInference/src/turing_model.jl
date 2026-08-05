@@ -41,8 +41,14 @@ end
     return NamedTuple{order}(Tuple(values))
 end
 
+# `average_mode` is positional rather than a keyword: `track::Bool` already
+# proves the positional path through DynamicPPL here, the model is unexported
+# with a single caller, and a positional argument stays visible in `model.args`
+# when introspecting a built model. Singleton instances (not `Type`s) pass
+# through `transform_args` untouched.
 @model function astrosgwb_importance_turing_model(
         track::Bool,
+        average_mode::AbstractAverageMode,
         model,
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
@@ -52,7 +58,7 @@ end
 )
     order = keys(prior.dists)
     Λ ~ to_submodel(sample_hyperparameters(order, prior.dists), false)
-    forward = _forward_model(model, fluxes, samples, Λ)
+    forward = _forward_model(model, fluxes, samples, Λ; average_mode)
     Sh = forward.spectral_density
 
     observed_in_band ~ MvNormal(
@@ -82,19 +88,25 @@ function build_turing_model(
         observation::ObservationContext,
         prior::ProductNamedTupleDistribution;
         track::Bool = false,
-        observed::Union{Nothing, AbstractVector{<:Real}} = nothing
+        observed::Union{Nothing, AbstractVector{<:Real}} = nothing,
+        average_mode::AbstractAverageMode = AnalyticInclination()
 )
     names = _hyperparameter_names(model)
     _validate_parameter_names(names, keys(prior.dists); context = "hyperprior")
     _validate_parameter_names(
         names, keys(fiducial_hyperparameters); context = "fiducial hyperparameters")
+    # One `average_mode` reaches both the synthesized `observed` and the model
+    # that scores it. Splitting them would bias the fit by a constant factor
+    # with no other symptom, so they are deliberately not separately settable.
     observed_data = if observed === nothing
-        fiducial_spectral_density(model, fluxes, samples, fiducial_hyperparameters)
+        fiducial_spectral_density(
+            model, fluxes, samples, fiducial_hyperparameters; average_mode)
     else
         observed
     end
     return astrosgwb_importance_turing_model(
         track,
+        average_mode,
         model,
         fluxes,
         samples,

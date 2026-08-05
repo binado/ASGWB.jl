@@ -2,6 +2,9 @@ module InferenceImpl
 
 using AstroSGWB
 using AstroSGWB:
+                 AbstractAverageMode,
+                 AnalyticInclination,
+                 CatalogInclination,
                  ObservationContext,
                  normalized_ess,
                  spectral_snr_squared,
@@ -21,6 +24,9 @@ export hyperparameters,
        build_turing_model,
        condition_turing_model,
        loglikelihood,
-       logposterior
+       logposterior,
+       AbstractAverageMode,
+       AnalyticInclination,
+       CatalogInclination
 
 end

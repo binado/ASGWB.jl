@@ -5,10 +5,16 @@ Astrophysical stochastic gravitational-wave background modeling: importance
 sampling, redshift grids, and spectral-density forward models. Turing model construction lives in the
 `AstroSGWBInference` package (see the `AstroSGWBInference/` directory in the repository).
 
-The primary inference artifact is **`catalog.h5`** ([`WaveformCatalogFile`](@ref)):
-per-sample intrinsic parameters with precomputed luminosity distances, and a
-`(nfreq, nsamples)` per-sample flux matrix `|h_+|² + |h_×|²` (before the
-fiducial `(D_L/D_gw)²` factor).
+The primary inference artifact is a **`waveform_catalog` v1 HDF5 file**, read by
+[`load_catalog`](@ref) into an [`SGWBCatalog`](@ref): per-sample source parameters,
+the shared frequency axis and in-band mask, and a `(nfreq, nsamples)` per-sample
+flux matrix `|h_+|² + |h_×|²` reduced from the stored complex polarizations
+(before the fiducial `(D_L/D_gw)²` factor). Format IO lives in `PlusCross.jl`, so
+the same file is consumed unchanged by the Python `astrogwb` package.
+
+The catalog also carries the inclination-averaging convention: [`average_mode`](@ref)
+derives it from the `inclination` column, and it must be threaded to
+[`spectral_density`](@ref) and to Turing model construction.
 
 Callers define an importance adapter (or use one from `AstroSGWBImportanceModels`),
 fiducial hyperparameters, and a catalog sample adapter in Julia, then pass raw catalog
@@ -30,7 +36,6 @@ import Cosmology: cosmology, cosmology_type, gravitational_wave_distance,
                   propagation, propagation_type
 
 include("types.jl")
-include("catalog/grid.jl")
 include("catalog/catalog.jl")
 include("catalog/io.jl")
 include("samples.jl")
@@ -47,8 +52,6 @@ include("diagnostics.jl")
 export ObservationContext,
        canonical_hyperparameters,
        validate_hyperparameters,
-       CATALOG_SOURCE_TYPE_ATTR,
-       CATALOG_SOURCE_TYPE_BNS,
        CumulativeIntegral1D,
        GridQuery,
        interpolate,
@@ -58,14 +61,9 @@ export ObservationContext,
        redshift
 
 # Catalog I/O
-export FrequencyGrid,
-       frequencies,
-       in_band_mask,
-       WaveformCatalog,
-       WaveformCatalogMetadata,
-       WaveformCatalogFile,
+export SGWBCatalog,
        load_catalog,
-       save_catalog
+       average_mode
 
 # Detector network (ORF / PSD effective strain PSD; used by `build_observation_context`)
 export Detector,
@@ -128,6 +126,13 @@ export OrderedUniformSourceMassPair,
 
 # Spectral density
 export spectral_density,
+       AbstractAverageMode,
+       AnalyticInclination,
+       CatalogInclination,
+       inclination_factor,
+       average_mode_config_name,
+       average_mode_type,
+       SUPPORTED_AVERAGE_MODES,
        inner_product,
        spectral_snr_squared,
        spectral_snr,

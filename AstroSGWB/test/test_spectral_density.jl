@@ -1,4 +1,6 @@
-using AstroSGWB: Ωgw
+using AstroSGWB: Ωgw, spectral_density, AnalyticInclination, CatalogInclination,
+                 inclination_factor, average_mode_config_name, average_mode_type,
+                 SUPPORTED_AVERAGE_MODES
 using Cosmology: hubble_constant_si
 using ForwardDiff
 using Statistics
@@ -70,6 +72,109 @@ end
         for lane in 1:2
             @test [ForwardDiff.partials(x)[lane] for x in got] ≈
                   [ForwardDiff.partials(x)[lane] for x in expected]
+        end
+    end
+end
+
+@testset "average mode tokens" begin
+    @test inclination_factor(AnalyticInclination()) == 0.4
+    @test inclination_factor(CatalogInclination()) == 1.0
+
+    @testset "config names round-trip and match the astrogwb literals" begin
+        @test average_mode_config_name(AnalyticInclination) == "analytic_inclination"
+        @test average_mode_config_name(CatalogInclination) == "catalog_inclination"
+        for M in SUPPORTED_AVERAGE_MODES
+            @test average_mode_type(average_mode_config_name(M)) === M
+        end
+        @test_throws ArgumentError average_mode_type("face_on")
+    end
+end
+
+@testset "spectral_density average_mode" begin
+    fluxes = Float64[1.0 2.0 3.0; 4.0 5.0 6.0]
+    rate = 2.5
+    nsamples = size(fluxes, 2)
+    real_weights = [0.5, 1.0, 2.0]
+    dual_weights = [
+        ForwardDiff.Dual{Nothing, Float64, 2}(0.5, ForwardDiff.Partials((1.0, 0.1))),
+        ForwardDiff.Dual{Nothing, Float64, 2}(1.0, ForwardDiff.Partials((-0.5, 0.2))),
+        ForwardDiff.Dual{Nothing, Float64, 2}(2.0, ForwardDiff.Partials((0.25, -0.3)))
+    ]
+
+    @testset "the default is AnalyticInclination on every dispatch branch" begin
+        @test spectral_density(fluxes, rate) ≈
+              spectral_density(fluxes, rate; average_mode = AnalyticInclination())
+        @test spectral_density(fluxes, rate; weights = real_weights) ≈
+              spectral_density(fluxes, rate; weights = real_weights,
+            average_mode = AnalyticInclination())
+        got = spectral_density(fluxes, rate; weights = dual_weights)
+        ref = spectral_density(fluxes, rate; weights = dual_weights,
+            average_mode = AnalyticInclination())
+        @test ForwardDiff.value.(got) ≈ ForwardDiff.value.(ref)
+        for lane in 1:2
+            @test [ForwardDiff.partials(x)[lane] for x in got] ≈
+                  [ForwardDiff.partials(x)[lane] for x in ref]
+        end
+    end
+
+    # The three `_spectral_density` branches carry the prefactor independently;
+    # a partial edit that misses one would leave a stale 0.4 in that branch only.
+    @testset "all three dispatch branches share one prefactor" begin
+        ratio = inclination_factor(CatalogInclination()) /
+                inclination_factor(AnalyticInclination())
+
+        @testset "unweighted" begin
+            analytic = spectral_density(fluxes, rate;
+                average_mode = AnalyticInclination())
+            catalog = spectral_density(fluxes, rate;
+                average_mode = CatalogInclination())
+            @test catalog ≈ ratio .* analytic
+            @test catalog ≈ rate .* vec(mean(fluxes; dims = 2))
+        end
+
+        @testset "real weights" begin
+            analytic = spectral_density(fluxes, rate; weights = real_weights,
+                average_mode = AnalyticInclination())
+            catalog = spectral_density(fluxes, rate; weights = real_weights,
+                average_mode = CatalogInclination())
+            @test catalog ≈ ratio .* analytic
+            @test catalog ≈ rate .* (fluxes * real_weights) ./ nsamples
+        end
+
+        @testset "dual weights: values and partials both scale" begin
+            analytic = spectral_density(fluxes, rate; weights = dual_weights,
+                average_mode = AnalyticInclination())
+            catalog = spectral_density(fluxes, rate; weights = dual_weights,
+                average_mode = CatalogInclination())
+            @test ForwardDiff.value.(catalog) ≈ ratio .* ForwardDiff.value.(analytic)
+            # Guards the `ntuple(j -> scale * ...)` line: scaling the primal but
+            # not the partials would pass a value-only comparison.
+            for lane in 1:2
+                @test [ForwardDiff.partials(x)[lane] for x in catalog] ≈
+                      ratio .* [ForwardDiff.partials(x)[lane] for x in analytic]
+            end
+            expected = rate .* ((fluxes * dual_weights) ./ nsamples)
+            @test ForwardDiff.value.(catalog) ≈ ForwardDiff.value.(expected)
+            for lane in 1:2
+                @test [ForwardDiff.partials(x)[lane] for x in catalog] ≈
+                      [ForwardDiff.partials(x)[lane] for x in expected]
+            end
+        end
+    end
+
+    @testset "a dual rate scales with the mode too" begin
+        rate_dual = ForwardDiff.Dual{Nothing, Float64, 2}(
+            rate, ForwardDiff.Partials((0.3, -0.1)))
+        analytic = spectral_density(fluxes, rate_dual; weights = dual_weights,
+            average_mode = AnalyticInclination())
+        catalog = spectral_density(fluxes, rate_dual; weights = dual_weights,
+            average_mode = CatalogInclination())
+        ratio = inclination_factor(CatalogInclination()) /
+                inclination_factor(AnalyticInclination())
+        @test ForwardDiff.value.(catalog) ≈ ratio .* ForwardDiff.value.(analytic)
+        for lane in 1:2
+            @test [ForwardDiff.partials(x)[lane] for x in catalog] ≈
+                  ratio .* [ForwardDiff.partials(x)[lane] for x in analytic]
         end
     end
 end

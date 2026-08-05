@@ -33,10 +33,11 @@ begin
     using AstroSGWB
     using AstroSGWB:
                      Detector,
-                     frequencies,
-                     in_band_mask,
                      build_observation_context,
                      load_catalog,
+                     average_mode,
+                     AnalyticInclination,
+                     CatalogInclination,
                      W0CDM,
                      ModifiedPropagation
     using AstroSGWBInference: build_turing_model, condition_turing_model,
@@ -108,8 +109,11 @@ end
 # ╔═╡ bc7d6e5f-8a9b-4c0d-8e1f-3a4b5c6d7e8f
 begin
     @info "loading catalog" catalog_path detectors = join((d.name for d in detectors), ",")
-    loaded = load_catalog(catalog_path)
-    catalog = loaded.catalog
+    catalog = load_catalog(catalog_path)
+    # Derived from the catalog's `inclination` column; override with an explicit
+    # `AnalyticInclination()` / `CatalogInclination()` if needed.
+    resolved_average_mode = average_mode(catalog)
+    @info "average mode" mode = string(resolved_average_mode)
     C = W0CDM
     P = ModifiedPropagation
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
@@ -122,8 +126,7 @@ begin
         local_merger_rate = local_merger_rate
     )
     observation = build_observation_context(
-        frequencies(loaded.metadata.grid), detectors,
-        in_band_mask(loaded.metadata.grid), observation_time_yr)
+        catalog.frequencies, detectors, catalog.in_band_mask, observation_time_yr)
     order = hyperparameters(prepared_model)
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
@@ -133,7 +136,9 @@ begin
     )
 
     @info "using fiducial in-band spectrum from cache as observed data"
-    observed = fiducial_spectral_density(prepared_model, catalog.fluxes, samples, fiducials)
+    observed = fiducial_spectral_density(
+        prepared_model, catalog.fluxes, samples, fiducials;
+        average_mode = resolved_average_mode)
 
     nothing
 end
@@ -149,7 +154,7 @@ Wrap the conditioned Turing model with `DynamicPPL.LogDensityFunction` (non-link
 begin
     model = build_turing_model(
         prepared_model, catalog.fluxes, samples, fiducials, observation, hyperprior;
-        track = false, observed = observed)
+        track = false, observed = observed, average_mode = resolved_average_mode)
     conditioned = condition_turing_model(model, fiducials, hyperprior, sample_only_tup)
     lf = DynamicPPL.LogDensityFunction(conditioned)
 
