@@ -88,19 +88,18 @@ end
     @test length(model.z_grid) == length(DEFAULT_Z_GRID)
     @test length(model.proposal_log_pdf) == length(SAMPLES.redshift)
     @test all(isfinite, model.proposal_log_pdf)
-    @test model.proposal_log_pdf ≈ [-6.274110509399128, -4.919648956007439]
+    # All three refrozen when `DEFAULT_Z_GRID` moved from [1e-3, 20] to [0, 20] to match
+    # `astrogwb.cosmology.distance_and_volume_grid`, which requires a grid starting at 0.
+    # Unlike the S5/S6 refreeze, this one moves `proposal_log_pdf` and `rate` as well —
+    # the grid *is* the integration domain, so restoring the missing first cell changes
+    # both the density normalization (+0.32%) and `∫dN/dz` (+0.169%). Measured shift in
+    # `log_weights`: -2.09e-2 at z = 0.1, -1.05e-2 at z = 0.2. Dropping the underflow
+    # floor in the same commit contributes ~1e-15 absolute, i.e. nothing.
+    @test model.proposal_log_pdf ≈ [-6.2539635957301094, -4.9113292473890375]
 
     rate, log_weights = merger_rate_and_log_weights(model, TARGET, SAMPLES)
-    @test rate ≈ 0.031115713391297647 rtol = 1.0e-13
-    # Refrozen when S5/S6 moved the hot path onto `distance_and_volume_grid` +
-    # `GridInterpolator`. `proposal_log_pdf` and `rate` above are bit-unchanged (they
-    # depend only on the density and its trapezoid normalizer); these shifted because
-    # `d_L` is now plain-linearly interpolated off the grid rather than reconstructed from
-    # the exact within-cell antiderivative of 1/E — a deliberate change, matching the
-    # Python stack. Linear-interpolation error is O(Δz²·f″) absolute, but d_L → 0 as
-    # z → 0, so the *relative* error carries a 1/z factor: measured Δ = -1.524e-2 at
-    # z = 0.1 and -8.29e-3 at z = 0.2, falling to ~-3.7e-4 at z = 1 and ~-8e-6 at z = 5.
-    @test log_weights ≈ [-0.08905516675812283, -0.15599248526634377] rtol = 1.0e-12
+    @test rate ≈ 0.031168377918986516 rtol = 1.0e-13
+    @test log_weights ≈ [-0.10995559838341759, -0.16653907807566956] rtol = 1.0e-12
     @test size(log_weights) == size(SAMPLES.redshift)
     @test all(isfinite, log_weights)
 
@@ -133,12 +132,38 @@ end
 
     # With the production sample adapter the residual is NOT zero: it synthesizes `d_L`
     # with `quadgk` while the hot path reads a 256-point grid. Pre-existing systematic
-    # (~2e-2 in log-weight at z = 0.1), unchanged by S5/S6 and tracked separately.
+    # (~4.6e-2 in log-weight at z = 0.1), tracked separately. astrogwb has the same
+    # residual for the same reason — its catalog `luminosity_distance` column also does
+    # not come from the 256-point grid the weights are evaluated on.
     _,
     w_quadgk = merger_rate_and_log_weights(
         model, FIDUCIALS,
         bns_samples_from_catalog((redshift = z,), LambdaCDM, FIDUCIALS))
     @test 1e-3 < maximum(abs, w_quadgk) < 1e-1
+end
+
+@testset "DEFAULT_Z_GRID starts at zero" begin
+    # Not cosmetic, and not merely a Julia-internal choice. Comoving distance is
+    # accumulated by trapezoidal integration along the grid assuming `d_c(grid[1]) = 0`,
+    # so a non-zero lower bound silently omits `∫₀^{z_min} dz/E` from *every* distance.
+    # The former `1e-3` bound cost ≈ 4.5 Mpc: −1.0% in d_L at z = 0.1, −20% at z = 0.005.
+    # `astrogwb.cosmology.distance_and_volume_grid` documents the same requirement, so
+    # this is also what keeps the two repos' weights comparable.
+    @test first(DEFAULT_Z_GRID) == 0.0
+    @test last(DEFAULT_Z_GRID) == 20.0
+    @test length(DEFAULT_Z_GRID) == 256
+
+    # The consequence, stated directly: with a 1e-3 floor the interpolated d_L at low z
+    # is short by ~1%, which is 2e-2 in log-weight.
+    cosmo = cosmology(LambdaCDM, FIDUCIALS)
+    truncated = collect(LinRange(1e-3, 20.0, 256))
+    zs = [0.1]
+    d_zero = GridInterpolator(zs, DEFAULT_Z_GRID)(
+        distance_and_volume_grid(cosmo, DEFAULT_Z_GRID).luminosity_distance)
+    d_trunc = GridInterpolator(zs, truncated)(
+        distance_and_volume_grid(cosmo, truncated).luminosity_distance)
+    @test only(d_trunc) < only(d_zero)
+    @test (only(d_zero) - only(d_trunc)) / only(d_zero) ≈ 0.0104 atol = 5e-4
 end
 
 @testset "S11 fiducial GW-distance reference" begin

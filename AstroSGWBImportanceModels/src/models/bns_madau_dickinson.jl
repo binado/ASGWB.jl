@@ -147,12 +147,15 @@ function _bns_grid_terms(
     sfd = source_frame_distribution.(Ref(MadauDickinsonSourceFrame()), zg, Ref(Λ))
     dN_dz = detector_frame_merger_rate_density.(zg, g.differential_comoving_volume, sfd)
     norm = trapz(zg, dN_dz)
-    tiny = floatmin(real(eltype(dN_dz)))
     # Hoisted out of the broadcast: `@. interp(x)` would apply the functor elementwise.
     p = interp(dN_dz)
-    # Decision C: the `max(…, tiny)` floor keeps NUTS away from NaN gradients where the
-    # density underflows. One broadcast, inside the adapter that needs it.
-    log_p = @. log(max(p / max(norm, tiny), tiny))
+    # No underflow floor, matching astrogwb's `logpdf = log(pdf) - log(integral)`. The
+    # density is strictly positive for every z > 0 under a Madau–Dickinson rate, and
+    # `prepare_bns_madau_dickinson_model` rejects samples outside the grid, so the only
+    # way to reach `log(0)` is a sample at exactly z = 0 — where the volume element
+    # vanishes and `-Inf` is the honest answer. astrogwb lands on the same value there
+    # via `jnp.interp(..., left=0.0)`.
+    log_p = @. log(p) - log(norm)
     return (; log_p, d_l = interp(g.luminosity_distance), norm)
 end
 

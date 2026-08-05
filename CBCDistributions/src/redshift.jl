@@ -12,10 +12,17 @@ export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
 """
     DEFAULT_Z_GRID
 
-Default redshift integration grid: 256 uniformly-spaced points on [1e-3, 20].
+Default redshift integration grid: 256 uniformly-spaced points on [0, 20].
 Shared across [`redshift_prior`](@ref) calls that do not pass an explicit grid.
+
+**The grid must start at `0`.** Comoving distance is accumulated by trapezoidal
+integration along the grid assuming `d_c(z_grid[1]) = 0`, so a non-zero lower bound
+silently omits `∫₀^{z_min} dz/E` from *every* distance. The previous `1e-3` lower bound
+cost ≈ 4.5 Mpc — −1.0% in `d_L` at z = 0.1 and −20% at z = 0.005 — which is also a factor
+of `1/z` in the relative interpolation error at low redshift. It matches
+`astrogwb.cosmology.distance_and_volume_grid`, which carries the same requirement.
 """
-const DEFAULT_Z_GRID = collect(LinRange(1e-3, 20.0, 256))
+const DEFAULT_Z_GRID = collect(LinRange(0.0, 20.0, 256))
 
 """
     RedshiftPrior(dN_dz)
