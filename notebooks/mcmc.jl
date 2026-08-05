@@ -211,8 +211,8 @@ In the cells below, we plot ``\Omega_{\mathrm{GW}}(f)`` as a function of the fre
 
 # ╔═╡ d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a
 function plot_fiducial_omega_gw(model, fluxes, samples, fiducials, observation)
-    rate0, log_weights0 = model(fiducials, samples)
-    Sh0 = spectral_density(fluxes, rate0; weights = exp.(log_weights0))
+    forward = forward_model(model, fluxes, samples, fiducials)
+    rate0, Sh0 = forward.rate, forward.spectral_density
     f = observation.frequencies
     df = frequency_bin_width(f)
     snr = spectral_snr(
@@ -266,21 +266,21 @@ begin
         adtype = resolve_adtype(sampler.ad_backend)
 
         @info "starting NUTS" nadapts=sampler.nadapts nsamples=sampler.nsamples target_acceptance=sampler.target_acceptance ad_backend=sampler.ad_backend sample_only=sample_only_tup
+        # S3: the prior declares what is sampled, `constants` what is held fixed, so
+        # the chain carries exactly the sampled variables by construction.
+        prior = sample_only_tup === nothing ? hyperprior :
+                NamedTuple{sample_only_tup}(hyperprior)
+        constants = Base.structdiff(fiducials, prior)
         turing_model = build_turing_model(
             model,
             fluxes,
             samples,
             fiducials,
             observation,
-            hyperprior;
+            prior;
+            constants = constants,
             track = false,
             average_mode = resolved_average_mode
-        )
-        conditioned = condition_turing_model(
-            turing_model,
-            fiducials,
-            hyperprior,
-            sample_only_tup
         )
         nuts = Turing.NUTS(
             sampler.nadapts,
@@ -293,7 +293,7 @@ begin
             chain = nothing
         else
             chain = sample(
-                conditioned,
+                turing_model,
                 nuts,
                 MCMCThreads(),
                 sampler.nsamples,
@@ -380,7 +380,7 @@ begin
     using AstroSGWBImportanceModels:
                                      bns_samples_from_catalog,
                                      prepare_bns_madau_dickinson_model
-    using AstroSGWBInference: build_turing_model, condition_turing_model
+    using AstroSGWBInference: build_turing_model, forward_model
     using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
     using AstroSGWBInference.ChainIO: atomic_save_chain
     using Distributions: Uniform

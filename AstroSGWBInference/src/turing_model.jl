@@ -3,35 +3,6 @@ using LinearAlgebra: Diagonal
 using Turing
 using Turing: DynamicPPL
 
-function _validate_subset(subset::Tuple{Vararg{Symbol}}, order)
-    for symbol in subset
-        symbol in order ||
-            throw(ArgumentError("subset contains $(repr(symbol)); expected symbols from $(Tuple(order))"))
-    end
-    length(unique(subset)) == length(subset) ||
-        throw(ArgumentError("subset must not repeat symbols"))
-    return subset
-end
-
-function condition_turing_model(
-        turing_model,
-        theta0::NamedTuple,
-        prior::NamedTuple,
-        sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
-)
-    order = keys(prior)
-    sample_only === nothing && return turing_model
-    isempty(sample_only) && throw(
-        ArgumentError(
-        "sample_only must not be empty; omit the argument or pass `nothing` to sample every hyperparameter",
-    ),
-    )
-    _validate_subset(sample_only, order)
-    fixed = Tuple(s for s in order if s ∉ sample_only)
-    isempty(fixed) && return turing_model
-    return turing_model | (; (s => theta0[s] for s in fixed)...)
-end
-
 @model function sample_hyperparameters(order::Tuple{Vararg{Symbol}}, dists)
     values = map(order) do sym
         x ~ DynamicPPL.NamedDist(dists[sym], sym)
@@ -53,10 +24,16 @@ end
         samples::NamedTuple,
         observation::ObservationContext,
         prior::NamedTuple,
+        constants::NamedTuple,
         observed_in_band::AbstractVector{<:Real}
 )
-    Λ ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
-    forward = _forward_model(weights_fn, fluxes, samples, Λ; average_mode)
+    Λ_sampled ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
+    # `merge(constants, Λ_sampled)` is the idiomatic Julia `{**constants, **sampled}`:
+    # resolved at compile time on `NamedTuple`s, so it costs nothing per evaluation and
+    # keeps `Λ.γ` type-stable. Sampled values win on collision, which `build_turing_model`
+    # rejects up front rather than allowing a silently shadowed constant.
+    Λ = merge(constants, Λ_sampled)
+    forward = forward_model(weights_fn, fluxes, samples, Λ; average_mode)
     Sh = forward.spectral_density
 
     observed_in_band ~ MvNormal(
@@ -80,16 +57,25 @@ end
 
 """
     build_turing_model(weights_fn, fluxes, samples, fiducial_hyperparameters,
-                       observation, prior; track=false, observed=nothing,
-                       average_mode=AnalyticInclination())
+                       observation, prior; constants=NamedTuple(), track=false,
+                       observed=nothing, average_mode=AnalyticInclination())
 
 Build the Turing model scoring `weights_fn` against `observed` (synthesized at
 `fiducial_hyperparameters` when omitted). `weights_fn(Λ, samples) -> (rate, log_weights)`
 is the whole model contract; see the `AstroSGWBInference` module docstring.
 
-`keys(prior)` alone declares which hyperparameters are sampled and in what order.
-A key the model needs but the prior omits surfaces as a `KeyError` on `Λ.name` at the
-first evaluation, before the sampler burns wall clock.
+`prior` declares what is **sampled** and `constants` declares what is **fixed**; the model
+body evaluates at `merge(constants, Λ_sampled)`. To sample a subset, build the prior with
+only that subset and pass the rest as `constants` -- the chain then contains exactly the
+sampled variables **by construction**, with no DynamicPPL conditioning and no subset
+validation. A key present in both is rejected here rather than silently shadowed.
+
+`fiducial_hyperparameters` is the full point (`prior ∪ constants`) at which `observed` is
+synthesized, and stays a separate argument for exactly that reason.
+
+`keys(prior)` alone declares which hyperparameters are sampled and in what order. A key
+the model needs but neither `prior` nor `constants` supplies surfaces as a `KeyError` on
+`Λ.name` at the first evaluation, before the sampler burns wall clock.
 """
 function build_turing_model(
         weights_fn,
@@ -98,16 +84,25 @@ function build_turing_model(
         fiducial_hyperparameters::NamedTuple,
         observation::ObservationContext,
         prior::NamedTuple;
+        constants::NamedTuple = NamedTuple(),
         track::Bool = false,
         observed::Union{Nothing, AbstractVector{<:Real}} = nothing,
         average_mode::AbstractAverageMode = AnalyticInclination()
 )
+    # A check on *this call's two arguments*, not model-declared name bookkeeping:
+    # `merge` lets the sampled value win, so an overlapping key would silently ignore
+    # the constant the caller asked for.
+    overlap = intersect(keys(prior), keys(constants))
+    isempty(overlap) ||
+        throw(ArgumentError("constants and prior both declare $(Tuple(overlap))"))
+
     # One `average_mode` reaches both the synthesized `observed` and the model
     # that scores it. Splitting them would bias the fit by a constant factor
     # with no other symptom, so they are deliberately not separately settable.
     observed_data = if observed === nothing
-        fiducial_spectral_density(
-            weights_fn, fluxes, samples, fiducial_hyperparameters; average_mode)
+        forward_model(
+            weights_fn, fluxes, samples, fiducial_hyperparameters;
+            average_mode).spectral_density
     else
         observed
     end
@@ -119,6 +114,7 @@ function build_turing_model(
         samples,
         observation,
         prior,
+        constants,
         observed_data[observation.in_band_mask]
     )
 end

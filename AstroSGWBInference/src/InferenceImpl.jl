@@ -10,19 +10,15 @@ using AstroSGWB:
                  spectral_snr_squared,
                  frequency_bin_width,
                  year_to_second
-using Distributions: MvNormal, logpdf
+using Distributions: MvNormal
 using LinearAlgebra: Diagonal
 using Turing
 
-include("models/base.jl")
-include("likelihood.jl")
+include("forward.jl")
 include("turing_model.jl")
 
-export fiducial_spectral_density,
+export forward_model,
        build_turing_model,
-       condition_turing_model,
-       loglikelihood,
-       logposterior,
        AbstractAverageMode,
        AnalyticInclination,
        CatalogInclination

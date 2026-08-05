@@ -18,7 +18,7 @@ module AstroSGWBProfileCLI
 
 using Distributions: logpdf, Uniform
 using AstroSGWB
-using AstroSGWBInference: build_turing_model, fiducial_spectral_density, logposterior
+using AstroSGWBInference: build_turing_model, forward_model
 using AstroSGWBImportanceModels:
                                  bns_samples_from_catalog,
                                  prepare_bns_madau_dickinson_model
@@ -271,8 +271,9 @@ function _run(;
 
     observed = if observed_spectral_density_csv === nothing
         @info "using fiducial spectrum from catalog as observed data"
-        fiducial_spectral_density(
-            model, fluxes, samples, θ0; average_mode = resolved_average_mode)
+        forward_model(
+            model, fluxes, samples, θ0;
+            average_mode = resolved_average_mode).spectral_density
     else
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
         _load_observed_spectral_density(
@@ -326,7 +327,7 @@ function _run(;
     @info "warming up (JIT + AD compile)"
     LogDensityProblems.logdensity(lf, z0_turing)
     LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
-    logposterior(h, model, fluxes, samples, observation, priors, observed)
+    forward_model(model, fluxes, samples, h; average_mode = resolved_average_mode)
 
     # ------------------------------------------------------------------
     # BenchmarkTools suite
@@ -340,14 +341,14 @@ function _run(;
 
     suite["primal"] = BenchmarkGroup()
     suite["primal"]["turing"] = @benchmarkable LogDensityProblems.logdensity($lf, $z0_turing)
-    suite["primal"]["logposterior"] = @benchmarkable logposterior(
-        $h,
+    # S4 deleted the duplicate bare `logposterior`; `forward_model` is the whole
+    # physics path the Turing model wraps, which is the meaningful comparison anyway.
+    suite["primal"]["forward"] = @benchmarkable forward_model(
         $model,
         $fluxes,
         $samples,
-        $observation,
-        $priors,
-        $observed
+        $h;
+        average_mode = $resolved_average_mode
     )
 
     suite["gradient"] = BenchmarkGroup()
@@ -389,9 +390,9 @@ function _run(;
     # ------------------------------------------------------------------
     @info "=== primal ==="
     t_primal_turing = results["primal"]["turing"]
-    t_primal_logpost = results["primal"]["logposterior"]
+    t_primal_forward = results["primal"]["forward"]
     _print_trial_row("turing (DynamicPPL)", t_primal_turing)
-    _print_trial_row("logposterior (bare)", t_primal_logpost)
+    _print_trial_row("forward_model (bare)", t_primal_forward)
 
     @info "=== gradient ==="
     t_grad_turing = results["gradient"]["turing"]
@@ -401,8 +402,8 @@ function _run(;
     r_turing = ratio(median(t_grad_turing), median(t_primal_turing))
     @info @sprintf("AD multiplier (gradient/primal): turing=%.2fx", time(r_turing))
 
-    @info "=== per-stage breakdown (denominator: median of logposterior primal) ==="
-    primal_ns = _median_ns(t_primal_logpost)
+    @info "=== per-stage breakdown (denominator: median of forward_model primal) ==="
+    primal_ns = _median_ns(t_primal_forward)
     for key in ("redshift", "rate_and_log_weights", "rate", "spectral", "prior", "lumdist")
         _print_trial_row(key, results["stage"][key]; pct_of = primal_ns)
     end
@@ -482,7 +483,7 @@ function _run(;
     println()
     println("## Profile summary")
     println()
-    println("| section | stage | median | min | allocs | mem | %% of logposterior |")
+    println("| section | stage | median | min | allocs | mem | %% of forward_model |")
     println("|---------|-------|--------|-----|--------|-----|-------------------|")
     _mdrow(section,
         stage,
@@ -498,7 +499,7 @@ function _run(;
         pct_of === nothing ? "-" : @sprintf("%.1f%%", 100 * _median_ns(t) / pct_of),)
     )
     _mdrow("primal", "turing", t_primal_turing; pct_of = primal_ns)
-    _mdrow("primal", "logposterior", t_primal_logpost; pct_of = primal_ns)
+    _mdrow("primal", "forward", t_primal_forward; pct_of = primal_ns)
     _mdrow("gradient", "turing", t_grad_turing; pct_of = primal_ns)
     for key in ("redshift", "rate_and_log_weights", "rate", "spectral", "prior", "lumdist")
         _mdrow("stage", key, results["stage"][key]; pct_of = primal_ns)

@@ -4,11 +4,12 @@ using Turing.DynamicPPL: VarInfo, getsym
 using FlexiChains
 using AstroSGWB
 using Distributions: logpdf
-using AstroSGWBInference: build_turing_model, condition_turing_model,
-                          fiducial_spectral_density, logposterior,
+using AstroSGWBInference: build_turing_model, forward_model,
                           AnalyticInclination, CatalogInclination
 
 _varinfo_symbols(vi) = Set(getsym(vn) for vn in keys(vi))
+
+_log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
 
 @testset "Turing model smoke test with local adapter" begin
     problem = local_problem_context()
@@ -21,19 +22,13 @@ _varinfo_symbols(vi) = Set(getsym(vn) for vn in keys(vi))
         problem.prior;
         track = false
     )
-    observed = fiducial_spectral_density(
+    forward = forward_model(
         problem.model, problem.fluxes, problem.samples, problem.fiducials)
     rate, log_weights = problem.model(problem.fiducials, problem.samples)
-    @test observed ≈ spectral_density(problem.fluxes, rate; weights = exp.(log_weights))
-    @test Turing.logjoint(model, problem.theta) ≈ logposterior(
-        problem.theta,
-        problem.model,
-        problem.fluxes,
-        problem.samples,
-        problem.observation,
-        problem.prior,
-        observed
-    ) rtol = 1.0e-6
+    @test forward.rate == rate
+    @test forward.weights ≈ exp.(log_weights)
+    @test forward.spectral_density ≈
+          spectral_density(problem.fluxes, rate; weights = exp.(log_weights))
 
     tracked = build_turing_model(
         problem.model,
@@ -95,9 +90,7 @@ end
     # residual vanishes and the joint collapses to prior + Gaussian
     # normalization -- but only if the synthesized data and the model that
     # scores it used the same averaging mode.
-    zero_residual_logjoint = sum(
-        logpdf(problem.prior[k], problem.fiducials[k])
-    for k in keys(problem.prior)) -
+    zero_residual_logjoint = _log_prior(problem.prior, problem.fiducials) -
                              0.5 * sum(log.(2π .* σ .^ 2))
 
     @testset "both paths agree for every mode" begin
@@ -105,19 +98,20 @@ end
             m = _build(; average_mode = mode)
             @test Turing.logjoint(m, problem.fiducials) ≈ zero_residual_logjoint
 
-            observed = fiducial_spectral_density(
+            # S4: there is no second likelihood implementation to compare against, so
+            # score `forward_model`'s spectrum with an inline Gaussian instead. Three
+            # lines in the test beats a parallel production code path that can drift.
+            Sh = forward_model(
+                problem.model, problem.fluxes, problem.samples, problem.theta;
+                average_mode = mode).spectral_density
+            observed = forward_model(
                 problem.model, problem.fluxes, problem.samples, problem.fiducials;
-                average_mode = mode)
-            @test Turing.logjoint(m, problem.theta) ≈ logposterior(
-                problem.theta,
-                problem.model,
-                problem.fluxes,
-                problem.samples,
-                observation,
-                problem.prior,
-                observed;
-                average_mode = mode
-            ) rtol = 1.0e-6
+                average_mode = mode).spectral_density
+            mask = observation.in_band_mask
+            residual = observed[mask] .- Sh[mask]
+            expected = _log_prior(problem.prior, problem.theta) -
+                       0.5 * sum((residual ./ σ) .^ 2 .+ log.(2π .* σ .^ 2))
+            @test Turing.logjoint(m, problem.theta) ≈ expected rtol = 1.0e-6
         end
     end
 
@@ -133,9 +127,9 @@ end
     @testset "a mismatched pair fails the zero-residual identity" begin
         mismatched = _build(;
             average_mode = AnalyticInclination(),
-            observed = fiducial_spectral_density(
+            observed = forward_model(
                 problem.model, problem.fluxes, problem.samples, problem.fiducials;
-                average_mode = CatalogInclination())
+                average_mode = CatalogInclination()).spectral_density
         )
         @test !isapprox(
             Turing.logjoint(mismatched, problem.fiducials), zero_residual_logjoint)
@@ -155,9 +149,9 @@ end
     end
 end
 
-@testset "flat submodel and conditioning boundary" begin
+@testset "constants replace conditioning" begin
     problem = local_problem_context()
-    model = build_turing_model(
+    full = build_turing_model(
         problem.model,
         problem.fluxes,
         problem.samples,
@@ -165,19 +159,43 @@ end
         problem.observation,
         problem.prior
     )
-    present = _varinfo_symbols(VarInfo(model))
-    @test present == Set((:rate_scale, :weight_shift))
+    @test _varinfo_symbols(VarInfo(full)) == Set(keys(problem.prior))
 
-    @test condition_turing_model(
-        model, problem.theta, problem.prior, nothing) === model
-    conditioned = condition_turing_model(
-        model, problem.theta, problem.prior, (:rate_scale,))
-    @test _varinfo_symbols(VarInfo(conditioned)) == Set((:rate_scale,))
+    # Restrict the prior to one parameter and hold the rest fixed at the fiducial. The
+    # chain then contains exactly the sampled variable *by construction* -- no DynamicPPL
+    # conditioning, no complement computation, no subset validation.
+    restricted_prior = (; rate_scale = problem.prior.rate_scale)
+    constants = Base.structdiff(problem.fiducials, restricted_prior)
+    @test keys(constants) == (:weight_shift,)
 
-    @test_throws ArgumentError condition_turing_model(
-        model, problem.theta, problem.prior, ())
-    @test_throws ArgumentError condition_turing_model(
-        model, problem.theta, problem.prior, (:unknown,))
-    @test_throws ArgumentError condition_turing_model(
-        model, problem.theta, problem.prior, (:rate_scale, :rate_scale))
+    restricted = build_turing_model(
+        problem.model,
+        problem.fluxes,
+        problem.samples,
+        problem.fiducials,
+        problem.observation,
+        restricted_prior;
+        constants = constants
+    )
+    @test _varinfo_symbols(VarInfo(restricted)) == Set((:rate_scale,))
+
+    # At a point whose fixed coordinate equals its constant, the restricted model scores
+    # the same likelihood as the full one -- the two differ only by the prior term the
+    # fixed variable no longer contributes.
+    θ = merge(problem.theta, (; weight_shift = problem.fiducials.weight_shift))
+    @test Turing.logjoint(restricted, (; rate_scale = θ.rate_scale)) ≈
+          Turing.logjoint(full, θ) -
+          logpdf(problem.prior.weight_shift, problem.fiducials.weight_shift)
+
+    # `merge(constants, Λ_sampled)` lets the sampled value win, so an overlapping key
+    # would silently shadow the constant the caller asked for. Reject it up front.
+    @test_throws ArgumentError build_turing_model(
+        problem.model,
+        problem.fluxes,
+        problem.samples,
+        problem.fiducials,
+        problem.observation,
+        restricted_prior;
+        constants = problem.fiducials
+    )
 end

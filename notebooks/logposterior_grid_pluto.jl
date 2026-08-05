@@ -10,7 +10,7 @@ md"""
 
 Sampler-free posterior visualization: builds the conditioned Turing model with the same canonical adapter as `mcmc.jl`, wraps it with `DynamicPPL.LogDensityFunction` (non-linked ⇒ physical-space logposterior, no Jacobian), and evaluates the **logposterior on a regular grid** over the free (sampled) parameters. Plots the result as a 1-D line or 2-D heatmap with CairoMakie.
 
-With `observed = fiducial_spectral_density`, the likelihood is largest at the fiducial
+With `observed` synthesized by `forward_model` at the fiducial, the likelihood is largest at the fiducial
 point (flat priors); the full log-posterior also includes the prior. Useful for checking
 posterior geometry and identifiability before or without running HMC.
 
@@ -40,8 +40,7 @@ begin
                      CatalogInclination,
                      W0CDM,
                      ModifiedPropagation
-    using AstroSGWBInference: build_turing_model, condition_turing_model,
-                              fiducial_spectral_density
+    using AstroSGWBInference: build_turing_model, forward_model
     using AstroSGWBImportanceModels:
                                      bns_samples_from_catalog,
                                      prepare_bns_madau_dickinson_model
@@ -143,9 +142,9 @@ begin
     )
 
     @info "using fiducial in-band spectrum from cache as observed data"
-    observed = fiducial_spectral_density(
+    observed = forward_model(
         prepared_model, fluxes, samples, fiducials;
-        average_mode = resolved_average_mode)
+        average_mode = resolved_average_mode).spectral_density
 
     nothing
 end
@@ -154,27 +153,28 @@ end
 md"""
 ## Logposterior grid
 
-Wrap the conditioned Turing model with `DynamicPPL.LogDensityFunction` (non-linked ⇒ physical-space logposterior, no Jacobian) and evaluate it on a regular grid over the free-parameter axes defined by `sample_only`.
+Wrap the Turing model with `DynamicPPL.LogDensityFunction` (non-linked ⇒ physical-space logposterior, no Jacobian) and evaluate it on a regular grid over the free-parameter axes defined by `sample_only`.
 """
 
 # ╔═╡ de9f8a7b-0c1d-4e2f-8031-5c6d7e8f9a0b
 begin
+    # S3: restrict the prior to the sampled axes and pass the rest as `constants`.
+    # The model then carries exactly the free parameters by construction.
+    prior = sample_only_tup === nothing ? hyperprior :
+            NamedTuple{sample_only_tup}(hyperprior)
+    constants = Base.structdiff(fiducials, prior)
     model = build_turing_model(
-        prepared_model, fluxes, samples, fiducials, observation, hyperprior;
-        track = false, observed = observed, average_mode = resolved_average_mode)
-    conditioned = condition_turing_model(model, fiducials, hyperprior, sample_only_tup)
-    lf = DynamicPPL.LogDensityFunction(conditioned)
+        prepared_model, fluxes, samples, fiducials, observation, prior;
+        constants = constants, track = false, observed = observed,
+        average_mode = resolved_average_mode)
+    lf = DynamicPPL.LogDensityFunction(model)
 
-    free_order = if sample_only_tup === nothing
-        order
-    else
-        Tuple(s for s in order if s in sample_only_tup)
-    end
+    free_order = keys(prior)
 
-    z0 = convert(Vector{Float64}, DynamicPPL.VarInfo(conditioned)[:])
+    z0 = convert(Vector{Float64}, DynamicPPL.VarInfo(model)[:])
     length(z0) == length(free_order) || error(
         "VarInfo free vector has length $(length(z0)) but free_order has length $(length(free_order)). " *
-        "The conditioned model's variable layout does not match the expected free_order."
+        "The model's variable layout does not match the expected free_order."
     )
     (1 <= length(free_order) <= 2) || error(
         "this notebook supports 1 or 2 free parameters; got $(length(free_order)). " *

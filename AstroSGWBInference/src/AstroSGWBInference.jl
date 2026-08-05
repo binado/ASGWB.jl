@@ -22,28 +22,29 @@ which keeps full dispatch and type parameters -- and an ad-hoc model is a plain 
     weights_fn = (Λ, samples) -> (1e-7 * Λ.rate_scale,
                                   fill(Λ.weight_shift, length(samples.redshift)))
 
-Hyperparameter *names* are declared by the prior, not by the model: `keys(prior)`
-alone determines what is sampled. A name the callable needs but the prior omits surfaces
-as a `KeyError` on `Λ.name` at the first evaluation, before the sampler burns wall clock.
+Hyperparameter *names* are declared by the prior and `constants`, not by the model:
+`keys(prior)` alone determines what is sampled, and `constants` supplies what is held
+fixed. The model body evaluates at `merge(constants, Λ_sampled)`. A name the callable
+needs but neither supplies surfaces as a `KeyError` on `Λ.name` at the first evaluation,
+before the sampler burns wall clock.
+
+[`forward_model`](@ref) is the single implementation of the forward pass, shared by the
+`@model` body and the synthesis of `observed` at the fiducial point. Scoring a point is
+`Turing.logjoint(model, θ)`; there is deliberately no second likelihood implementation to
+drift from the first.
 """
 module AstroSGWBInference
 
 include("InferenceImpl.jl")
 using .InferenceImpl:
-                      fiducial_spectral_density,
+                      forward_model,
                       build_turing_model,
-                      condition_turing_model,
-                      loglikelihood,
-                      logposterior,
                       AbstractAverageMode,
                       AnalyticInclination,
                       CatalogInclination
 
-export fiducial_spectral_density,
+export forward_model,
        build_turing_model,
-       condition_turing_model,
-       loglikelihood,
-       logposterior,
        AbstractAverageMode,
        AnalyticInclination,
        CatalogInclination,

@@ -28,7 +28,6 @@ using AstroSGWBImportanceModels:
                                  prepare_bns_madau_dickinson_model
 using AstroSGWBInference:
                           build_turing_model,
-                          condition_turing_model,
                           atomic_save_chain,
                           MCMCConfig,
                           load_config,
@@ -94,16 +93,22 @@ function _fiducials_namedtuple(cfg::MCMCConfig, order::Tuple{Vararg{Symbol}})
     return canonical_hyperparameters(order, nt; context = "fiducial hyperparameters")
 end
 
-"""Resolve `sample_only` to a tuple of symbols, validating membership in `order`."""
-function _resolve_sample_only(cfg::MCMCConfig, order::Tuple{Vararg{Symbol}})
-    cfg.sample_only === nothing && return nothing
-    isempty(cfg.sample_only) && return nothing
-    for sym in cfg.sample_only
-        sym in order || throw(ArgumentError(
-            "unknown hyperparameter $(repr(sym)) in sample_only; expected one of $order",
+"""
+Restrict `prior` to the hyperparameters named in `sample_only`.
+
+`NamedTuple{names}(prior)` alone would report an unknown symbol as
+`type NamedTuple has no field :Xyz`, which does not say where the name came from.
+"""
+function _restrict_prior(prior::NamedTuple, sample_only)
+    (sample_only === nothing || isempty(sample_only)) && return prior
+    names = Tuple(Symbol.(sample_only))
+    for sym in names
+        haskey(prior, sym) || throw(ArgumentError(
+            "unknown hyperparameter $(repr(sym)) in sample_only; " *
+            "expected one of $(keys(prior))",
         ))
     end
-    return Tuple(cfg.sample_only)
+    return NamedTuple{names}(prior)
 end
 
 # --------------------------------------------------------------------------
@@ -136,7 +141,12 @@ function run_mcmc(config_file::String)
     order = keys(HYPERPRIOR)
     @info "model" cosmology=string(C) propagation=string(P) order
     fiducials = _fiducials_namedtuple(cfg, order)
-    sample_only = _resolve_sample_only(cfg, order)
+    # S3: the prior declares what is sampled, `constants` what is held fixed. The chain
+    # then carries exactly the sampled variables by construction -- no DynamicPPL
+    # conditioning, no complement computation, no subset validation.
+    prior = _restrict_prior(HYPERPRIOR, cfg.sample_only)
+    constants = Base.structdiff(fiducials, prior)
+    sample_only = keys(prior) == order ? nothing : keys(prior)
 
     @info "seeding RNG" seed = cfg.seed
     Random.seed!(cfg.seed)
@@ -174,22 +184,17 @@ function run_mcmc(config_file::String)
     output_toml = joinpath(output_dir, "$base.toml")
 
     adtype = _resolve_adtype(cfg.sampler.ad_backend)
-    @info "starting NUTS" nadapts=cfg.sampler.nadapts nsamples=cfg.sampler.nsamples target_acceptance=cfg.sampler.target_acceptance ad_backend=cfg.sampler.ad_backend sample_only nchains
+    @info "starting NUTS" nadapts=cfg.sampler.nadapts nsamples=cfg.sampler.nsamples target_acceptance=cfg.sampler.target_acceptance ad_backend=cfg.sampler.ad_backend sampled=keys(prior) fixed=keys(constants) nchains
     turing_model = build_turing_model(
         model,
         catalog.fluxes,
         samples,
         fiducials,
         observation,
-        HYPERPRIOR;
+        prior;
+        constants = constants,
         track = true,
         average_mode = resolved_average_mode
-    )
-    conditioned = condition_turing_model(
-        turing_model,
-        fiducials,
-        HYPERPRIOR,
-        sample_only
     )
     nuts = Turing.NUTS(
         cfg.sampler.nadapts,
@@ -199,7 +204,7 @@ function run_mcmc(config_file::String)
     )
     initial_params = fill(InitFromPrior(), nchains)
     chain = sample(
-        conditioned,
+        turing_model,
         nuts,
         MCMCThreads(),
         cfg.sampler.nsamples,
