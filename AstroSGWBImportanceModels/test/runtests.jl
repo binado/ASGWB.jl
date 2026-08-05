@@ -7,6 +7,9 @@ using Distributions: Uniform
 using ForwardDiff
 using Turing
 
+# S7: `R₀` (Gpc⁻³ yr⁻¹) is a live hyperparameter read as `Λ.R₀`, not a frozen struct
+# field. It sits in both points at the same value the old `local_merger_rate` keyword
+# carried, which is why the frozen `rate` fixture below does not move.
 const FIDUCIALS = (
     H0 = 67.0,
     Ωm = 0.315,
@@ -14,7 +17,8 @@ const FIDUCIALS = (
     Ξₙ = 0.0,
     γ = 2.7,
     κ = 3.0,
-    zpeak = 2.5
+    zpeak = 2.5,
+    R₀ = 161.0
 )
 
 const TARGET = (
@@ -24,7 +28,8 @@ const TARGET = (
     Ξₙ = 0.2,
     γ = 2.9,
     κ = 3.1,
-    zpeak = 2.2
+    zpeak = 2.2,
+    R₀ = 161.0
 )
 
 const SAMPLES = (
@@ -34,14 +39,7 @@ const SAMPLES = (
 
 function prepared(samples = SAMPLES; C = LambdaCDM, P = ModifiedPropagation,
         fiducials = FIDUCIALS)
-    return prepare_bns_madau_dickinson_model(
-        samples,
-        fiducials,
-        C,
-        P;
-        local_merger_rate = 161.0,
-        observation_time = 1.0
-    )
+    return prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
 end
 
 @testset "the prepared model is the contract callable" begin
@@ -81,8 +79,6 @@ end
     @test model isa BNSMadauDickinsonImportanceModel{LambdaCDM, ModifiedPropagation}
     @test model.z_grid isa Vector{Float64}
     @test model.proposal_log_pdf isa Vector{Float64}
-    @test model.local_merger_rate === 161.0
-    @test model.observation_time === 1.0
     @test length(model.z_grid) == length(DEFAULT_Z_GRID)
     @test length(model.proposal_log_pdf) == length(SAMPLES.redshift)
     @test all(isfinite, model.proposal_log_pdf)
@@ -251,9 +247,21 @@ end
         κ = Uniform(0.05, 10.0),
         zpeak = Uniform(0.05, 10.0)
     )
+    # `R₀` is fixed via `constants` rather than sampled -- the production default. The
+    # prior declares the sampled names; `constants` supplies the rest of `Λ`.
     turing_model = build_turing_model(
-        model, fluxes, SAMPLES, FIDUCIALS, observation, prior)
+        model, fluxes, SAMPLES, FIDUCIALS, observation, prior;
+        constants = (; R₀ = FIDUCIALS.R₀))
 
     @test turing_model !== nothing
     @test isfinite(Turing.logjoint(turing_model, FIDUCIALS))
+
+    # And the opt-in: adding `R₀` to the prior makes it a sampled variable, with no
+    # change anywhere else.
+    sampling_R₀ = build_turing_model(
+        model, fluxes, SAMPLES, FIDUCIALS, observation,
+        merge(prior, (; R₀ = Uniform(10.0, 1000.0))))
+    @test isfinite(Turing.logjoint(sampling_R₀, FIDUCIALS))
+    @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(sampling_R₀)))) ==
+          Set(keys(FIDUCIALS))
 end

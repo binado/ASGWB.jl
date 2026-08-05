@@ -251,7 +251,9 @@ function _run(;
     P = ModifiedPropagation
     # S2: the prior declares the hyperparameter names; there is no model to ask.
     order = keys(priors)
-    θ0 = _theta0_from_toml(init_tbl, order)
+    # S7: `R₀` is a live hyperparameter now. The profiler keeps it out of `priors` and
+    # threads the config's `local_merger_rate` in as a constant, matching production.
+    θ0 = merge(_theta0_from_toml(init_tbl, order), (; R₀ = local_merger_rate))
     samples = bns_samples_from_catalog(catalog.samples, C, θ0)
     # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
@@ -262,8 +264,6 @@ function _run(;
         θ0,
         C,
         P;
-        observation_time = observation_time,
-        local_merger_rate = local_merger_rate
     )
     observation = build_observation_context(
         catalog.frequencies, detectors, catalog.in_band_mask, observation_time)
@@ -299,6 +299,7 @@ function _run(;
         θ0,
         observation,
         priors;
+        constants = (; R₀ = local_merger_rate),
         track = false,
         observed = observed,
         average_mode = resolved_average_mode
@@ -363,11 +364,7 @@ function _run(;
     # The fused joint replaces the separate weight/rate atomics: it returns
     # (rate, log_weights) in one cosmology-specific pass.
     suite["stage"]["rate_and_log_weights"] = @benchmarkable $model($h, $samples)
-    suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
-        $norm0,
-        $(model.local_merger_rate),
-        $(model.observation_time)
-    )
+    suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec($norm0, $(h.R₀))
     suite["stage"]["spectral"] = @benchmarkable spectral_density(
         $fluxes,
         $rate0;

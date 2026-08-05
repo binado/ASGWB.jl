@@ -59,6 +59,9 @@ end
 Expected number of detected events over the observation.
 
 `observation_time` is the observation duration in years (Julian year).
+
+Public API for the sampling and diagnostic paths. It no longer sits on any inference
+path: `merger_rate_per_sec` used to route through it, and `T` cancelled -- see S7.
 """
 function expected_number_of_events(
         local_merger_rate_gpc3_yr::Real,
@@ -69,40 +72,33 @@ function expected_number_of_events(
 end
 
 """
-    merger_rate_per_sec(redshift_integral_mpc3, local_merger_rate_gpc3_yr, observation_time)
-    merger_rate_per_sec(prior::RedshiftPrior, local_merger_rate_gpc3_yr, observation_time)
+    merger_rate_per_sec(redshift_integral_mpc3, local_merger_rate_gpc3_yr)
+    merger_rate_per_sec(prior::RedshiftPrior, local_merger_rate_gpc3_yr)
 
 Detector-frame merger rate in events/sec:
-`expected_number_of_events(local_rate, redshift_integral, observation_time) /
-year_to_second(observation_time)`.
+`1e-9 · R₀ · ∫dN/dz / JULIAN_YEAR_SEC`.
+
+There is deliberately no `observation_time` argument. The rate is a rate; the old
+three-argument form computed
+`expected_number_of_events(R₀, ∫, T) / year_to_second(T) = 1e-9·R₀·∫·T / (T·JULIAN_YEAR_SEC)`,
+where `T` cancels algebraically -- it was multiplied and divided by itself. Detector
+state, `observation_time` included, does not belong on the importance-weighting path.
+[`expected_number_of_events`](@ref) keeps its `T`, which it genuinely uses.
 
 The scalar form is what the importance-weighting hot path calls: it needs only the
 redshift integral, so it does not have to build a [`RedshiftPrior`](@ref) just to read
 `normalizer` back out of it. The `RedshiftPrior` form forwards to it and stays the entry
 point for the sampling path.
-
-`observation_time` is the observation duration in years (Julian year).
 """
 function merger_rate_per_sec(
         redshift_integral_mpc3::Real,
-        local_merger_rate_gpc3_yr::Real,
-        observation_time::Real
+        local_merger_rate_gpc3_yr::Real
 )
-    n_events = expected_number_of_events(
-        local_merger_rate_gpc3_yr,
-        redshift_integral_mpc3,
-        observation_time
-    )
-    return n_events / year_to_second(observation_time)
+    return 1.0e-9 * local_merger_rate_gpc3_yr * redshift_integral_mpc3 / JULIAN_YEAR_SEC
 end
 
-function merger_rate_per_sec(
-        prior::RedshiftPrior,
-        local_merger_rate_gpc3_yr::Real,
-        observation_time::Real
-)
-    return merger_rate_per_sec(
-        redshift_integral(prior), local_merger_rate_gpc3_yr, observation_time)
+function merger_rate_per_sec(prior::RedshiftPrior, local_merger_rate_gpc3_yr::Real)
+    return merger_rate_per_sec(redshift_integral(prior), local_merger_rate_gpc3_yr)
 end
 
 """

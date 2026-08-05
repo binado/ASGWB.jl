@@ -5,7 +5,7 @@ using TOML
 export MCMCConfig, SamplerConfig, load_config, save_config, validate_fiducials
 
 """Current config schema version. Bump on any breaking layout change."""
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 """AD backends the notebook knows how to resolve (mirrors `resolve_adtype`)."""
 const SUPPORTED_AD_BACKENDS = ("ForwardDiff",)
@@ -29,8 +29,8 @@ end
     MCMCConfig
 
 Strongly-typed, serializable record of the *data* that defines an MCMC run:
-input/output paths, detector network, seed, observation time, local merger rate,
-sampler options, fiducial values, and `sample_only`.
+input/output paths, detector network, seed, observation time, sampler options,
+fiducial values, and `sample_only`.
 
 It deliberately does **not** capture the priors, population model, cosmology
 family, or propagation family — those are code (live objects / types) that stay
@@ -43,6 +43,12 @@ materializes them with `Detector.(cfg.detectors)`. `fiducials` is a flat
 `sample_only` is optional: an absent TOML key decodes to `nothing` (TOML has no
 null), and `nothing` is omitted on write.
 
+Schema v2 dropped `local_merger_rate`: it is an ordinary hyperparameter (`R₀`, in
+Gpc⁻³ yr⁻¹) and lives in `[fiducials]`, so it is fixed by default and sampled by adding
+it to `sample_only` and to the runner's hyperprior. `observation_time` stays -- unlike
+the rate it does not cancel, and `build_observation_context` and the SNR tracking branch
+both read it.
+
 Construct from a parsed dict via `MCMCConfig(d)` or from a file via
 [`load_config`](@ref); serialize with [`save_config`](@ref).
 """
@@ -52,7 +58,6 @@ struct MCMCConfig
     detectors::Vector{String}
     seed::Int
     observation_time::Float64
-    local_merger_rate::Float64
     sampler::SamplerConfig
     fiducials::Dict{Symbol, Float64}
     sample_only::Union{Nothing, Vector{Symbol}}
@@ -116,11 +121,6 @@ function MCMCConfig(d::AbstractDict)
     observation_time > 0 || throw(ArgumentError(
         "observation_time must be > 0; got $observation_time",
     ))
-    local_merger_rate = Float64(d["local_merger_rate"])
-    local_merger_rate > 0 || throw(ArgumentError(
-        "local_merger_rate must be > 0; got $local_merger_rate",
-    ))
-
     sampler = SamplerConfig(d["sampler"])
     fiducials = Dict{Symbol, Float64}(Symbol(k) => Float64(v) for (k, v) in d["fiducials"])
 
@@ -134,7 +134,6 @@ function MCMCConfig(d::AbstractDict)
         Vector{String}(String.(d["detectors"])),
         Int(d["seed"]),
         observation_time,
-        local_merger_rate,
         sampler,
         fiducials,
         sample_only,
@@ -165,7 +164,6 @@ function save_config(cfg::MCMCConfig, path::AbstractString)
         "detectors" => cfg.detectors,
         "seed" => cfg.seed,
         "observation_time" => cfg.observation_time,
-        "local_merger_rate" => cfg.local_merger_rate,
         "output_dir" => cfg.output_dir,
         "output_prefix" => cfg.output_prefix,
         "sampler" => Dict{String, Any}(

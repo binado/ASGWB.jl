@@ -14,7 +14,6 @@ const _REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
 
 using AstroSGWB
 using AstroSGWB:
-                 canonical_hyperparameters,
                  load_catalog,
                  average_mode,
                  AnalyticInclination,
@@ -31,8 +30,7 @@ using AstroSGWBInference:
                           atomic_save_chain,
                           MCMCConfig,
                           load_config,
-                          save_config,
-                          validate_fiducials
+                          save_config
 using ADTypes: AutoForwardDiff
 using AdvancedHMC: DenseEuclideanMetric
 using Distributions: Uniform
@@ -86,11 +84,18 @@ function _resolve_adtype(name::AbstractString)
     throw(ArgumentError("unsupported ad_backend $(repr(name)) (use \"ForwardDiff\")"))
 end
 
-"""Order the validated fiducial map into the canonical NamedTuple the model expects."""
-function _fiducials_namedtuple(cfg::MCMCConfig, order::Tuple{Vararg{Symbol}})
-    validate_fiducials(cfg, order)
-    nt = NamedTuple(Tuple(sym => cfg.fiducials[sym] for sym in order))
-    return canonical_hyperparameters(order, nt; context = "fiducial hyperparameters")
+"""
+Materialize the config's fiducial map as a `NamedTuple`.
+
+This is the **full** point (`prior ∪ constants`) at which `observed` is synthesized, so
+it is built from the config's own keys rather than checked against a model-declared
+order -- there is no longer such an order to check against. A key the model reads but
+the config omits throws a `KeyError` on `Λ.name` at prepare time, before NUTS starts.
+Keys are sorted for a deterministic `NamedTuple` type.
+"""
+function _fiducials_namedtuple(cfg::MCMCConfig)
+    names = Tuple(sort!(collect(keys(cfg.fiducials)); by = string))
+    return NamedTuple{names}(Tuple(cfg.fiducials[sym] for sym in names))
 end
 
 """
@@ -135,18 +140,14 @@ function run_mcmc(config_file::String)
         "set nchains = 0 or match -t / SLURM_CPUS_PER_TASK",
     ))
 
-    # S2: the prior is the declaration of what the model takes. There is no longer a
-    # `hyperparameters(model)` to ask, and no need for one -- a fiducial key the model
-    # reads but the config omits throws from `Λ.name` at prepare time, before NUTS starts.
-    order = keys(HYPERPRIOR)
-    @info "model" cosmology=string(C) propagation=string(P) order
-    fiducials = _fiducials_namedtuple(cfg, order)
+    @info "model" cosmology=string(C) propagation=string(P) sampleable=keys(HYPERPRIOR)
+    fiducials = _fiducials_namedtuple(cfg)
     # S3: the prior declares what is sampled, `constants` what is held fixed. The chain
     # then carries exactly the sampled variables by construction -- no DynamicPPL
     # conditioning, no complement computation, no subset validation.
     prior = _restrict_prior(HYPERPRIOR, cfg.sample_only)
     constants = Base.structdiff(fiducials, prior)
-    sample_only = keys(prior) == order ? nothing : keys(prior)
+    sample_only = keys(prior) == keys(HYPERPRIOR) ? nothing : keys(prior)
 
     @info "seeding RNG" seed = cfg.seed
     Random.seed!(cfg.seed)
@@ -160,14 +161,7 @@ function run_mcmc(config_file::String)
     # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, fiducials))
-    model = prepare_bns_madau_dickinson_model(
-        samples,
-        fiducials,
-        C,
-        P;
-        observation_time = cfg.observation_time,
-        local_merger_rate = cfg.local_merger_rate
-    )
+    model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
     observation = build_observation_context(
         catalog.frequencies, detectors, catalog.in_band_mask, cfg.observation_time)
     @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(

@@ -190,11 +190,13 @@ end
 
 const _PARITY_CATALOG_DIRS = Dict{Symbol, String}()
 
+# The local merger rate used to travel with this: S7 made it the live `Λ.R₀`, which
+# belongs to the importance model's hyperparameters, not to detector state.
 function parity_observation_kwargs(variant::Symbol)
     if variant == :posterior || variant == :full_intrinsic
-        return (local_merger_rate = 1e-7, observation_time = 1e-6)
+        return (observation_time = 1e-6,)
     else
-        return (local_merger_rate = 161.0, observation_time = 1.0)
+        return (observation_time = 1.0,)
     end
 end
 

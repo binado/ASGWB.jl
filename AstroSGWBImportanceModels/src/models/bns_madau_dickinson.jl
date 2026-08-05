@@ -21,8 +21,6 @@ struct BNSMadauDickinsonImportanceModel{
     interp::GridInterpolator
     proposal_log_pdf::Vector{Float64}
     log_Ξ_fid::Vector{Float64}
-    local_merger_rate::Float64
-    observation_time::Float64
 end
 
 const _NON_GR_FIDUCIAL_NOTICE = "BNS model: non-GR fiducial propagation; log-weights " *
@@ -50,13 +48,17 @@ function bns_samples_from_catalog(
 end
 
 """
-    prepare_bns_madau_dickinson_model(samples, fiducials, C, P;
-        local_merger_rate, observation_time, z_grid=DEFAULT_Z_GRID)
+    prepare_bns_madau_dickinson_model(samples, fiducials, C, P; z_grid=DEFAULT_Z_GRID)
 
 Precompute the Float64 proposal caches for the canonical BNS Madau–Dickinson importance
-adapter. `local_merger_rate` is the local merger rate in events per year; `observation_time`
-is the observation duration in years (Julian year). Returns the prepared model directly.
-Construct detector state separately with `AstroSGWB.build_observation_context`.
+adapter. Returns the prepared model directly. Construct detector state separately with
+`AstroSGWB.build_observation_context`.
+
+The local merger rate is a live hyperparameter, read as `Λ.R₀` (in Gpc⁻³ yr⁻¹) on every
+call, not a frozen field -- it is a real astrophysical unknown that scales the rate
+linearly, so a caller can sample it by adding `R₀` to the prior or hold it fixed by
+putting it in `constants`. `observation_time` is gone entirely: it cancelled
+algebraically, and detector state never belongs in the importance model.
 
 The returned model's log-weights are referenced to the **fiducial GW** luminosity
 distance, so the flux matrix passed alongside must have been through
@@ -69,8 +71,6 @@ function prepare_bns_madau_dickinson_model(
         fiducials::NamedTuple,
         ::Type{C},
         ::Type{P};
-        local_merger_rate::Real,
-        observation_time::Real,
         z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
 ) where {C <: AbstractCosmology, P <: AbstractPropagation}
     z = samples.redshift
@@ -104,9 +104,7 @@ function prepare_bns_madau_dickinson_model(
         zg,
         interp,
         proposal_log_pdf,
-        log_Ξ_fid,
-        Float64(local_merger_rate),
-        Float64(observation_time)
+        log_Ξ_fid
     )
 end
 
@@ -149,6 +147,10 @@ end
 
 The model contract: detector-frame merger rate in events per second, and one log
 importance weight per catalog sample, at the live hyperparameters `Λ`.
+
+`Λ` must carry the cosmology parameters of `C`, the propagation parameters of `P`, the
+Madau–Dickinson shape `(:γ, :κ, :zpeak)`, and `:R₀`, the local merger rate in
+Gpc⁻³ yr⁻¹. A missing key is a `KeyError` here, on the first evaluation.
 """
 function (model::BNSMadauDickinsonImportanceModel{C, P})(
         Λ::NamedTuple,
@@ -164,6 +166,6 @@ function (model::BNSMadauDickinsonImportanceModel{C, P})(
                      2 * (log(samples.luminosity_distance) - log(t.d_l) - log(Ξ_θ) +
                       model.log_Ξ_fid)
 
-    rate = merger_rate_per_sec(t.norm, model.local_merger_rate, model.observation_time)
+    rate = merger_rate_per_sec(t.norm, Λ.R₀)
     return (rate, log_weights)
 end

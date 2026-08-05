@@ -12,15 +12,15 @@ function example_config(; sample_only = [:H0])
         :Ξₙ => 1.91,
         :γ => 2.7,
         :κ => 3.0,
-        :zpeak => 2.0
+        :zpeak => 2.0,
+        :R₀ => 161.0
     )
     return MCMCConfig(
-        1,
+        2,
         "catalog.h5",
         ["S1", "R1", "C1"],
         42,
         1.0,
-        161.0,
         sampler,
         fiducials,
         sample_only,
@@ -33,12 +33,11 @@ end
 # validating constructor directly.
 function example_dict()
     return Dict{String, Any}(
-        "version" => 1,
+        "version" => 2,
         "catalog_path" => "catalog.h5",
         "detectors" => ["S1", "R1", "C1"],
         "seed" => 42,
         "observation_time" => 1.0,
-        "local_merger_rate" => 161.0,
         "sample_only" => ["H0"],
         "output_dir" => "chains",
         "output_prefix" => "chains",
@@ -57,7 +56,8 @@ function example_dict()
             "Ξₙ" => 1.91,
             "γ" => 2.7,
             "κ" => 3.0,
-            "zpeak" => 2.0
+            "zpeak" => 2.0,
+            "R₀" => 161.0
         )
     )
 end
@@ -144,7 +144,7 @@ end
 
 @testset "validate_fiducials matches model order" begin
     cfg = example_config()
-    order = (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
+    order = (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak, :R₀)
     @test validate_fiducials(cfg, order) === nothing
 
     # Extra expected key (model wants one the config lacks).
@@ -156,7 +156,7 @@ end
     typo_fiducials[:z_peak] = 2.0
     cfg_typo = MCMCConfig(
         cfg.version, cfg.catalog_path, cfg.detectors, cfg.seed,
-        cfg.observation_time, cfg.local_merger_rate, cfg.sampler,
+        cfg.observation_time, cfg.sampler,
         typo_fiducials, cfg.sample_only, cfg.output_dir, cfg.output_prefix
     )
     @test_throws ArgumentError validate_fiducials(cfg_typo, order)

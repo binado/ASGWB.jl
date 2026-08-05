@@ -47,7 +47,8 @@ const BASE_FIDUCIALS = Dict{Symbol, Float64}(
     :Ξₙ => 1.91,
     :γ => 2.7,
     :κ => 5.7,
-    :zpeak => 2.0
+    :zpeak => 2.0,
+    :R₀ => 161.0
 )
 
 function _resolve_output_dir(path::AbstractString)
@@ -56,12 +57,11 @@ end
 
 function _config(detectors::Vector{String}, sample_only::Vector{Symbol})
     return MCMCConfig(
-        1,
+        2,
         CATALOG_PATH,
         copy(detectors),
         42,
         1.0,
-        161.0,
         BASE_SAMPLER,
         copy(BASE_FIDUCIALS),
         copy(sample_only),

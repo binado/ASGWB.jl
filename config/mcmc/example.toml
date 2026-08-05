@@ -3,7 +3,7 @@
 # Cosmology family and importance adapter are fixed in the script
 # (W0CDM + ModifiedPropagation + BNSMadauDickinsonImportanceModel).
 
-version = 1
+version = 2
 
 # Catalog path is relative to the repo root unless absolute.
 catalog_path = "catalog.h5"
@@ -14,7 +14,6 @@ detectors = ["E1", "E2", "E3", "C2"]
 sample_only = ["H0"]
 
 seed = 42
-local_merger_rate = 161.0   # matches COBA simulations
 observation_time = 1.0
 
 output_dir = "chains"
@@ -38,3 +37,7 @@ w0 = -1.0
 "γ" = 2.7
 "κ" = 5.7
 zpeak = 2.0
+# Local merger rate in Gpc^-3 yr^-1 (matches COBA simulations). It is an ordinary
+# hyperparameter: fixed here by default, sampled by adding it to sample_only and to
+# HYPERPRIOR in scripts/run_mcmc.jl.
+"R₀" = 161.0
