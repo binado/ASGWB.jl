@@ -44,17 +44,15 @@ function prepared(samples = SAMPLES; C = LambdaCDM, P = ModifiedPropagation,
     )
 end
 
-@testset "BNS Madau–Dickinson hyperparameters" begin
-    @test bns_madau_dickinson_hyperparameters(LambdaCDM, GR) ==
-          (:H0, :Ωm, :γ, :κ, :zpeak)
-    @test bns_madau_dickinson_hyperparameters(LambdaCDM, ModifiedPropagation) ==
-          (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
-    @test bns_madau_dickinson_hyperparameters(W0CDM, GR) ==
-          (:H0, :Ωm, :w0, :γ, :κ, :zpeak)
-    @test bns_madau_dickinson_hyperparameters(W0CDM, ModifiedPropagation) ==
-          (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
-    @test AstroSGWBInference.hyperparameters(prepared()) ==
-          bns_madau_dickinson_hyperparameters(LambdaCDM, ModifiedPropagation)
+@testset "the prepared model is the contract callable" begin
+    # S1: the whole model contract is `weights_fn(Λ, samples) -> (rate, log_weights)`.
+    # No abstract supertype, no generic function to add methods to -- so this package
+    # imports nothing from `AstroSGWBInference` and a plain closure would serve equally.
+    model = prepared()
+    @test !isempty(methods(model))
+    rate, log_weights = model(TARGET, SAMPLES)
+    @test rate isa Real
+    @test length(log_weights) == length(SAMPLES.redshift)
 end
 
 @testset "catalog sample adaptation" begin
@@ -97,14 +95,14 @@ end
     # floor in the same commit contributes ~1e-15 absolute, i.e. nothing.
     @test model.proposal_log_pdf ≈ [-6.2539635957301094, -4.9113292473890375]
 
-    rate, log_weights = merger_rate_and_log_weights(model, TARGET, SAMPLES)
+    rate, log_weights = model(TARGET, SAMPLES)
     @test rate ≈ 0.031168377918986516 rtol = 1.0e-13
     @test log_weights ≈ [-0.10995559838341759, -0.16653907807566956] rtol = 1.0e-12
     @test size(log_weights) == size(SAMPLES.redshift)
     @test all(isfinite, log_weights)
 
-    @test_throws DimensionMismatch merger_rate_and_log_weights(
-        model, TARGET, (redshift = [0.1], luminosity_distance = [430.0]))
+    @test_throws DimensionMismatch model(TARGET, (
+        redshift = [0.1], luminosity_distance = [430.0]))
     # Decision B: the interpolator clamps, but a proposal sample off the integration grid
     # is a setup error and must be loud at prepare time.
     @test_throws ArgumentError prepared((
@@ -127,7 +125,7 @@ end
         distance_and_volume_grid(cosmology(LambdaCDM, FIDUCIALS),
         model.z_grid).luminosity_distance)
     grid_samples = (redshift = z, luminosity_distance = d_l_grid)
-    _, w = merger_rate_and_log_weights(model, FIDUCIALS, grid_samples)
+    _, w = model(FIDUCIALS, grid_samples)
     @test maximum(abs, w) < 1e-14
 
     # With the production sample adapter the residual is NOT zero: it synthesizes `d_L`
@@ -136,8 +134,7 @@ end
     # residual for the same reason — its catalog `luminosity_distance` column also does
     # not come from the 256-point grid the weights are evaluated on.
     _,
-    w_quadgk = merger_rate_and_log_weights(
-        model, FIDUCIALS,
+    w_quadgk = model(FIDUCIALS,
         bns_samples_from_catalog((redshift = z,), LambdaCDM, FIDUCIALS))
     @test 1e-3 < maximum(abs, w_quadgk) < 1e-1
 end
@@ -177,8 +174,8 @@ end
     @test m_gr.log_Ξ_fid == zeros(length(z))
     # Isolates the change to log_Ξ_fid: the proposal density is propagation-independent.
     @test m_mod.proposal_log_pdf == m_gr.proposal_log_pdf
-    _, w_gr = merger_rate_and_log_weights(m_gr, TARGET, SAMPLES)
-    _, w_mod = merger_rate_and_log_weights(m_mod, TARGET, SAMPLES)
+    _, w_gr = m_gr(TARGET, SAMPLES)
+    _, w_mod = m_mod(TARGET, SAMPLES)
     @test w_mod ≈ w_gr .+ 2 .* log.(gw_em_distance_ratio.(z, Ref(prop_fid)))
 
     # The load-bearing invariant, stated on the physical contraction:
@@ -201,9 +198,8 @@ end
     empty_model = prepared(empty_samples)
     one_model = prepared(one_sample)
     empty_rate,
-    empty_weights = merger_rate_and_log_weights(
-        empty_model, Λ_dual, empty_samples)
-    one_rate, one_weights = merger_rate_and_log_weights(one_model, Λ_dual, one_sample)
+    empty_weights = empty_model(Λ_dual, empty_samples)
+    one_rate, one_weights = one_model(Λ_dual, one_sample)
 
     @test isfinite(empty_rate)
     @test isfinite(one_rate)
@@ -221,7 +217,7 @@ end
     # exact shape `merge(constants, Λ_sampled)` produces on every gradient evaluation.
     model = prepared()
     dΞ₀ = ForwardDiff.derivative(1.1) do Ξ₀
-        _, w = merger_rate_and_log_weights(model, merge(TARGET, (; Ξ₀)), SAMPLES)
+        _, w = model(merge(TARGET, (; Ξ₀)), SAMPLES)
         sum(w)
     end
     @test isfinite(dΞ₀)
@@ -229,7 +225,7 @@ end
 
     # Same for a cosmology parameter, where only `Λ.H0` is dual.
     dH0 = ForwardDiff.derivative(70.0) do H0
-        rate, _ = merger_rate_and_log_weights(model, merge(TARGET, (; H0)), SAMPLES)
+        rate, _ = model(merge(TARGET, (; H0)), SAMPLES)
         rate
     end
     @test isfinite(dH0)

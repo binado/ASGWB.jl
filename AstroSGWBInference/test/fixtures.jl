@@ -1,16 +1,10 @@
 using Distributions: Uniform, product_distribution
-import AstroSGWBInference: hyperparameters, merger_rate_and_log_weights
 
-struct LocalImportanceModel end
-
-hyperparameters(::LocalImportanceModel) = (:rate_scale, :weight_shift)
-
-function merger_rate_and_log_weights(::LocalImportanceModel, Λ::NamedTuple, samples)
-    rate = 1.0e-7 * Λ.rate_scale
-    return rate, fill(Λ.weight_shift, length(samples.redshift))
+# S1: the model contract is a callable, so an ad-hoc model is three lines of arithmetic --
+# no struct, no method definitions on foreign generics, no import.
+const LOCAL_MODEL = function (Λ, samples)
+    return (1.0e-7 * Λ.rate_scale, fill(Λ.weight_shift, length(samples.redshift)))
 end
-
-const LOCAL_MODEL = LocalImportanceModel()
 const LOCAL_FLUXES = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
 const LOCAL_SAMPLES = (redshift = [0.1, 0.2],)
 const LOCAL_FIDUCIALS = (rate_scale = 1.0, weight_shift = 0.0)

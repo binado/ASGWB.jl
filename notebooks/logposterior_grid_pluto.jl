@@ -42,7 +42,6 @@ begin
                      ModifiedPropagation
     using AstroSGWBInference: build_turing_model, condition_turing_model,
                               fiducial_spectral_density
-    using AstroSGWBInference: hyperparameters
     using AstroSGWBImportanceModels:
                                      bns_samples_from_catalog,
                                      prepare_bns_madau_dickinson_model
@@ -134,7 +133,8 @@ begin
     )
     observation = build_observation_context(
         catalog.frequencies, detectors, catalog.in_band_mask, observation_time_yr)
-    order = hyperparameters(prepared_model)
+    # S2: the prior declares the hyperparameter names; there is no model to ask.
+    order = keys(hyperprior_dists)
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
 

@@ -1,10 +1,10 @@
 """
-    loglikelihood(Λ, model, fluxes, samples, observation::ObservationContext, observed;
+    loglikelihood(Λ, weights_fn, fluxes, samples, observation::ObservationContext, observed;
                   average_mode=AnalyticInclination())
 
 Gaussian in-band log-likelihood of the SGWB spectral density at `Λ`. Delegates the
-cosmology-specific `rate`/`log_weights` to the model's [`merger_rate_and_log_weights`](@ref)
-joint, exponentiates the weights, contracts the raw fluxes into `Sₕ`, and scores the in-band
+cosmology-specific `rate`/`log_weights` to the caller's `weights_fn(Λ, samples)` callable,
+exponentiates the weights, contracts the raw fluxes into `Sₕ`, and scores the in-band
 residual against the `observation` masks/scales.
 
 `observed` is the full-length strain spectral density vector (one entry per frequency bin
@@ -14,14 +14,14 @@ under (see [`fiducial_spectral_density`](@ref)).
 """
 function loglikelihood(
         Λ::NamedTuple,
-        model,
+        weights_fn,
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
         observation::ObservationContext,
         observed::AbstractVector{<:Real};
         average_mode::AbstractAverageMode = AnalyticInclination()
 )
-    Sh = _forward_spectral_density(model, fluxes, samples, Λ; average_mode)
+    Sh = _forward_spectral_density(weights_fn, fluxes, samples, Λ; average_mode)
 
     mask = observation.in_band_mask
     σ = observation.sgwb_scale_in_band
@@ -31,7 +31,7 @@ end
 
 function logposterior(
         Λ::NamedTuple,
-        model,
+        weights_fn,
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
         observation::ObservationContext,
@@ -40,5 +40,6 @@ function logposterior(
         average_mode::AbstractAverageMode = AnalyticInclination()
 )
     return logpdf(prior, Λ) +
-           loglikelihood(Λ, model, fluxes, samples, observation, observed; average_mode)
+           loglikelihood(
+        Λ, weights_fn, fluxes, samples, observation, observed; average_mode)
 end

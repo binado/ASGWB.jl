@@ -19,9 +19,7 @@ module AstroSGWBProfileCLI
 using Distributions: logpdf, product_distribution, Uniform
 using AstroSGWB
 using AstroSGWBInference: build_turing_model, fiducial_spectral_density, logposterior
-using AstroSGWBInference: merger_rate_and_log_weights
 using AstroSGWBImportanceModels:
-                                 bns_madau_dickinson_hyperparameters,
                                  bns_samples_from_catalog,
                                  prepare_bns_madau_dickinson_model
 using AstroSGWB:
@@ -251,7 +249,8 @@ function _run(;
     @info "average mode" mode = string(resolved_average_mode)
     C = LambdaCDM
     P = ModifiedPropagation
-    order = bns_madau_dickinson_hyperparameters(C, P)
+    # S2: the prior declares the hyperparameter names; there is no model to ask.
+    order = keys(priors.dists)
     θ0 = _theta0_from_toml(init_tbl, order)
     samples = bns_samples_from_catalog(catalog.samples, C, θ0)
     # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
@@ -317,7 +316,7 @@ function _run(;
     dN_dz0 = detector_frame_merger_rate_density.(
         model.z_grid, grid0.differential_comoving_volume, sfd0)
     norm0 = trapz(model.z_grid, dN_dz0)
-    rate0, log_weights0 = merger_rate_and_log_weights(model, h, samples)
+    rate0, log_weights0 = model(h, samples)
     weights0 = exp.(log_weights0)
     z_samples = redshift(samples)
 
@@ -362,8 +361,7 @@ function _run(;
         $c0, $(model.z_grid))
     # The fused joint replaces the separate weight/rate atomics: it returns
     # (rate, log_weights) in one cosmology-specific pass.
-    suite["stage"]["rate_and_log_weights"] = @benchmarkable merger_rate_and_log_weights(
-        $model, $h, $samples)
+    suite["stage"]["rate_and_log_weights"] = @benchmarkable $model($h, $samples)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec(
         $norm0,
         $(model.local_merger_rate),

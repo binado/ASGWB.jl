@@ -5,11 +5,15 @@ Prepared BNS importance model using a Madau–Dickinson source-frame merger rate
 background cosmology `C`, and GW propagation model `P`. Detector state is intentionally
 kept in a separate `AstroSGWB.ObservationContext`.
 
+The model is a **functor**: `model(Λ, samples) -> (rate, log_weights)` is the whole
+contract `AstroSGWBInference.build_turing_model` consumes, so this package adds no methods
+to foreign generics and does not depend on the inference package at all.
+
 `log_Ξ_fid` is `log Ξ(z_i)` at the **fiducial** propagation, captured at prepare time
-because `merger_rate_and_log_weights` only ever sees the live `Λ`. It enters the
-log-weights as `+2 log Ξ_fid`, which is the term that makes the weights consistent with a
-flux matrix re-referenced to the fiducial GW distance by
-[`apply_gw_distance_correction!`](@ref). The two must be applied together.
+because the hot path only ever sees the live `Λ`. It enters the log-weights as
+`+2 log Ξ_fid`, which is the term that makes the weights consistent with a flux matrix
+re-referenced to the fiducial GW distance by [`apply_gw_distance_correction!`](@ref). The
+two must be applied together.
 """
 struct BNSMadauDickinsonImportanceModel{
     C <: AbstractCosmology, P <: AbstractPropagation}
@@ -25,25 +29,6 @@ const _NON_GR_FIDUCIAL_NOTICE = "BNS model: non-GR fiducial propagation; log-wei
                                 "carry the +2 log Ξ_fid term — the flux matrix must " *
                                 "have been passed through apply_gw_distance_correction! " *
                                 "at the same fiducials"
-
-"""
-    bns_madau_dickinson_hyperparameters(C, P) -> Tuple{Vararg{Symbol}}
-
-Return the cosmology, propagation, and Madau–Dickinson hyperparameter names for type
-tokens `C` and `P`.
-"""
-function bns_madau_dickinson_hyperparameters(
-        ::Type{C}, ::Type{P}) where {C <: AbstractCosmology, P <: AbstractPropagation}
-    return (Cosmology.hyperparameters(C)...,
-        Cosmology.propagation_hyperparameters(P)..., :γ, :κ, :zpeak)
-end
-
-function hyperparameters(
-        ::BNSMadauDickinsonImportanceModel{
-        C, P}) where {
-        C <: AbstractCosmology, P <: AbstractPropagation}
-    return bns_madau_dickinson_hyperparameters(C, P)
-end
 
 """
     bns_samples_from_catalog(catalog_samples, C, fiducials) -> NamedTuple
@@ -131,11 +116,11 @@ end
 Single source of truth for the detector-frame redshift log-density at the proposal
 samples, the interpolated EM luminosity distances, and the redshift normalizer.
 
-`prepare_bns_madau_dickinson_model` calls it with `Float64` fiducials and
-[`merger_rate_and_log_weights`](@ref) calls it with the live (possibly `ForwardDiff.Dual`)
-`Λ`. Sharing one code path is what makes `log_p_target - proposal_log_pdf` **exactly**
-`0.0` at `Λ == fiducials`; writing the formula twice would let accumulation order diverge
-by an ulp, and every posterior would then carry a spurious per-sample offset.
+`prepare_bns_madau_dickinson_model` calls it with `Float64` fiducials and the model's own
+call operator calls it with the live (possibly `ForwardDiff.Dual`) `Λ`. Sharing one code
+path is what makes `log_p_target - proposal_log_pdf` **exactly** `0.0` at
+`Λ == fiducials`; writing the formula twice would let accumulation order diverge by an
+ulp, and every posterior would then carry a spurious per-sample offset.
 """
 function _bns_grid_terms(
         ::Type{C},
@@ -159,8 +144,13 @@ function _bns_grid_terms(
     return (; log_p, d_l = interp(g.luminosity_distance), norm)
 end
 
-function merger_rate_and_log_weights(
-        model::BNSMadauDickinsonImportanceModel{C, P},
+"""
+    (model::BNSMadauDickinsonImportanceModel)(Λ, samples) -> (rate, log_weights)
+
+The model contract: detector-frame merger rate in events per second, and one log
+importance weight per catalog sample, at the live hyperparameters `Λ`.
+"""
+function (model::BNSMadauDickinsonImportanceModel{C, P})(
         Λ::NamedTuple,
         samples
 ) where {C <: AbstractCosmology, P <: AbstractPropagation}

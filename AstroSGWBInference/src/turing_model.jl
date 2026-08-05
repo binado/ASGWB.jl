@@ -20,7 +20,6 @@ function condition_turing_model(
         sample_only::Union{Nothing, Tuple{Vararg{Symbol}}}
 )
     order = keys(prior.dists)
-    _validate_parameter_names(order, keys(theta0); context = "initial hyperparameters")
     sample_only === nothing && return turing_model
     isempty(sample_only) && throw(
         ArgumentError(
@@ -49,7 +48,7 @@ end
 @model function astrosgwb_importance_turing_model(
         track::Bool,
         average_mode::AbstractAverageMode,
-        model,
+        weights_fn,
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
         observation::ObservationContext,
@@ -58,7 +57,7 @@ end
 )
     order = keys(prior.dists)
     Λ ~ to_submodel(sample_hyperparameters(order, prior.dists), false)
-    forward = _forward_model(model, fluxes, samples, Λ; average_mode)
+    forward = _forward_model(weights_fn, fluxes, samples, Λ; average_mode)
     Sh = forward.spectral_density
 
     observed_in_band ~ MvNormal(
@@ -80,8 +79,21 @@ end
     )
 end
 
+"""
+    build_turing_model(weights_fn, fluxes, samples, fiducial_hyperparameters,
+                       observation, prior; track=false, observed=nothing,
+                       average_mode=AnalyticInclination())
+
+Build the Turing model scoring `weights_fn` against `observed` (synthesized at
+`fiducial_hyperparameters` when omitted). `weights_fn(Λ, samples) -> (rate, log_weights)`
+is the whole model contract; see the `AstroSGWBInference` module docstring.
+
+`keys(prior.dists)` alone declares which hyperparameters are sampled and in what order.
+A key the model needs but the prior omits surfaces as a `KeyError` on `Λ.name` at the
+first evaluation, before the sampler burns wall clock.
+"""
 function build_turing_model(
-        model,
+        weights_fn,
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
         fiducial_hyperparameters::NamedTuple,
@@ -91,23 +103,19 @@ function build_turing_model(
         observed::Union{Nothing, AbstractVector{<:Real}} = nothing,
         average_mode::AbstractAverageMode = AnalyticInclination()
 )
-    names = _hyperparameter_names(model)
-    _validate_parameter_names(names, keys(prior.dists); context = "hyperprior")
-    _validate_parameter_names(
-        names, keys(fiducial_hyperparameters); context = "fiducial hyperparameters")
     # One `average_mode` reaches both the synthesized `observed` and the model
     # that scores it. Splitting them would bias the fit by a constant factor
     # with no other symptom, so they are deliberately not separately settable.
     observed_data = if observed === nothing
         fiducial_spectral_density(
-            model, fluxes, samples, fiducial_hyperparameters; average_mode)
+            weights_fn, fluxes, samples, fiducial_hyperparameters; average_mode)
     else
         observed
     end
     return astrosgwb_importance_turing_model(
         track,
         average_mode,
-        model,
+        weights_fn,
         fluxes,
         samples,
         observation,

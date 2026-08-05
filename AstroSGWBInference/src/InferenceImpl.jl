@@ -18,9 +18,7 @@ include("models/base.jl")
 include("likelihood.jl")
 include("turing_model.jl")
 
-export hyperparameters,
-       merger_rate_and_log_weights,
-       fiducial_spectral_density,
+export fiducial_spectral_density,
        build_turing_model,
        condition_turing_model,
        loglikelihood,

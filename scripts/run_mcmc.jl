@@ -24,7 +24,6 @@ using AstroSGWB:
                  W0CDM,
                  Detector
 using AstroSGWBImportanceModels:
-                                 bns_madau_dickinson_hyperparameters,
                                  bns_samples_from_catalog,
                                  prepare_bns_madau_dickinson_model
 using AstroSGWBInference:
@@ -131,7 +130,10 @@ function run_mcmc(config_file::String)
         "set nchains = 0 or match -t / SLURM_CPUS_PER_TASK",
     ))
 
-    order = bns_madau_dickinson_hyperparameters(C, P)
+    # S2: the prior is the declaration of what the model takes. There is no longer a
+    # `hyperparameters(model)` to ask, and no need for one -- a fiducial key the model
+    # reads but the config omits throws from `Λ.name` at prepare time, before NUTS starts.
+    order = keys(HYPERPRIOR.dists)
     @info "model" cosmology=string(C) propagation=string(P) order
     fiducials = _fiducials_namedtuple(cfg, order)
     sample_only = _resolve_sample_only(cfg, order)

@@ -27,10 +27,13 @@ Inference requires an importance adapter, parametrized by a vector ``\Lambda``, 
 characterizes the distribution of the intrinsic parameters ``p(\theta | \Lambda)``.
 
 The canonical adapter is `BNSMadauDickinsonImportanceModel{C, P}` from
-`AstroSGWBImportanceModels`. It implements the two-method inference contract:
+`AstroSGWBImportanceModels`. The entire inference contract is that the prepared model is
+**callable**:
 
-- **`hyperparameters(model)`** — declares the joint hyperparameter names: cosmology (`C`), propagation (`P`), and the Madau–Dickinson redshift parameters `:γ`, `:κ`, `:zpeak`.
-- **`merger_rate_and_log_weights(model, Λ, samples)`** — inlines the redshift log-ratio, importance weights, and rate normalization. For this BNS population the Λ-independent mass/spin/tidal priors cancel exactly, so only the redshift + distance/propagation terms survive.
+- **`model(Λ, samples) -> (rate, log_weights)`** — inlines the redshift log-ratio, importance weights, and rate normalization. For this BNS population the Λ-independent mass/spin/tidal priors cancel exactly, so only the redshift + distance/propagation terms survive.
+
+Hyperparameter *names* are declared by the hyperprior below, not by the model: a name the
+model reads but the prior omits throws a `KeyError` on `Λ.name` at the first evaluation.
 
 `bns_samples_from_catalog` keeps only the catalog columns the weight loop reads (`redshift` and `luminosity_distance`); when the catalog omits `luminosity_distance` it is generated once from redshift at the fiducial cosmology, so the `samples` NamedTuple stays the single source of truth for the EM distance.
 """
@@ -158,7 +161,8 @@ begin
     )
     observation = build_observation_context(
         catalog.frequencies, detectors, catalog.in_band_mask, observation_time)
-    order = hyperparameters(model)
+    # S2: the prior declares the hyperparameter names; there is no model to ask.
+    order = keys(hyperprior_dists)
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
 
@@ -207,7 +211,7 @@ In the cells below, we plot ``\Omega_{\mathrm{GW}}(f)`` as a function of the fre
 
 # ╔═╡ d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a
 function plot_fiducial_omega_gw(model, fluxes, samples, fiducials, observation)
-    rate0, log_weights0 = merger_rate_and_log_weights(model, fiducials, samples)
+    rate0, log_weights0 = model(fiducials, samples)
     Sh0 = spectral_density(fluxes, rate0; weights = exp.(log_weights0))
     f = observation.frequencies
     df = frequency_bin_width(f)
@@ -377,7 +381,6 @@ begin
                                      bns_samples_from_catalog,
                                      prepare_bns_madau_dickinson_model
     using AstroSGWBInference: build_turing_model, condition_turing_model
-    using AstroSGWBInference: hyperparameters, merger_rate_and_log_weights
     using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
     using AstroSGWBInference.ChainIO: atomic_save_chain
     using Distributions: Uniform, product_distribution

@@ -6,7 +6,6 @@ using AstroSGWB
 using Distributions: logpdf
 using AstroSGWBInference: build_turing_model, condition_turing_model,
                           fiducial_spectral_density, logposterior,
-                          merger_rate_and_log_weights,
                           AnalyticInclination, CatalogInclination
 
 _varinfo_symbols(vi) = Set(getsym(vn) for vn in keys(vi))
@@ -24,9 +23,7 @@ _varinfo_symbols(vi) = Set(getsym(vn) for vn in keys(vi))
     )
     observed = fiducial_spectral_density(
         problem.model, problem.fluxes, problem.samples, problem.fiducials)
-    rate,
-    log_weights = merger_rate_and_log_weights(
-        problem.model, problem.fiducials, problem.samples)
+    rate, log_weights = problem.model(problem.fiducials, problem.samples)
     @test observed ≈ spectral_density(problem.fluxes, rate; weights = exp.(log_weights))
     @test Turing.logjoint(model, problem.theta) ≈ logposterior(
         problem.theta,
