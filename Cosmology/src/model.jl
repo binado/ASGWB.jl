@@ -128,6 +128,11 @@ struct ModifiedPropagation{T <: Real} <: AbstractPropagation
     Ξₙ::T
 end
 
+# One type parameter for two fields means the default constructor rejects mixed eltypes.
+# That is the *normal* case under ForwardDiff: a run that samples `Ξ₀` while holding `Ξₙ`
+# fixed hands this constructor a `Dual` and a `Float64`. Promote instead of erroring.
+ModifiedPropagation(Ξ₀::Real, Ξₙ::Real) = ModifiedPropagation(promote(Ξ₀, Ξₙ)...)
+
 Base.broadcastable(p::AbstractPropagation) = Ref(p)
 
 """Supported configurable propagation subtypes (registration order)."""

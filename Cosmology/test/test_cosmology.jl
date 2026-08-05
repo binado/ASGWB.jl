@@ -145,6 +145,27 @@ end
     @test_throws ArgumentError propagation_type("not_a_model")
 end
 
+@testset "ModifiedPropagation promotes mixed eltypes" begin
+    # `ModifiedPropagation{T}` shares one type parameter between both fields, so without
+    # the promoting outer constructor these are `MethodError`s.
+    @test ModifiedPropagation(1.4, 1) === ModifiedPropagation(1.4, 1.0)
+    @test propagation(ModifiedPropagation, (Ξ₀ = 1.4, Ξₙ = 1)) ===
+          ModifiedPropagation(1.4, 1.0)
+
+    # The shape a partially-sampled run produces: one slot `Dual`, the other `Float64`.
+    # `Ξ(z) = Ξ₀ + (1 - Ξ₀)(1 + z)^(-Ξₙ)`, so ∂Ξ/∂Ξ₀ = 1 - (1 + z)^(-Ξₙ).
+    z, Ξₙ = 0.7, 1.9
+    dΞ = ForwardDiff.derivative(
+        Ξ₀ -> gw_em_distance_ratio(z, propagation(ModifiedPropagation, (; Ξ₀, Ξₙ))), 1.4)
+    @test dΞ ≈ 1 - (1 + z)^(-Ξₙ)
+
+    # And the mirrored case: `Ξₙ` free, `Ξ₀` fixed.
+    dΞₙ = ForwardDiff.derivative(
+        Ξₙ -> gw_em_distance_ratio(z, propagation(ModifiedPropagation, (Ξ₀ = 1.4, Ξₙ))),
+        1.9)
+    @test dΞₙ ≈ -(1 - 1.4) * log(1 + z) * (1 + z)^(-1.9)
+end
+
 @testset "dark_energy_eos" begin
     lcdm = LambdaCDM(67.0, 0.3)
     w0cdm = W0CDM(67.0, 0.3, -0.8)

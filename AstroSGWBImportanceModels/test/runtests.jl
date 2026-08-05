@@ -214,6 +214,28 @@ end
     @test eltype(one_weights) <: ForwardDiff.Dual
 end
 
+@testset "mixed-eltype Λ (partially sampled hyperparameters)" begin
+    # A run that samples a subset leaves the rest `Float64` while the free ones become
+    # `Dual`, so `propagation(P, Λ)` sees one `Dual` and one `Float64`. Before the
+    # promoting `ModifiedPropagation` constructor this was a `MethodError`, and it is the
+    # exact shape `merge(constants, Λ_sampled)` produces on every gradient evaluation.
+    model = prepared()
+    dΞ₀ = ForwardDiff.derivative(1.1) do Ξ₀
+        _, w = merger_rate_and_log_weights(model, merge(TARGET, (; Ξ₀)), SAMPLES)
+        sum(w)
+    end
+    @test isfinite(dΞ₀)
+    @test !iszero(dΞ₀)
+
+    # Same for a cosmology parameter, where only `Λ.H0` is dual.
+    dH0 = ForwardDiff.derivative(70.0) do H0
+        rate, _ = merger_rate_and_log_weights(model, merge(TARGET, (; H0)), SAMPLES)
+        rate
+    end
+    @test isfinite(dH0)
+    @test !iszero(dH0)
+end
+
 @testset "concrete adapter integrates with Turing" begin
     model = prepared()
     fluxes = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
