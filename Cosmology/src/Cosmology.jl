@@ -16,6 +16,7 @@ export AbstractCosmology, LambdaCDM, W0CDM, W0WaCDM,
        CumulativeIntegral1D, GridInterpolator, interpolate, cdf, normalizer
 
 include("cumulative_integral.jl")
+include("conversion.jl")
 include("model.jl")
 include("distance.jl")
 
