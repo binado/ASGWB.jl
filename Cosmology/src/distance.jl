@@ -1,17 +1,5 @@
 using QuadGK
 
-struct CosmologyCache{C <: AbstractCosmology, I <: CumulativeIntegral1D, TD <: Real}
-    cosmology::C
-    inv_E_integral::I
-    d_h::TD
-end
-
-function CosmologyCache(cosmology::AbstractCosmology, z_grid::AbstractVector{<:Real})
-    inv_E_integral = CumulativeIntegral1D(z_grid, z -> inv(E(z, cosmology)))
-    d_h = SPEED_OF_LIGHT_KM_S / H0(cosmology)
-    return CosmologyCache(cosmology, inv_E_integral, d_h)
-end
-
 function comoving_distance(z::Real, c::AbstractCosmology)
     Ez = E(z, c)
     pref = SPEED_OF_LIGHT_KM_S / (H0(c) * Ez)
@@ -30,40 +18,6 @@ function differential_comoving_volume(z::Real, c::AbstractCosmology)
     return d_h * d_c^2 / E(z, c)
 end
 
-function comoving_distance(z::Real, cache::CosmologyCache)
-    cache.d_h * cdf(cache.inv_E_integral, z)
-end
-
-function luminosity_distance(z::Real, cache::CosmologyCache)
-    (1 + z) * comoving_distance(z, cache)
-end
-
-function differential_comoving_volume(z::Real, cache::CosmologyCache)
-    d_c = comoving_distance(z, cache)
-    return cache.d_h * d_c^2 / E(z, cache.cosmology)
-end
-
-"""
-    comoving_distance(z, c::AbstractCosmology, dist::CumulativeIntegral1D) -> Real
-
-Comoving distance using a precomputed [`CumulativeIntegral1D`](@ref) of
-`w -> 1/E(w, c)`. Uses [`cdf`](@ref) which returns the exact integral under
-the linear interpolant (analytic trapezoidal rule).
-"""
-function comoving_distance(z::Real, c::AbstractCosmology, dist::CumulativeIntegral1D)
-    (SPEED_OF_LIGHT_KM_S / H0(c)) * cdf(dist, z)
-end
-
-function luminosity_distance(z::Real, c::AbstractCosmology, dist::CumulativeIntegral1D)
-    (1 + z) * comoving_distance(z, c, dist)
-end
-
-function differential_comoving_volume(z::Real, c::AbstractCosmology, dist::CumulativeIntegral1D)
-    d_h = SPEED_OF_LIGHT_KM_S / H0(c)
-    d_c = comoving_distance(z, c, dist)
-    return d_h * d_c^2 / E(z, c)
-end
-
 """
     distance_and_volume_grid(c::AbstractCosmology, z_grid)
         -> (; comoving_distance, luminosity_distance, differential_comoving_volume)
@@ -71,16 +25,18 @@ end
 Tabulate the three distance quantities on `z_grid` in a single pass, sharing one
 `1/E(z)` evaluation and one cumulative trapezoid between them.
 
-Equivalent to the [`CosmologyCache`](@ref) scalar path evaluated at every node — `d_c`
-and `d_L` bit-for-bit, `dV_c/dz` to ~1 ulp, since `d_h · d_c² · inv_E` reuses the
-already-computed `inv_E` instead of calling `E(z, c)` a second time. That second call is
-what this replaces on the inference hot path; `CosmologyCache` itself stays, backing the
-inverse-CDF sampling path.
+This is the efficient batched path for models that already evaluate and normalize
+quantities on a redshift grid. Scalar distance calls use adaptive QuadGK integration
+instead. The grid approximation and subsequent interpolation policy belong to the
+caller.
 
 Takes the grid **array**, not `(z_min, z_max, n)`, so the caller's grid is the grid used
-— there is no way for the tabulation and the interpolation to disagree about nodes.
+— there is no way for tabulation and interpolation to disagree about nodes. The grid
+must contain at least two strictly increasing nodes and start at zero, because the
+cumulative comoving-distance integral assumes `d_c(0) = 0`.
 """
 function distance_and_volume_grid(c::AbstractCosmology, z_grid::AbstractVector{<:Real})
+    validate_redshift_grid(z_grid)
     inv_E = inv.(E.(z_grid, Ref(c)))
     d_h = SPEED_OF_LIGHT_KM_S / H0(c)
     d_c = d_h .* cumtrapz(z_grid, inv_E)
@@ -89,6 +45,24 @@ function distance_and_volume_grid(c::AbstractCosmology, z_grid::AbstractVector{<
         luminosity_distance = (1 .+ z_grid) .* d_c,
         differential_comoving_volume = @. d_h * d_c^2 * inv_E
     )
+end
+
+"""
+    validate_redshift_grid(z_grid) -> nothing
+
+Require at least two strictly increasing redshift nodes starting at zero. These are the
+preconditions for cumulative distance tabulation.
+"""
+function validate_redshift_grid(z_grid::AbstractVector{<:Real})
+    n = length(z_grid)
+    n >= 2 || throw(ArgumentError("redshift grid must contain at least two points"))
+    iszero(first(z_grid)) ||
+        throw(ArgumentError("redshift grid must start at zero"))
+    @inbounds for i in 1:(n - 1)
+        z_grid[i + 1] > z_grid[i] ||
+            throw(ArgumentError("redshift grid must be strictly increasing"))
+    end
+    return nothing
 end
 
 """
@@ -153,5 +127,3 @@ end
         "polarization-power matrix has $(size(polarization_power, 2)) sample columns but got $(length(z)) redshifts"))
     return nothing
 end
-
-

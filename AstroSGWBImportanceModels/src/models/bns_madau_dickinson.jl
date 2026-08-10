@@ -19,7 +19,7 @@ two must be applied together.
 struct BNSMadauDickinsonImportanceModel{
     C <: AbstractCosmology, P <: AbstractPropagation}
     z_grid::Vector{Float64}
-    interp::GridInterpolator
+    z_samples::Vector{Float64}
     proposal_log_pdf::Vector{Float64}
     log_Ξ_fid::Vector{Float64}
 end
@@ -76,17 +76,17 @@ function prepare_bns_madau_dickinson_model(
 ) where {C <: AbstractCosmology, P <: AbstractPropagation}
     z = samples.redshift
     zg = collect(Float64, z_grid)
+    validate_redshift_grid(zg)
 
-    # Decision B: `GridInterpolator` itself clamps (it is a general-purpose primitive with
-    # Python-matching numerics), but a proposal sample outside the integration grid is a
-    # setup error, so report it loudly here. `all` on an empty collection is `true`, so
+    # DataInterpolations throws outside the grid. Report this as a model-setup error
+    # before preparing proposal values. `all` on an empty collection is `true`, so
     # preparing against an empty sample set still works.
     all(zg[1] .<= z .<= zg[end]) || throw(ArgumentError(
         "proposal redshifts must lie inside the integration grid " *
         "[$(zg[1]), $(zg[end])]; got extrema $(extrema(z))"))
-    interp = GridInterpolator(z, zg)
+    z_samples = collect(Float64, z)
 
-    proposal_log_pdf = _bns_grid_terms(C, fiducials, zg, interp).log_p::Vector{Float64}
+    proposal_log_pdf = _bns_grid_terms(C, fiducials, zg, z_samples).log_p::Vector{Float64}
 
     # `Float64[...]` is load-bearing: a `Vector{Dual}` field here would poison the
     # ForwardDiff fast path in `AstroSGWB.spectral_density`, which dispatches on
@@ -103,14 +103,14 @@ function prepare_bns_madau_dickinson_model(
 
     return BNSMadauDickinsonImportanceModel{C, P}(
         zg,
-        interp,
+        z_samples,
         proposal_log_pdf,
         log_Ξ_fid
     )
 end
 
 """
-    _bns_grid_terms(C, Λ, zg, interp) -> (; log_p, d_l, norm)
+    _bns_grid_terms(C, Λ, zg, z_samples) -> (; log_p, d_l, norm)
 
 Single source of truth for the detector-frame redshift log-density at the proposal
 samples, the interpolated EM luminosity distances, and the redshift normalizer.
@@ -125,14 +125,13 @@ function _bns_grid_terms(
         ::Type{C},
         Λ::NamedTuple,
         zg::AbstractVector{<:Real},
-        interp::GridInterpolator
+        z_samples::AbstractVector{<:Real}
 ) where {C <: AbstractCosmology}
     g = distance_and_volume_grid(cosmology(C, Λ), zg)
     sfd = source_frame_distribution.(Ref(MadauDickinsonSourceFrame()), zg, Ref(Λ))
     dN_dz = detector_frame_merger_rate_density.(zg, g.differential_comoving_volume, sfd)
     norm = trapz(zg, dN_dz)
-    # Hoisted out of the broadcast: `@. interp(x)` would apply the functor elementwise.
-    p = interp(dN_dz)
+    p = _linear_interpolate(dN_dz, zg, z_samples)
     # No underflow floor, matching astrogwb's `logpdf = log(pdf) - log(integral)`. The
     # density is strictly positive for every z > 0 under a Madau–Dickinson rate, and
     # `prepare_bns_madau_dickinson_model` rejects samples outside the grid, so the only
@@ -140,7 +139,17 @@ function _bns_grid_terms(
     # vanishes and `-Inf` is the honest answer. astrogwb lands on the same value there
     # via `jnp.interp(..., left=0.0)`.
     log_p = @. log(p) - log(norm)
-    return (; log_p, d_l = interp(g.luminosity_distance), norm)
+    d_l = _linear_interpolate(g.luminosity_distance, zg, z_samples)
+    return (; log_p, d_l, norm)
+end
+
+function _linear_interpolate(
+        values::AbstractVector,
+        grid::AbstractVector{<:Real},
+        points::AbstractVector{<:Real}
+)
+    isempty(points) && return similar(values, 0)
+    return LinearInterpolation(values, grid)(points)
 end
 
 """
@@ -161,7 +170,7 @@ function (model::BNSMadauDickinsonImportanceModel{C, P})(
         "model was prepared for $(length(model.proposal_log_pdf)) samples but got " *
         "$(length(samples.redshift))"))
 
-    t = _bns_grid_terms(C, Λ, model.z_grid, model.interp)
+    t = _bns_grid_terms(C, Λ, model.z_grid, model.z_samples)
     Ξ_θ = gw_em_distance_ratio.(samples.redshift, Ref(propagation(P, Λ)))
     log_weights = @. t.log_p - model.proposal_log_pdf +
                      2 * (log(samples.luminosity_distance) - log(t.d_l) - log(Ξ_θ) +

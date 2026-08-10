@@ -324,7 +324,7 @@ function _run(;
     h = θ0
     c0 = cosmology(C, h)
     # Mirrors what the importance model's hot path now does: one cosmology pass on the
-    # grid, then a trapezoid normalizer — no `CosmologyCache`, no `RedshiftPrior`.
+    # grid, then a trapezoid normalizer without constructing a sampling distribution.
     grid0 = distance_and_volume_grid(c0, model.z_grid)
     sfd0 = source_frame_distribution.(
         Ref(MadauDickinsonSourceFrame()), model.z_grid, Ref(h))

@@ -225,7 +225,7 @@ uuid = "6a24b920-6d62-45b7-87dc-84df6f794d62"
 version = "0.3.0"
 
 [[deps.AstroSGWBImportanceModels]]
-deps = ["CBCDistributions", "Cosmology"]
+deps = ["CBCDistributions", "Cosmology", "DataInterpolations"]
 path = "AstroSGWBImportanceModels"
 uuid = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
 version = "0.1.0"

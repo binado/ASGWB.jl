@@ -10,7 +10,7 @@ begin
     Pkg.activate(@__DIR__)
     Pkg.instantiate()
     using AstroSGWB:
-                     CosmologyCache,
+                     DEFAULT_Z_GRID,
                      LambdaCDM,
                      cosmology,
                      OrderedUniformSourceMassPair,
@@ -18,6 +18,7 @@ begin
                      MadauDickinsonSourceFrame,
                      redshift_prior,
                      luminosity_distance
+    using Cosmology: AbstractCosmology
     using CBCDistributions: DefaultBBHMassPair, PopulationModel, hyperparameters,
                             single_event_prior
     import CBCDistributions: hyperparameters, single_event_prior
@@ -69,7 +70,7 @@ md"""
 
 All we need to do to define a population model is to create a struct which subtypes `PopulationModel` and defines two methods:
 - a `hyperparameters(model)` method which returns a tuple of symbols of the hyperparameters of the model
-- a `single_event_prior(model, cosmology, Λ)` method which, for a given hyperparameter vector ``Λ``, returns ``p(\theta | \Lambda,~\textrm{cosmo})``
+- a `single_event_prior(model, cosmology, Λ; z_grid)` method which, for a given hyperparameter vector ``Λ``, returns ``p(\theta | \Lambda,~\textrm{cosmo})``
 """
 
 # ╔═╡ a1b2c3d4-0004-4e5f-9a0b-1c2d3e4f5a6b
@@ -90,10 +91,11 @@ begin
 
     function single_event_prior(
             ::BNSUniformMassAlignedSpinTidalSFR,
-            cache::CosmologyCache,
-            Λ::NamedTuple
+            cosmo::AbstractCosmology,
+            Λ::NamedTuple;
+            z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
     )
-        z_d = redshift_prior(MadauDickinsonSourceFrame(), cache, Λ)
+        z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ; z_grid)
         spin = AlignedSpinChiSimple(a_max = Λ.a_max)
         return product_distribution((
             mass = OrderedUniformSourceMassPair(low = Λ.m_low, high = Λ.m_high),
@@ -107,10 +109,11 @@ begin
 
     function single_event_prior(
             ::BBHAlignedSpinModel,
-            cache::CosmologyCache,
-            Λ::NamedTuple
+            cosmo::AbstractCosmology,
+            Λ::NamedTuple;
+            z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
     )
-        z_d = redshift_prior(MadauDickinsonSourceFrame(), cache, Λ)
+        z_d = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ; z_grid)
         spin = AlignedSpinChiSimple(a_max = Λ.a_max)
         return product_distribution((
             mass = DefaultBBHMassPair(;

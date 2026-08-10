@@ -18,6 +18,15 @@ using CBCDistributions
     @test :y in keys(sep.dists)
 end
 
+@testset "PopulationModel threads the caller's redshift grid" begin
+    cosmo = LambdaCDM(67.0, 0.315)
+    Λ = (γ = 2.7, κ = 3.0, zpeak = 2.5)
+    z_grid = collect(LinRange(0.0, 3.0, 61))
+    prior = single_event_prior(TestRedshiftPop(), cosmo, Λ; z_grid)
+    @test minimum(prior.dists.redshift) == first(z_grid)
+    @test maximum(prior.dists.redshift) == last(z_grid)
+end
+
 @testset "full_hyperparameters and merge_hyperpriors" begin
     pop = TestPop()
     @test full_hyperparameters(LambdaCDM, ModifiedPropagation, pop) ==

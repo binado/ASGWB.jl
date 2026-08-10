@@ -15,12 +15,9 @@ export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
 Default redshift integration grid: 256 uniformly-spaced points on [0, 20].
 Shared across [`redshift_prior`](@ref) calls that do not pass an explicit grid.
 
-**The grid must start at `0`.** Comoving distance is accumulated by trapezoidal
-integration along the grid assuming `d_c(z_grid[1]) = 0`, so a non-zero lower bound
-silently omits `∫₀^{z_min} dz/E` from *every* distance. The previous `1e-3` lower bound
-cost ≈ 4.5 Mpc — −1.0% in `d_L` at z = 0.1 and −20% at z = 0.005 — which is also a factor
-of `1/z` in the relative interpolation error at low redshift. It matches
-`astrogwb.cosmology.distance_and_volume_grid`, which carries the same requirement.
+The grid must start at `0` and be strictly increasing. [`distance_and_volume_grid`](@ref)
+enforces these requirements because its cumulative comoving-distance integral assumes
+`d_c(0) = 0`.
 """
 const DEFAULT_Z_GRID = collect(LinRange(0.0, 20.0, 256))
 
@@ -143,24 +140,11 @@ function source_frame_distribution(::MadauDickinsonSourceFrame, z::Real, Λ::Nam
 end
 
 """
-    redshift_prior(sf_model, cache::CosmologyCache, Λ) -> RedshiftInterpolatedDistribution
+    redshift_prior(sf_model, cosmology, Λ; z_grid) -> RedshiftInterpolatedDistribution
 
-Build the detector-frame redshift prior from a prebuilt [`CosmologyCache`](@ref),
-reusing its cumulative ∫1/E integral (and grid) rather than recomputing them. This
-is the form the hot path calls so the same cache is shared with importance
-weighting instead of being rebuilt per evaluation.
-"""
-function redshift_prior(sf_model, cache::CosmologyCache, Λ::NamedTuple)
-    sfn = z -> source_frame_distribution(sf_model, z, Λ)
-    return RedshiftInterpolatedDistribution(build_redshift_prior(sfn, cache))
-end
-
-"""
-    redshift_prior(sf_model, cosmo, Λ; z_grid) -> RedshiftInterpolatedDistribution
-
-Convenience form that builds a [`CosmologyCache`](@ref) on `z_grid` (default
-[`DEFAULT_Z_GRID`](@ref)) and delegates to the cache method. Use when no cache is
-already on hand.
+Build the detector-frame redshift distribution on `z_grid` (default
+[`DEFAULT_Z_GRID`](@ref)). The cosmology package tabulates distance and volume; this
+module owns the redshift density, normalization, and inverse-CDF sampling state.
 """
 function redshift_prior(
         sf_model,
@@ -168,16 +152,30 @@ function redshift_prior(
         Λ::NamedTuple;
         z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
 )
-    return redshift_prior(sf_model, CosmologyCache(cosmo, z_grid), Λ)
+    sfn = z -> source_frame_distribution(sf_model, z, Λ)
+    return RedshiftInterpolatedDistribution(build_redshift_prior(sfn, cosmo, z_grid))
 end
 
-function build_redshift_prior(source_frame_fn, cache::CosmologyCache)
-    z_grid_f = cache.inv_E_integral.x
+"""
+    build_redshift_prior(source_frame_fn, cosmology, z_grid) -> RedshiftPrior
+
+Tabulate the detector-frame redshift density on the caller's grid. Distances and
+comoving volume come from [`distance_and_volume_grid`](@ref); the returned
+[`RedshiftPrior`](@ref) stores only the density and its cumulative integral.
+"""
+function build_redshift_prior(
+        source_frame_fn,
+        cosmo::AbstractCosmology,
+        z_grid::AbstractVector{<:Real}
+)
+    z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
+    grid = distance_and_volume_grid(cosmo, z_grid_f)
     pdf_vals = map(eachindex(z_grid_f)) do i
-        @inbounds z = z_grid_f[i]
-        @inbounds d_c = cache.d_h * cache.inv_E_integral.cumulative[i]
-        dvc_dz = cache.d_h * d_c^2 / E(z, cache.cosmology)
-        detector_frame_merger_rate_density(z, dvc_dz, source_frame_fn(z))
+        @inbounds detector_frame_merger_rate_density(
+            z_grid_f[i],
+            grid.differential_comoving_volume[i],
+            source_frame_fn(z_grid_f[i])
+        )
     end
     return RedshiftPrior(CumulativeIntegral1D(z_grid_f, pdf_vals))
 end

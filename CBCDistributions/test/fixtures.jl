@@ -3,8 +3,10 @@ using Distributions
 using CBCDistributions
 
 struct TestPop <: PopulationModel end
+struct TestRedshiftPop <: PopulationModel end
 
 CBCDistributions.hyperparameters(::TestPop) = (:α, :β)
+CBCDistributions.hyperparameters(::TestRedshiftPop) = (:γ, :κ, :zpeak)
 
 function population_hyperprior(::TestPop)
     return product_distribution((
@@ -16,9 +18,21 @@ end
 function CBCDistributions.single_event_prior(
         ::TestPop,
         cosmo::AbstractCosmology,
-        Λ::NamedTuple
+        Λ::NamedTuple;
+        z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
 )
     return product_distribution((x = Uniform(0.0, Λ.α), y = Uniform(0.0, Λ.β)))
+end
+
+function CBCDistributions.single_event_prior(
+        ::TestRedshiftPop,
+        cosmo::AbstractCosmology,
+        Λ::NamedTuple;
+        z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
+)
+    return product_distribution((
+        redshift = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ; z_grid),
+    ))
 end
 
 function cosmology_hyperprior(::Type{LambdaCDM})

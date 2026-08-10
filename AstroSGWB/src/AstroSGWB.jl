@@ -29,9 +29,9 @@ Callers define an importance adapter (or use one from `AstroSGWBImportanceModels
 fiducial hyperparameters, and a catalog sample adapter in Julia, then pass raw catalog
 `polarization_power`, restructured `samples`, and fiducials explicitly. Prepared importance models
 cache proposal log-probabilities, redshift interpolants, and rate metadata; detector
-state (banded `frequencies`, network [`effective_psd`](@ref), observation time) is
-passed to inference entry points as flattened arrays.
-
+store proposal log-probabilities, catalog redshifts, and the integration grid; detector
+state (banded `frequencies`, network [`effective_psd`](@ref), observation time) is passed
+to inference entry points as flattened arrays.
 Inference state is a flat hyperparameter `NamedTuple`. The caller-owned model contract and
 Turing integration live in `AstroSGWBInference`; this package provides the reusable physics
 and array kernels used to implement that contract.
@@ -61,7 +61,6 @@ include("snr.jl")
 export canonical_hyperparameters,
        validate_hyperparameters,
        CumulativeIntegral1D,
-       GridInterpolator,
        interpolate,
        cdf,
        normalizer,
@@ -101,7 +100,6 @@ export E,
        propagation_type,
        propagation_config_name,
        SUPPORTED_PROPAGATIONS,
-       CosmologyCache,
        comoving_distance,
        luminosity_distance,
        differential_comoving_volume,
