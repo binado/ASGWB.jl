@@ -100,8 +100,8 @@ applies the `(Ξ₀, Ξₙ)` factor
 
 ``\\Xi(z) = \\Xi_0 + (1 - \\Xi_0) / (1 + z)^{\\Xi_n}``.
 
-This is the single source of truth for the propagation factor; `gravitational_wave_distance`
-is `gw_em_distance_ratio(z, prop) * D_L`.
+This is the single source of truth for the propagation factor; the GW luminosity
+distance is `gw_em_distance_ratio(z, prop) * D_L`.
 """
 gw_em_distance_ratio(z::Real, Ξ₀::Real, Ξₙ::Real) = Ξ₀ + (1 - Ξ₀) / (1 + z)^Ξₙ
 gw_em_distance_ratio(z::Real, ::GR) = one(z)
@@ -154,22 +154,4 @@ end
     return nothing
 end
 
-function gravitational_wave_distance(
-        z::Real,
-        luminosity_distance::Real,
-        Ξ₀::Real,
-        Ξₙ::Real
-)
-    return gw_em_distance_ratio(z, Ξ₀, Ξₙ) * luminosity_distance
-end
 
-# GW luminosity distance from a precomputed EM luminosity distance `d_l`. The propagation
-# dispatch lives entirely in `gw_em_distance_ratio` (1 for `GR`, the (Ξ₀, Ξₙ) factor for
-# `ModifiedPropagation`), so this is just `Ξ(z) * d_l`.
-function gravitational_wave_distance(z::Real, d_l::Real, prop::AbstractPropagation)
-    gw_em_distance_ratio(z, prop) * d_l
-end
-
-function gravitational_wave_distance(z::Real, c::AbstractCosmology, prop::AbstractPropagation)
-    return gravitational_wave_distance(z, luminosity_distance(z, c), prop)
-end

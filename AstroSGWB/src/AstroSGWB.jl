@@ -42,7 +42,7 @@ using CBCDistributions
 using Cosmology
 import CBCDistributions: single_event_prior
 import Cosmology: apply_gw_distance_correction, apply_gw_distance_correction!,
-                  cosmology, cosmology_type, gravitational_wave_distance,
+                  cosmology, cosmology_type,
                   gw_em_distance_ratio, hyperparameters,
                   propagation, propagation_type
 
@@ -108,7 +108,6 @@ export E,
        distance_and_volume_grid,
        trapz,
        cumtrapz,
-       gravitational_wave_distance,
        gw_em_distance_ratio,
        apply_gw_distance_correction,
        apply_gw_distance_correction!,

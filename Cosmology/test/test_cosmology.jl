@@ -26,7 +26,8 @@ end
     @test d_l[1] ≈ 0.0
     @test d_l[3] > d_l[2] > d_l[1]
 
-    d_gw = gravitational_wave_distance.([0.1, 0.2], [10.0, 20.0], 1.0, 0.0)
+    # GW luminosity distance is gw_em_distance_ratio(z, ...) * D_L; GR ⇒ identity.
+    d_gw = gw_em_distance_ratio.([0.1, 0.2], 1.0, 0.0) .* [10.0, 20.0]
     @test d_gw ≈ [10.0, 20.0]
 end
 
@@ -39,7 +40,7 @@ end
         W0WaCDM(67.0, 0.315, -0.9, 0.2))
         for z in zs
             @test gw_em_distance_ratio(z, GR()) ≈ 1.0
-            @test gravitational_wave_distance(z, cosmo, GR()) ≈
+            @test gw_em_distance_ratio(z, GR()) * luminosity_distance(z, cosmo) ≈
                   luminosity_distance(z, cosmo)
         end
     end
@@ -51,8 +52,8 @@ end
         Ξ = Ξ₀ + (1 - Ξ₀) / (1 + z)^Ξₙ
         @test gw_em_distance_ratio(z, p_mod) ≈ Ξ
         @test gw_em_distance_ratio(z, Ξ₀, Ξₙ) ≈ Ξ
-        # gravitational_wave_distance is exactly Ξ(z) · D_L.
-        @test gravitational_wave_distance(z, c, p_mod) ≈
+        # GW luminosity distance is exactly Ξ(z) · D_L.
+        @test gw_em_distance_ratio(z, p_mod) * luminosity_distance(z, c) ≈
               gw_em_distance_ratio(z, p_mod) * luminosity_distance(z, c)
     end
 end

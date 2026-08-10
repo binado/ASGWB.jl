@@ -11,7 +11,7 @@ export AbstractCosmology, LambdaCDM, W0CDM, W0WaCDM,
        propagation_type, propagation_config_name, SUPPORTED_PROPAGATIONS,
        comoving_distance, luminosity_distance, differential_comoving_volume,
        distance_and_volume_grid, trapz, cumtrapz,
-       gw_em_distance_ratio, gravitational_wave_distance,
+       gw_em_distance_ratio,
        apply_gw_distance_correction, apply_gw_distance_correction!,
        CumulativeIntegral1D, GridInterpolator, interpolate, cdf, normalizer
 
