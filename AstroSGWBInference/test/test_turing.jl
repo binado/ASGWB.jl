@@ -70,10 +70,9 @@ end
         problem.observation.frequencies,
         problem.observation.effective_psd,
         fill(1.0e-8, length(problem.observation.frequencies)),
-        problem.observation.in_band_mask,
         problem.observation.observation_time
     )
-    σ = observation.sgwb_scale_in_band
+    σ = observation.sgwb_scale
 
     _build(;
         kwargs...) = build_turing_model(
@@ -107,8 +106,7 @@ end
             observed = forward_model(
                 problem.model, problem.fluxes, problem.samples, problem.fiducials;
                 average_mode = mode).spectral_density
-            mask = observation.in_band_mask
-            residual = observed[mask] .- Sh[mask]
+            residual = observed .- Sh
             expected = _log_prior(problem.prior, problem.theta) -
                        0.5 * sum((residual ./ σ) .^ 2 .+ log.(2π .* σ .^ 2))
             @test Turing.logjoint(m, problem.theta) ≈ expected rtol = 1.0e-6

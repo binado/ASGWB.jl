@@ -75,14 +75,12 @@ end
     eff = effective_psd(f, [d1, d2])
     @test length(eff) == length(f)
     @test all(isfinite, eff) && all(eff .> 0)
-    mask = trues(length(f))
     scale = gaussian_bin_scale(;
         effective_psd = eff,
         frequencies = f,
-        in_band_mask = mask,
         observation_time_sec = 3.15576e7
     )
-    @test length(scale) == count(mask)
+    @test length(scale) == length(f)
     @test all(isfinite, scale) && all(scale .> 0)
 end
 
@@ -94,8 +92,9 @@ end
     d2 = Detector("L1")
     obs = parity_problem_context(:posterior_v2_minimal, [d1, d2]).observation
     @test length(obs.effective_psd) == length(obs.frequencies)
-    # In-band bins have finite PSD; f=0 Hz (DC) is excluded by in_band_mask and may be Inf.
-    @test all(isfinite, obs.effective_psd[obs.in_band_mask])
+    # Every bin handed to the context is scored; the DC bin (f=0 Hz, possibly Inf
+    # PSD) is sliced off by the caller, so all bins here are finite.
+    @test all(isfinite, obs.effective_psd)
     @test length(obs.sgwb_scale) == length(obs.frequencies)
 end
 

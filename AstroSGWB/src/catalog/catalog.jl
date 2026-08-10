@@ -18,15 +18,16 @@ the out-of-place [`apply_gw_distance_correction`](@ref) where a cell or block ma
 and the orientation HDF5.jl reads the on-disk `(nsamples, nfreq)` C-order
 polarization datasets into without a transpose.
 
-`in_band_mask` and `frequencies` come from the file rather than being derived from
-`(duration, sampling_frequency)` scalars, so the band convention travels with the
-data. Built by [`load_catalog`](@ref) from a `waveform_catalog` v1 file.
+`frequencies` comes from the file rather than being derived from
+`(duration, sampling_frequency)` scalars. Band selection is the caller's job:
+slice `frequencies` and the rows of `fluxes` before building an
+[`ObservationContext`](@ref) or calling an inference model. Built by
+[`load_catalog`](@ref) from a `waveform_catalog` v1 file.
 """
 struct SGWBCatalog{S <: NamedTuple}
     frequencies::Vector{Float64}
     fluxes::Matrix{Float64}
     samples::S
-    in_band_mask::BitVector
     approximant::String
 end
 

@@ -5,7 +5,9 @@ using Distributions: Uniform
 const LOCAL_MODEL = function (Λ, samples)
     return (1.0e-7 * Λ.rate_scale, fill(Λ.weight_shift, length(samples.redshift)))
 end
-const LOCAL_FLUXES = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+# The fixtures are already band-restricted: the DC row of the underlying parity
+# catalog is sliced off before reaching the model, as a real caller would.
+const LOCAL_FLUXES = Float64[1.0 1.5; 2.0 2.5]
 const LOCAL_SAMPLES = (redshift = [0.1, 0.2],)
 const LOCAL_FIDUCIALS = (rate_scale = 1.0, weight_shift = 0.0)
 const LOCAL_THETA = (rate_scale = 1.1, weight_shift = 0.05)
@@ -14,10 +16,9 @@ const LOCAL_PRIOR = (
     weight_shift = Uniform(-0.2, 0.2)
 )
 const LOCAL_OBSERVATION = ObservationContext(
-    [0.0, 20.0, 40.0],
-    [Inf, 1.0, 1.0],
-    [1.0, 1.0, 1.0],
-    BitVector([false, true, true]),
+    [20.0, 40.0],
+    [1.0, 1.0],
+    [1.0, 1.0],
     1.0
 )
 

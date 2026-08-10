@@ -25,7 +25,7 @@ end
         observation::ObservationContext,
         prior::NamedTuple,
         constants::NamedTuple,
-        observed_in_band::AbstractVector{<:Real}
+        observed::AbstractVector{<:Real}
 )
     Λ_sampled ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
     # `merge(constants, Λ_sampled)` is the idiomatic Julia `{**constants, **sampled}`:
@@ -36,17 +36,16 @@ end
     forward = forward_model(weights_fn, fluxes, samples, Λ; average_mode)
     Sh = forward.spectral_density
 
-    observed_in_band ~ MvNormal(
-        Sh[observation.in_band_mask],
-        Diagonal(observation.sgwb_scale_in_band .^ 2)
+    observed ~ MvNormal(
+        Sh,
+        Diagonal(observation.sgwb_scale .^ 2)
     )
 
     track || return nothing
-    m = observation.in_band_mask
     df = frequency_bin_width(observation.frequencies)
     obs_sec = year_to_second(observation.observation_time)
     snr_sq = spectral_snr_squared(
-        Sh[m], observation.effective_psd[m], obs_sec, df)
+        Sh, observation.effective_psd, obs_sec, df)
     return (;
         number_of_sources = forward.rate * obs_sec,
         effective_sample_size = normalized_ess(forward.weights),
@@ -63,6 +62,9 @@ end
 Build the Turing model scoring `weights_fn` against `observed` (synthesized at
 `fiducial_hyperparameters` when omitted). `weights_fn(Λ, samples) -> (rate, log_weights)`
 is the whole model contract; see the `AstroSGWBInference` module docstring.
+
+Every frequency bin is scored: `fluxes`, `observed`, and `observation` must already be
+restricted to the analysis band (slice them with one mask beforehand).
 
 `prior` declares what is **sampled** and `constants` declares what is **fixed**; the model
 body evaluates at `merge(constants, Λ_sampled)`. To sample a subset, build the prior with
@@ -115,6 +117,6 @@ function build_turing_model(
         observation,
         prior,
         constants,
-        observed_data[observation.in_band_mask]
+        observed_data
     )
 end

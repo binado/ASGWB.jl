@@ -10,7 +10,8 @@ const _PARITY_APPROXIMANT = "IMRPhenomPV2_NRTidalv2"
 
 # The frequency axis and band edges are stored in the catalog file, not derived
 # from `(duration, sampling_frequency)`, so they are written out literally here.
-# The mask these produce is `[false, true, true]`.
+# The DC bin (f = 0) is out of band; callers slice it off (see
+# `parity_problem_context`).
 const _PARITY_FREQUENCIES = [0.0, 20.0, 40.0]
 const _PARITY_MINIMUM_FREQUENCY = 15.0
 const _PARITY_MAXIMUM_FREQUENCY = 40.0
@@ -242,11 +243,15 @@ function parity_problem_context(variant::Symbol, detectors)
     # re-reads `catalog.h5` from scratch.
     apply_gw_distance_correction!(catalog, propagation(P, Λ))
     kw = parity_observation_kwargs(variant)
+    # Band selection is the caller's job: keep every bin above DC, matching the
+    # band edges stored in the fixture files.
+    band = catalog.frequencies .> 0.0
+    fluxes = catalog.fluxes[band, :]
     observation = build_observation_context(
-        catalog.frequencies, Vector{Detector}(collect(detectors)),
-        catalog.in_band_mask, kw.observation_time)
+        catalog.frequencies[band], Vector{Detector}(collect(detectors)),
+        kw.observation_time)
     return (;
-        fluxes = catalog.fluxes,
+        fluxes = fluxes,
         samples = samples,
         fiducials = Λ,
         observation = observation,

@@ -15,26 +15,22 @@ end
 function gaussian_bin_variance(;
         effective_psd::AbstractVector{<:Real},
         frequencies::AbstractVector{<:Real},
-        in_band_mask::BitVector,
         observation_time_sec::Real
 )
     df = frequency_bin_width(frequencies)
-    eff_ib = effective_psd[in_band_mask]
     # effective_psd is amplitude √(variance); bin variance is (effective_psd)² / (2 T Δf)
-    return eff_ib .^ 2 ./ (2.0 * Float64(observation_time_sec) * df)
+    return effective_psd .^ 2 ./ (2.0 * Float64(observation_time_sec) * df)
 end
 
 function gaussian_bin_scale(;
         effective_psd::AbstractVector{<:Real},
         frequencies::AbstractVector{<:Real},
-        in_band_mask::BitVector,
         observation_time_sec::Real
 )
     return sqrt.(
         gaussian_bin_variance(;
         effective_psd = effective_psd,
         frequencies = frequencies,
-        in_band_mask = in_band_mask,
         observation_time_sec = observation_time_sec
     ),
     )
@@ -52,17 +48,19 @@ function _sgwb_scale_vector(
 end
 
 """
-    build_observation_context(frequencies, detectors, in_band_mask, observation_time)
+    build_observation_context(frequencies, detectors, observation_time)
 
 Build an [`ObservationContext`](@ref) from a detector network and tabulated PSDs
 (isotropic ORF network [`effective_psd`](@ref) and per-bin Gaussian scales).
 
-`observation_time` is the observation duration in years (Julian year).
+`frequencies` must already be restricted to the analysis band (slice the catalog's
+`frequencies` and the rows of its `fluxes` with the same mask beforehand); every bin
+passed here is scored by the likelihood. `observation_time` is the observation
+duration in years (Julian year).
 """
 function build_observation_context(
         frequencies::Vector{Float64},
         detectors::AbstractVector{Detector},
-        in_band_mask::BitVector,
         observation_time::Float64
 )
     eff = effective_psd(frequencies, detectors)
@@ -72,7 +70,6 @@ function build_observation_context(
         frequencies,
         eff,
         sgwb,
-        in_band_mask,
         observation_time
     )
 end

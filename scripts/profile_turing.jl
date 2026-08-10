@@ -52,6 +52,13 @@ using Statistics: mean
 using TOML
 using Turing: DynamicPPL
 
+# Analysis band (Hz). The catalog carries no band information: `frequencies` and the
+# rows of `fluxes` are sliced with this cut before the observation is built, so every
+# bin handed to the model is scored. Matches the generator band of the production
+# catalog.
+const MINIMUM_FREQUENCY = 2.0
+const MAXIMUM_FREQUENCY = 4096.0
+
 # ---------------------------------------------------------------------------
 # TOML config helpers
 # ---------------------------------------------------------------------------
@@ -258,15 +265,19 @@ function _run(;
     # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, θ0))
-    fluxes = catalog.fluxes
+    # Band selection is the caller's job: restrict to the analysis band before
+    # building the observation, so every bin handed to the model is scored.
+    band = (catalog.frequencies .>= MINIMUM_FREQUENCY) .&
+           (catalog.frequencies .<= MAXIMUM_FREQUENCY)
+    fluxes = catalog.fluxes[band, :]
+    frequencies = catalog.frequencies[band]
     model = prepare_bns_madau_dickinson_model(
         samples,
         θ0,
         C,
         P;
     )
-    observation = build_observation_context(
-        catalog.frequencies, detectors, catalog.in_band_mask, observation_time)
+    observation = build_observation_context(frequencies, detectors, observation_time)
     @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing

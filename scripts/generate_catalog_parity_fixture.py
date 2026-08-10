@@ -16,7 +16,7 @@ Writes (both are gitignored, and the Julia test skips when they are absent):
 
 - ``AstroSGWB/test/fixtures/catalog_parity_reference.h5`` -- the catalog itself.
 - ``AstroSGWB/test/fixtures/catalog_parity_reference.npz`` -- arrays
-  ``fluxes`` (``(nfreq, nsamples)``), ``frequencies``, and ``in_band_mask``.
+  ``fluxes`` (``(nfreq, nsamples)``) and ``frequencies``.
 """
 
 from __future__ import annotations
@@ -75,15 +75,11 @@ def main() -> None:
     # rounding is part of what the Julia side is compared against.
     reloaded = pluscross.load_catalog(str(h5_path))
     fluxes = polarization_power(reloaded)
-    in_band_mask = (reloaded.frequencies >= reloaded.minimum_frequency) & (
-        reloaded.frequencies <= reloaded.maximum_frequency
-    )
 
     np.savez(
         npz_path,
         fluxes=fluxes,
         frequencies=reloaded.frequencies,
-        in_band_mask=in_band_mask,
     )
     print(f"wrote {h5_path}")
     print(f"wrote {npz_path} (fluxes shape {fluxes.shape})")

@@ -230,12 +230,11 @@ end
 
 @testset "concrete adapter integrates with Turing" begin
     model = prepared()
-    fluxes = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    fluxes = Float64[1.0 1.5; 2.0 2.5]
     observation = ObservationContext(
-        [0.0, 20.0, 40.0],
-        [Inf, 1.0, 1.0],
-        [1.0, 1.0, 1.0],
-        BitVector([false, true, true]),
+        [20.0, 40.0],
+        [1.0, 1.0],
+        [1.0, 1.0],
         1.0
     )
     prior = (

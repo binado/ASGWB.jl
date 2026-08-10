@@ -77,6 +77,12 @@ begin
     local_merger_rate = 161.0
     observation_time_yr = 1.0
 
+    # Analysis band (Hz). The catalog carries no band information: slice
+    # `frequencies` and the rows of `fluxes` with this cut before building the
+    # observation. Matches the generator band of the production catalog.
+    minimum_frequency = 2.0
+    maximum_frequency = 4096.0
+
     cosmology_parameters = (;
         H0 = 67.66,
         Ωm = 0.3096,
@@ -126,9 +132,16 @@ begin
     fluxes = apply_gw_distance_correction(
         catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
 
+    # Band selection is the caller's job: restrict to the analysis band before
+    # building the observation, so every bin handed to the model is scored.
+    band = (catalog.frequencies .>= minimum_frequency) .&
+           (catalog.frequencies .<= maximum_frequency)
+    fluxes = fluxes[band, :]
+    frequencies = catalog.frequencies[band]
+
     prepared_model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
     observation = build_observation_context(
-        catalog.frequencies, detectors, catalog.in_band_mask, observation_time_yr)
+        frequencies, detectors, observation_time_yr)
     # S2: the prior declares the hyperparameter names; there is no model to ask.
     order = keys(hyperprior_dists)
     @info order
@@ -138,7 +151,7 @@ begin
         samples.redshift,
     )
 
-    @info "using fiducial in-band spectrum from cache as observed data"
+    @info "using fiducial spectrum from cache as observed data"
     observed = forward_model(
         prepared_model, fluxes, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density

@@ -59,7 +59,6 @@ end
         end
         @test catalog.fluxes == expected_fluxes
         @test catalog.frequencies == [0.0, 1.0, 2.0]
-        @test catalog.in_band_mask == BitVector([false, true, true])
         @test catalog.approximant == "IMRPhenomPV2"
         @test size(catalog.fluxes) == (3, 2)
 
@@ -103,7 +102,6 @@ end
         # orientation HDF5.jl gives Julia, so no transpose is involved.
         @test size(catalog.fluxes) == size(reference["fluxes"])
         @test catalog.frequencies ≈ vec(reference["frequencies"])
-        @test catalog.in_band_mask == BitVector(vec(reference["in_band_mask"]))
 
         # Julia's `abs2(z)` computes `re² + im²`; NumPy's `abs(z)**2` squares a
         # `hypot`, so the two agree to a few ulp rather than bit-for-bit.
@@ -123,7 +121,7 @@ end
     # convention of the legacy generator.
     no_column = SGWBCatalog(
         [0.0, 1.0], zeros(2, 2), (redshift = [0.1, 0.2],),
-        BitVector([false, true]), "IMRPhenomPV2")
+        "IMRPhenomPV2")
     @test average_mode(no_column) === AnalyticInclination()
 end
 
@@ -132,7 +130,7 @@ end
 
     @test redshift(loaded.samples) ≈ [0.1, 0.2]
     @test loaded.samples.luminosity_distance ≈ [430.0, 880.0]
-    @test loaded.fluxes ≈ Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    @test loaded.fluxes ≈ Float64[1.0 1.5; 2.0 2.5]
 
     Λ = loaded.fiducials
     @test Λ.H0 == 67.0
@@ -148,11 +146,9 @@ end
     @test all(isfinite, loaded.samples.luminosity_distance)
     @test all(>(0), loaded.samples.luminosity_distance)
 
-    @test observation.frequencies ≈ [0.0, 20.0, 40.0]
-    @test observation.in_band_mask == BitVector([false, true, true])
+    @test observation.frequencies ≈ [20.0, 40.0]
     @test length(observation.effective_psd) == length(observation.frequencies)
-    @test observation.sgwb_scale_in_band ≈
-          observation.sgwb_scale[observation.in_band_mask]
+    @test length(observation.sgwb_scale) == length(observation.frequencies)
     @test observation.observation_time == 1.0
     @test year_to_second(observation.observation_time) ≈ 365.25 * 24 * 3600
 end
