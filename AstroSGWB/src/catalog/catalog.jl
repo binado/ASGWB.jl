@@ -62,8 +62,9 @@ matching the convention of the legacy face-on generator. Every `gwmock-pop`
 catalog does emit the column, so that fallback only applies to hand-built
 fixtures and pre-`gwmock` files.
 
-Pass `average_mode` explicitly to [`spectral_density`](@ref) or
-`AstroSGWBInference.build_turing_model` to override the derived value.
+Pass `average_mode` explicitly to [`spectral_density`](@ref),
+`AstroSGWBInference.forward_model`, and
+`AstroSGWBInference.astrosgwb_importance_turing_model` to override the derived value.
 """
 function average_mode(catalog::SGWBCatalog)
     haskey(catalog.samples, :inclination) || return AnalyticInclination()

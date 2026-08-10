@@ -18,7 +18,7 @@ callers wanting only the spectrum take `.spectral_density`.
 `average_mode` is the inclination-averaging convention of the catalog that produced
 `polarization_power` (see [`AstroSGWB.spectral_density`](@ref)). It must match the mode `observed` was
 built under, or the synthesized data and the model that scores it disagree by a constant
-factor; [`build_turing_model`](@ref) enforces that by forwarding a single value to both.
+factor; callers pass a single value to both this call and the Turing model.
 """
 function forward_model(
         weights_fn, polarization_power, samples, Λ;

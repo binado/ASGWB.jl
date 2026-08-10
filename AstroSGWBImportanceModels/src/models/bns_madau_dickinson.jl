@@ -4,11 +4,11 @@
 Prepared BNS importance model using a Madau–Dickinson source-frame merger rate,
 background cosmology `C`, and GW propagation model `P`. Detector state (frequencies,
 effective PSD, observation time) is intentionally kept out of this model and passed to
-`AstroSGWBInference.build_turing_model` as flattened arrays.
+`AstroSGWBInference.astrosgwb_importance_turing_model` as flattened arrays.
 
 The model is a **functor**: `model(Λ, samples) -> (rate, log_weights)` is the whole
-contract `AstroSGWBInference.build_turing_model` consumes, so this package adds no methods
-to foreign generics and does not depend on the inference package at all.
+contract `AstroSGWBInference.astrosgwb_importance_turing_model` consumes, so this package
+adds no methods to foreign generics and does not depend on the inference package at all.
 
 `log_Ξ_fid` is `log Ξ(z_i)` at the **fiducial** propagation, captured at prepare time
 because the hot path only ever sees the live `Λ`. It enters the log-weights as

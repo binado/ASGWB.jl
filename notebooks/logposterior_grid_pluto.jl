@@ -40,7 +40,7 @@ begin
                      CatalogInclination,
                      W0CDM,
                      ModifiedPropagation
-    using AstroSGWBInference: build_turing_model, forward_model
+    using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
     using AstroSGWBImportanceModels:
                                      prepare_bns_madau_dickinson_model
     using Distributions: Uniform
@@ -171,11 +171,9 @@ begin
     prior = sample_only_tup === nothing ? hyperprior :
             NamedTuple{sample_only_tup}(hyperprior)
     constants = Base.structdiff(fiducials, prior)
-    model = build_turing_model(
-        prepared_model, polarization_power, samples, fiducials, frequencies, eff_psd,
-        observation_time_yr, prior;
-        constants = constants, track = false, observed = observed,
-        average_mode = resolved_average_mode)
+    model = astrosgwb_importance_turing_model(
+        false, resolved_average_mode, prepared_model, polarization_power, samples,
+        frequencies, eff_psd, observation_time_yr, prior, constants, observed)
     lf = DynamicPPL.LogDensityFunction(model)
 
     free_order = keys(prior)

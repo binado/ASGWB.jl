@@ -18,7 +18,7 @@ include("diagnostics.jl")
 include("turing_model.jl")
 
 export forward_model,
-       build_turing_model,
+       astrosgwb_importance_turing_model,
        AbstractAverageMode,
        AnalyticInclination,
        CatalogInclination

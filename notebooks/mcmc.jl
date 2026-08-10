@@ -268,18 +268,23 @@ begin
     prior = sample_only_tup === nothing ? hyperprior :
             NamedTuple{sample_only_tup}(hyperprior)
     constants = Base.structdiff(fiducials, prior)
-    turing_model = build_turing_model(
+    # No external spectrum to fit: synthesize `observed` at the fiducials. One
+    # `resolved_average_mode` reaches both this call and the model that scores it.
+    observed = forward_model(
+        model, polarization_power, samples, fiducials;
+        average_mode = resolved_average_mode).spectral_density
+    turing_model = astrosgwb_importance_turing_model(
+        false,
+        resolved_average_mode,
         model,
         polarization_power,
         samples,
-        fiducials,
         frequencies,
         eff_psd,
         observation_time,
-        prior;
-        constants = constants,
-        track = false,
-        average_mode = resolved_average_mode
+        prior,
+        constants,
+        observed
     )
     nuts = Turing.NUTS(
         sampler.nadapts,
@@ -379,7 +384,7 @@ begin
                      Ωgw
     using AstroSGWBImportanceModels:
                                      prepare_bns_madau_dickinson_model
-    using AstroSGWBInference: build_turing_model, forward_model
+    using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
     using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
     using Distributions: Uniform
     using InferenceObjects: InferenceObjects

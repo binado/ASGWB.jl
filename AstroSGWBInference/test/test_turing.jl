@@ -4,26 +4,32 @@ using Turing.DynamicPPL: VarInfo, getsym
 using FlexiChains
 using AstroSGWB
 using Distributions: logpdf
-using AstroSGWBInference: build_turing_model, forward_model,
+using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model,
                           AnalyticInclination, CatalogInclination
 
 _varinfo_symbols(vi) = Set(getsym(vn) for vn in keys(vi))
 
 _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
 
+# Constructing the model is caller-owned: synthesize `observed` at the fiducials (or pass
+# an external spectrum) and call the `@model` directly. This helper only spares the test
+# bodies the repetition.
+function _inline_model(problem; track = false,
+        average_mode = AnalyticInclination(),
+        prior = problem.prior, constants = NamedTuple(),
+        effective_psd = problem.effective_psd,
+        observed = forward_model(
+            problem.model, problem.polarization_power, problem.samples, problem.fiducials;
+            average_mode = average_mode).spectral_density)
+    return astrosgwb_importance_turing_model(
+        track, average_mode, problem.model, problem.polarization_power, problem.samples,
+        problem.frequencies, effective_psd, problem.observation_time, prior, constants,
+        observed)
+end
+
 @testset "Turing model smoke test with local adapter" begin
     problem = local_problem_context()
-    model = build_turing_model(
-        problem.model,
-        problem.polarization_power,
-        problem.samples,
-        problem.fiducials,
-        problem.frequencies,
-        problem.effective_psd,
-        problem.observation_time,
-        problem.prior;
-        track = false
-    )
+    model = _inline_model(problem; track = false)
     forward = forward_model(
         problem.model, problem.polarization_power, problem.samples, problem.fiducials)
     rate, log_weights = problem.model(problem.fiducials, problem.samples)
@@ -32,17 +38,7 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
     @test forward.spectral_density ≈
           spectral_density(problem.polarization_power, rate; weights = exp.(log_weights))
 
-    tracked = build_turing_model(
-        problem.model,
-        problem.polarization_power,
-        problem.samples,
-        problem.fiducials,
-        problem.frequencies,
-        problem.effective_psd,
-        problem.observation_time,
-        problem.prior;
-        track = true
-    )
+    tracked = _inline_model(problem; track = true)
     returned_nt = Turing.returned(tracked, problem.theta)
     @test 0 < returned_nt.effective_sample_size <= 1
     @test isfinite(returned_nt.snr)
@@ -68,13 +64,13 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
     @test all(isfinite, vec(Array(chain[:logjoint])))
 end
 
-@testset "average_mode reaches both sides of build_turing_model" begin
+@testset "one average_mode reaches both the data and the model" begin
     problem = local_problem_context()
 
     # The fixture's unit PSD carries σ ≈ 9e-5 against a fiducial Sₕ ~ 5e-8, so its
     # residual term is ~1e-7 and the joint is numerically all prior plus
     # normalization -- every likelihood-sensitive assertion below would pass
-    # vacuously. Score against σ at the signal scale instead: `build_turing_model`
+    # vacuously. Score against σ at the signal scale instead: the model body
     # derives σ = effective_psd / √(2 T Δf), so pick the PSD that yields σ = 1e-8.
     nfreq = length(problem.frequencies)
     σ_target = 1.0e-8
@@ -84,18 +80,7 @@ end
         nfreq)
     σ = fill(σ_target, nfreq)
 
-    _build(;
-        kwargs...) = build_turing_model(
-        problem.model,
-        problem.polarization_power,
-        problem.samples,
-        problem.fiducials,
-        problem.frequencies,
-        eff_psd,
-        problem.observation_time,
-        problem.prior;
-        kwargs...
-    )
+    _build(; kwargs...) = _inline_model(problem; effective_psd = eff_psd, kwargs...)
 
     # `observed` is synthesized at the fiducials, so at the fiducials the
     # residual vanishes and the joint collapses to prior + Gaussian
@@ -109,7 +94,7 @@ end
             m = _build(; average_mode = mode)
             @test Turing.logjoint(m, problem.fiducials) ≈ zero_residual_logjoint
 
-            # S4: there is no second likelihood implementation to compare against, so
+            # There is no second likelihood implementation to compare against, so
             # score `forward_model`'s spectrum with an inline Gaussian instead. Three
             # lines in the test beats a parallel production code path that can drift.
             Sh = forward_model(
@@ -149,28 +134,11 @@ end
         @test _build(; average_mode = CatalogInclination()).args.average_mode ===
               CatalogInclination()
     end
-
-    @testset "the default is AnalyticInclination" begin
-        default = _build()
-        @test default.args.average_mode === AnalyticInclination()
-        @test Turing.logjoint(default, problem.theta) ≈
-              Turing.logjoint(
-            _build(; average_mode = AnalyticInclination()), problem.theta)
-    end
 end
 
 @testset "constants replace conditioning" begin
     problem = local_problem_context()
-    full = build_turing_model(
-        problem.model,
-        problem.polarization_power,
-        problem.samples,
-        problem.fiducials,
-        problem.frequencies,
-        problem.effective_psd,
-        problem.observation_time,
-        problem.prior
-    )
+    full = _inline_model(problem)
     @test _varinfo_symbols(VarInfo(full)) == Set(keys(problem.prior))
 
     # Restrict the prior to one parameter and hold the rest fixed at the fiducial. The
@@ -180,17 +148,8 @@ end
     constants = Base.structdiff(problem.fiducials, restricted_prior)
     @test keys(constants) == (:weight_shift,)
 
-    restricted = build_turing_model(
-        problem.model,
-        problem.polarization_power,
-        problem.samples,
-        problem.fiducials,
-        problem.frequencies,
-        problem.effective_psd,
-        problem.observation_time,
-        restricted_prior;
-        constants = constants
-    )
+    restricted = _inline_model(
+        problem; prior = restricted_prior, constants = constants)
     @test _varinfo_symbols(VarInfo(restricted)) == Set((:rate_scale,))
 
     # At a point whose fixed coordinate equals its constant, the restricted model scores
@@ -202,16 +161,10 @@ end
           logpdf(problem.prior.weight_shift, problem.fiducials.weight_shift)
 
     # `merge(constants, Λ_sampled)` lets the sampled value win, so an overlapping key
-    # would silently shadow the constant the caller asked for. Reject it up front.
-    @test_throws ArgumentError build_turing_model(
-        problem.model,
-        problem.polarization_power,
-        problem.samples,
-        problem.fiducials,
-        problem.frequencies,
-        problem.effective_psd,
-        problem.observation_time,
-        restricted_prior;
-        constants = problem.fiducials
-    )
+    # would silently shadow the constant the caller asked for. The model body rejects it
+    # at the first evaluation -- the same point where a missing name surfaces as a
+    # `KeyError` on `Λ.name`.
+    overlapping = _inline_model(
+        problem; prior = restricted_prior, constants = problem.fiducials)
+    @test_throws ArgumentError Turing.logjoint(overlapping, problem.theta)
 end

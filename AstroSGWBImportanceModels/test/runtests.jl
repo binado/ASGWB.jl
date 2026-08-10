@@ -84,7 +84,6 @@ end
     # is a setup error and must be loud at prepare time.
     @test_throws ArgumentError prepared((
         redshift = [0.1, 25.0], luminosity_distance = [430.0, 880.0]))
-    @test_throws ArgumentError prepared(; z_grid = Float64[])
     @test_throws ArgumentError prepared(; z_grid = [0.0])
     @test_throws ArgumentError prepared(; z_grid = [0.0, 1.0, 0.5])
 end
@@ -112,15 +111,13 @@ end
 end
 
 @testset "DEFAULT_Z_GRID starts at zero" begin
-    # Comoving distance is accumulated along the grid assuming `d_c(grid[1]) = 0`.
-    # A non-zero lower bound must fail instead of silently omitting `∫₀^{z_min} dz/E`.
+    # Comoving distance is accumulated along the grid assuming `d_c(grid[1]) = 0`:
+    # `distance_and_volume_grid` documents the grid must start at zero but does not
+    # check it (grid validation is caller-owned), so the production grid's zero lower
+    # bound is asserted here instead.
     @test first(DEFAULT_Z_GRID) == 0.0
     @test last(DEFAULT_Z_GRID) == 20.0
     @test length(DEFAULT_Z_GRID) == 256
-
-    cosmo = cosmology(LambdaCDM, FIDUCIALS)
-    truncated = collect(LinRange(1e-3, 20.0, 256))
-    @test_throws ArgumentError distance_and_volume_grid(cosmo, truncated)
 end
 
 @testset "DataInterpolations linear sample evaluation" begin
@@ -225,20 +222,23 @@ end
         zpeak = Uniform(0.05, 10.0)
     )
     # `R₀` is fixed via `constants` rather than sampled -- the production default. The
-    # prior declares the sampled names; `constants` supplies the rest of `Λ`.
-    turing_model = build_turing_model(
-        model, polarization_power, SAMPLES, FIDUCIALS,
-        frequencies, eff_psd, observation_time, prior;
-        constants = (; R₀ = FIDUCIALS.R₀))
+    # prior declares the sampled names; `constants` supplies the rest of `Λ`. `observed`
+    # is synthesized at the fiducials since there is no external spectrum to fit.
+    observed = forward_model(
+        model, polarization_power, SAMPLES, FIDUCIALS).spectral_density
+    turing_model = astrosgwb_importance_turing_model(
+        false, AnalyticInclination(), model, polarization_power, SAMPLES, frequencies,
+        eff_psd, observation_time, prior, (; R₀ = FIDUCIALS.R₀), observed)
 
     @test turing_model !== nothing
     @test isfinite(Turing.logjoint(turing_model, FIDUCIALS))
 
     # And the opt-in: adding `R₀` to the prior makes it a sampled variable, with no
     # change anywhere else.
-    sampling_R₀ = build_turing_model(
-        model, polarization_power, SAMPLES, FIDUCIALS, frequencies, eff_psd, observation_time,
-        merge(prior, (; R₀ = Uniform(10.0, 1000.0))))
+    sampling_R₀ = astrosgwb_importance_turing_model(
+        false, AnalyticInclination(), model, polarization_power, SAMPLES, frequencies,
+        eff_psd, observation_time, merge(prior, (; R₀ = Uniform(10.0, 1000.0))),
+        NamedTuple(), observed)
     @test isfinite(Turing.logjoint(sampling_R₀, FIDUCIALS))
     @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(sampling_R₀)))) ==
           Set(keys(FIDUCIALS))

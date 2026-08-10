@@ -25,7 +25,8 @@ using AstroSGWB:
 using AstroSGWBImportanceModels:
                                  prepare_bns_madau_dickinson_model
 using AstroSGWBInference:
-                          build_turing_model,
+                          astrosgwb_importance_turing_model,
+                          forward_model,
                           MCMCConfig,
                           load_config,
                           save_config
@@ -193,18 +194,23 @@ function run_mcmc(config_file::String)
 
     adtype = _resolve_adtype(cfg.sampler.ad_backend)
     @info "starting NUTS" nadapts=cfg.sampler.nadapts nsamples=cfg.sampler.nsamples target_acceptance=cfg.sampler.target_acceptance ad_backend=cfg.sampler.ad_backend sampled=keys(prior) fixed=keys(constants) nchains
-    turing_model = build_turing_model(
+    # No external spectrum to fit: synthesize `observed` at the fiducials. One
+    # `resolved_average_mode` reaches both this call and the model that scores it.
+    observed = forward_model(
+        model, polarization_power, samples, fiducials;
+        average_mode = resolved_average_mode).spectral_density
+    turing_model = astrosgwb_importance_turing_model(
+        true,
+        resolved_average_mode,
         model,
         polarization_power,
         samples,
-        fiducials,
         frequencies,
         eff_psd,
         cfg.observation_time,
-        prior;
-        constants = constants,
-        track = true,
-        average_mode = resolved_average_mode
+        prior,
+        constants,
+        observed
     )
     nuts = Turing.NUTS(
         cfg.sampler.nadapts,

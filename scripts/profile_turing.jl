@@ -18,7 +18,7 @@ module AstroSGWBProfileCLI
 
 using Distributions: logpdf, Uniform
 using AstroSGWB
-using AstroSGWBInference: build_turing_model, forward_model
+using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
 using AstroSGWBImportanceModels:
                                  prepare_bns_madau_dickinson_model
 using AstroSGWB:
@@ -302,19 +302,18 @@ function _run(;
     # ------------------------------------------------------------------
 
     # Turing / DynamicPPL path
-    turing_model = build_turing_model(
+    turing_model = astrosgwb_importance_turing_model(
+        false,
+        resolved_average_mode,
         model,
         polarization_power,
         samples,
-        θ0,
         frequencies,
         eff_psd,
         observation_time,
-        priors;
-        constants = (; R₀ = local_merger_rate),
-        track = false,
-        observed = observed,
-        average_mode = resolved_average_mode
+        priors,
+        (; R₀ = local_merger_rate),
+        observed
     )
     lf, z0_turing = _build_turing_logdensity(turing_model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)

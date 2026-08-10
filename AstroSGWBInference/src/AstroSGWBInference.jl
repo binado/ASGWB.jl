@@ -29,22 +29,22 @@ needs but neither supplies surfaces as a `KeyError` on `Λ.name` at the first ev
 before the sampler burns wall clock.
 
 [`forward_model`](@ref) is the single implementation of the forward pass, shared by the
-`@model` body and the synthesis of `observed` at the fiducial point. Scoring a point is
-`Turing.logjoint(model, θ)`; there is deliberately no second likelihood implementation to
-drift from the first.
+`@model` body ([`astrosgwb_importance_turing_model`](@ref)) and the caller-side synthesis
+of `observed` at the fiducial point. Scoring a point is `Turing.logjoint(model, θ)`;
+there is deliberately no second likelihood implementation to drift from the first.
 """
 module AstroSGWBInference
 
 include("InferenceImpl.jl")
 using .InferenceImpl:
                       forward_model,
-                      build_turing_model,
+                      astrosgwb_importance_turing_model,
                       AbstractAverageMode,
                       AnalyticInclination,
                       CatalogInclination
 
 export forward_model,
-       build_turing_model,
+       astrosgwb_importance_turing_model,
        AbstractAverageMode,
        AnalyticInclination,
        CatalogInclination,
