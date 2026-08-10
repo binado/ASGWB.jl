@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "9daa98f87f620079d82b8542878197e1a47f0d77"
+project_hash = "022f6685a8ca2e413c09b6eca261e0f9685af30b"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "d9aaef7c63466eee4de23b4d9dad03629df54bea"
@@ -14,6 +14,11 @@ weakdeps = ["ChainRulesCore", "ConstructionBase", "EnzymeCore"]
     ADTypesChainRulesCoreExt = "ChainRulesCore"
     ADTypesConstructionBaseExt = "ConstructionBase"
     ADTypesEnzymeCoreExt = "EnzymeCore"
+
+[[deps.ANSIColoredPrinters]]
+git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
+uuid = "a4c015fc-c6ff-483c-b24f-f7ea428134e9"
+version = "0.0.1"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -231,7 +236,7 @@ uuid = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
 version = "0.1.0"
 
 [[deps.AstroSGWBInference]]
-deps = ["AbstractMCMC", "AstroSGWB", "BenchmarkTools", "Bijectors", "DelimitedFiles", "Distributions", "FlexiChains", "ForwardDiff", "JLD2", "LinearAlgebra", "LogDensityProblems", "LogDensityProblemsAD", "Printf", "Profile", "Random", "Serialization", "Statistics", "TOML", "Turing"]
+deps = ["AbstractMCMC", "AstroSGWB", "BenchmarkTools", "Bijectors", "DelimitedFiles", "Distributions", "FlexiChains", "ForwardDiff", "LinearAlgebra", "LogDensityProblems", "LogDensityProblemsAD", "Printf", "Profile", "Random", "Serialization", "Statistics", "TOML", "Turing"]
 path = "AstroSGWBInference"
 uuid = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
 version = "0.1.0"
@@ -313,6 +318,12 @@ version = "0.15.24"
     Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
     ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
 
+[[deps.Blosc_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Lz4_jll", "Zlib_jll", "Zstd_jll"]
+git-tree-sha1 = "535c80f1c0847a4c967ea945fca21becc9de1522"
+uuid = "0b7ba130-8d10-5ba8-a3d6-c5182647fed9"
+version = "1.21.7+0"
+
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "1b96ea4a01afe0ea4090c5c8039690672dd13f2e"
@@ -329,6 +340,12 @@ version = "0.1.0"
 git-tree-sha1 = "389ad5c84de1ae7cf0e28e381131c98ea87d54fc"
 uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 version = "0.5.0"
+
+[[deps.CFTime]]
+deps = ["Dates", "Printf"]
+git-tree-sha1 = "fad2f199d1f1ae0c8e820ab68f81f6dbf62e60b2"
+uuid = "179af706-886a-5703-950a-314cd64e0468"
+version = "0.2.10"
 
 [[deps.CRC32c]]
 uuid = "8bf52ea8-c179-5cab-976a-9e18b702a9bc"
@@ -467,6 +484,12 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "37ea44092930b1811e666c3bc38065d7d87fcc74"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.13.1"
+
+[[deps.CommonDataModel]]
+deps = ["CFTime", "DataStructures", "Dates", "DiskArrays", "Preferences", "Printf", "Statistics"]
+git-tree-sha1 = "54d50f8a0a68ff4160564dfa09fc5de32465cfca"
+uuid = "1fbeeb36-5f17-413c-809b-666fb144f157"
+version = "0.4.4"
 
 [[deps.CommonSolve]]
 git-tree-sha1 = "99ee296f88c12485402e37c2fd025f95ae097637"
@@ -743,6 +766,12 @@ version = "0.30.1"
     RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
     SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
     StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[[deps.DiskArrays]]
+deps = ["ConstructionBase", "LRUCache", "Mmap", "OffsetArrays"]
+git-tree-sha1 = "9903195c34a488c5265d9a105f39718b7a2b3568"
+uuid = "3c3547ce-8d99-4f5e-a174-61eb10b00ae3"
+version = "0.4.22"
 
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -1227,6 +1256,23 @@ git-tree-sha1 = "012e604e1c7458645cb8b436f8fba789a51b257f"
 uuid = "9b13fd28-a010-5f03-acff-a1bbcff69959"
 version = "1.0.0"
 
+[[deps.InferenceObjects]]
+deps = ["ANSIColoredPrinters", "Dates", "DimensionalData", "Random", "Tables"]
+git-tree-sha1 = "dad59fcae3faa962c8fd3c570eae860232862fff"
+uuid = "b5cf5a8d-e756-4ee3-b014-01d49d192c00"
+version = "0.4.17"
+
+    [deps.InferenceObjects.extensions]
+    InferenceObjectsMCMCDiagnosticToolsExt = "MCMCDiagnosticTools"
+    InferenceObjectsNCDatasetsExt = "NCDatasets"
+    InferenceObjectsPosteriorStatsExt = ["PosteriorStats", "StatsBase"]
+
+    [deps.InferenceObjects.weakdeps]
+    MCMCDiagnosticTools = "be115224-59cd-429b-ad48-344e309966f0"
+    NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+    PosteriorStats = "7f36be82-ad55-44ba-a5c0-b8b5480d7aa5"
+    StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
 [[deps.Inflate]]
 git-tree-sha1 = "d1b1b796e47d94588b3757fe84fbf65a5ec4a80d"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
@@ -1432,6 +1478,15 @@ git-tree-sha1 = "eb62a3deb62fc6d8822c0c4bef73e4412419c5d8"
 uuid = "1d63c593-3942-5779-bab2-d838dc0a180e"
 version = "18.1.8+0"
 
+[[deps.LRUCache]]
+git-tree-sha1 = "5519b95a490ff5fe629c4a7aa3b3dfc9160498b3"
+uuid = "8ac3fa9e-de4c-5943-b1dc-09c6b5f20637"
+version = "1.6.2"
+weakdeps = ["Serialization"]
+
+    [deps.LRUCache.extensions]
+    SerializationExt = ["Serialization"]
+
 [[deps.LaTeXStrings]]
 git-tree-sha1 = "dda21b8cbd6a6c40d9d02a73230f9d70fed6918c"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
@@ -1591,6 +1646,12 @@ git-tree-sha1 = "f00544d95982ea270145636c181ceda21c4e2575"
 uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
 version = "1.2.0"
 
+[[deps.Lz4_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "191686b1ac1ea9c89fc52e996ad15d1d241d1e33"
+uuid = "5ced341a-0733-55b8-9ab6-a4889d929147"
+version = "1.10.1+0"
+
 [[deps.MCMCChains]]
 deps = ["AbstractMCMC", "AxisArrays", "DataAPI", "Dates", "Distributions", "IteratorInterfaceExtensions", "KernelDensity", "LinearAlgebra", "MCMCDiagnosticTools", "MLJModelInterface", "NaturalSort", "OrderedCollections", "PrettyTables", "Random", "RecipesBase", "Statistics", "StatsBase", "StatsFuns", "TableTraits", "Tables"]
 git-tree-sha1 = "060d6bc7cf60e621dfd056ed2c1a2db1e68db0fe"
@@ -1708,6 +1769,18 @@ git-tree-sha1 = "e8dcbeef032ba2f9051a44ac22b4e54e3a1a0099"
 uuid = "46d2c3a1-f734-5fdb-9937-b9b9aeba4221"
 version = "0.2.6"
 
+[[deps.NCDatasets]]
+deps = ["CFTime", "CommonDataModel", "DataStructures", "Dates", "DiskArrays", "NetCDF_jll", "NetworkOptions", "Printf"]
+git-tree-sha1 = "5eb7747d10437f5acb2675c1f865ffa0353f3f9c"
+uuid = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+version = "0.14.15"
+
+    [deps.NCDatasets.extensions]
+    NCDatasetsMPIExt = "MPI"
+
+    [deps.NCDatasets.weakdeps]
+    MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+
 [[deps.NLSolversBase]]
 deps = ["ADTypes", "DifferentiationInterface", "FiniteDiff", "LinearAlgebra"]
 git-tree-sha1 = "b3f76b463c7998473062992b246045e6961a074e"
@@ -1724,6 +1797,12 @@ version = "1.1.4"
 git-tree-sha1 = "eda490d06b9f7c00752ee81cfa451efe55521e21"
 uuid = "c020b1a1-e9b0-503a-9c33-f039bfc54a85"
 version = "1.0.0"
+
+[[deps.NetCDF_jll]]
+deps = ["Artifacts", "Blosc_jll", "Bzip2_jll", "HDF5_jll", "JLLWrappers", "LazyArtifacts", "LibCURL_jll", "Libdl", "MPIABI_jll", "MPICH_jll", "MPIPreferences", "MPItrampoline_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "TOML", "XML2_jll", "Zlib_jll", "Zstd_jll", "libaec_jll", "libzip_jll"]
+git-tree-sha1 = "b9584045c11c1c89d24083bb654c37b73a447877"
+uuid = "7243133f-43d8-5620-bbf4-c2c921802cf3"
+version = "401.1000.100+0"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore", "ImageMetadata"]
@@ -2985,6 +3064,12 @@ deps = ["Artifacts", "Giflib_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Lib
 git-tree-sha1 = "4e4282c4d846e11dce56d74fa8040130b7a95cb3"
 uuid = "c5f90fcd-3b7e-5836-afba-fc50a0988cb2"
 version = "1.6.0+0"
+
+[[deps.libzip_jll]]
+deps = ["Artifacts", "Bzip2_jll", "JLLWrappers", "Libdl", "OpenSSL_jll", "XZ_jll", "Zlib_jll", "Zstd_jll"]
+git-tree-sha1 = "86addc139bca85fdf9e7741e10977c45785727b7"
+uuid = "337d8026-41b4-5cde-a456-74a10e5b31d1"
+version = "1.11.3+0"
 
 [[deps.mpif_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "MPIABI_jll", "MPICH_jll", "MPIPreferences", "MPItrampoline_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "TOML"]

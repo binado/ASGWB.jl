@@ -155,7 +155,7 @@ load_config(path::AbstractString)::MCMCConfig = MCMCConfig(TOML.parsefile(path))
 Serialize `cfg` to TOML at `path`. `nothing`-valued optional fields are omitted
 (decoded back as `nothing`). Output keys are sorted for stable, diffable files;
 Unicode fiducial keys are emitted as quoted keys. Written atomically via a
-temp file + `mv`, mirroring `ChainIO.atomic_save_chain`.
+temp file + `mv`.
 """
 function save_config(cfg::MCMCConfig, path::AbstractString)
     d = Dict{String, Any}(

@@ -55,7 +55,7 @@ julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
    a caller-owned model implementing `AstroSGWBInference.hyperparameters(model)` and
    `merger_rate_and_log_weights(model, Λ, samples)`. Compute the detector network's
    effective PSD separately with `effective_psd(frequencies, detectors)`.
-6. Sample with `AstroSGWBInference.build_turing_model(model, polarization_power, samples, fiducials, frequencies, effective_psd, observation_time, prior)`, `condition_turing_model`, and Turing NUTS; save chains via `AstroSGWBInference.atomic_save_chain`. If you omit an `observed` spectrum, `build_turing_model` synthesizes one via `fiducial_spectral_density(model, polarization_power, samples, fiducials)` so the modified-propagation factors `Ξ(z)` are applied consistently.
+6. Sample with `AstroSGWBInference.build_turing_model(model, polarization_power, samples, fiducials, frequencies, effective_psd, observation_time, prior)`, `condition_turing_model`, and Turing NUTS; save chains to netCDF via `InferenceObjects.convert_to_inference_data(chain)` + `InferenceObjects.to_netcdf`. If you omit an `observed` spectrum, `build_turing_model` synthesizes one via `fiducial_spectral_density(model, polarization_power, samples, fiducials)` so the modified-propagation factors `Ξ(z)` are applied consistently.
 
 Waveform generation is not part of the Julia packages; see [scripts/generate_waveforms.py](./scripts/generate_waveforms.py) for a standalone Python accumulator (legacy layout).
 
@@ -96,7 +96,7 @@ just run-mcmc config/mcmc/my_run.toml
 julia --project=scripts/run -t auto scripts/run_mcmc.jl config/mcmc/my_run.toml
 ```
 
-`sampler.num_chains` defaults to `0`, which uses `Base.Threads.nthreads()`. If set explicitly, it must equal the thread count passed to `-t` (or `SLURM_CPUS_PER_TASK` on a cluster). The runner currently supports `ad_backend = "ForwardDiff"` only. Chains are written as JLD2 under `output_dir` (default `chains/`); generated filenames include the config basename so array outputs can be traced back to their input TOML.
+`sampler.num_chains` defaults to `0`, which uses `Base.Threads.nthreads()`. If set explicitly, it must equal the thread count passed to `-t` (or `SLURM_CPUS_PER_TASK` on a cluster). The runner currently supports `ad_backend = "ForwardDiff"` only. Chains are written as netCDF under `output_dir` (default `chains/`); generated filenames include the config basename so array outputs can be traced back to their input TOML.
 
 **Submit on SLURM** from the repository root (pre-instantiate on the login node with `just setup-run`; the batch scripts do not run `Pkg.instantiate()` on compute nodes):
 

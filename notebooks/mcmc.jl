@@ -42,7 +42,7 @@ model reads but the prior omits throws a `KeyError` on `Λ.name` at the first ev
 md"""
 ## Configuration
 
-Edit runtime settings here: `catalog_path`, detectors, observation time, merger rate, fiducials, `hyperprior_dists` / `hyperprior`, sampler (`nsamples`, `nadapts`, `ad_backend`, `nchains`), output paths, `chain_input_jld2`, and `DEBUG`.
+Edit runtime settings here: `catalog_path`, detectors, observation time, merger rate, fiducials, `hyperprior_dists` / `hyperprior`, sampler (`nsamples`, `nadapts`, `ad_backend`, `nchains`), output paths, and `DEBUG`.
 """
 
 # ╔═╡ c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f
@@ -127,8 +127,6 @@ begin
     C = W0CDM
     P = ModifiedPropagation
 
-    chain_input_jld2 = nothing
-
     nchains = sampler.nchains > 0 ? sampler.nchains : num_threads
 end
 
@@ -184,7 +182,7 @@ begin
     det_suffix = join((d.name for d in detectors), ",")
     params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
     base = "$(output_prefix)-$(params_suffix)-det=$(det_suffix)-seed$(seed)-$(timestamp)"
-    output_jld2 = joinpath(output_dir, "$base.jld2")
+    output_nc = joinpath(output_dir, "$base.nc")
     output_toml = joinpath(output_dir, "$base.toml")
 
     # Reproducible record of this run's settings, dumped on a successful run.
@@ -263,60 +261,51 @@ md"""
 
 # ╔═╡ 7b1c0d9e-2f3a-4c4b-5d6e-7f8a9b0c1d2e
 begin
-    if chain_input_jld2 !== nothing
-        chain_path = isabspath(chain_input_jld2) ? String(chain_input_jld2) :
-                     normpath(joinpath(_repo_root, chain_input_jld2))
-        isfile(chain_path) ||
-            throw(ArgumentError("JLD2 chain file not found: $(repr(chain_path))"))
-        @info "loading chain from JLD2" path = chain_path
-        chain = load(chain_path)["chain"]
-        @info "chain loaded" chain_size = size(chain)
-    else
-        initial_params = fill(InitFromPrior(), nchains)
-        adtype = resolve_adtype(sampler.ad_backend)
+    initial_params = fill(InitFromPrior(), nchains)
+    adtype = resolve_adtype(sampler.ad_backend)
 
-        @info "starting NUTS" nadapts=sampler.nadapts nsamples=sampler.nsamples target_acceptance=sampler.target_acceptance ad_backend=sampler.ad_backend sample_only=sample_only_tup
-        # S3: the prior declares what is sampled, `constants` what is held fixed, so
-        # the chain carries exactly the sampled variables by construction.
-        prior = sample_only_tup === nothing ? hyperprior :
-                NamedTuple{sample_only_tup}(hyperprior)
-        constants = Base.structdiff(fiducials, prior)
-        turing_model = build_turing_model(
-            model,
-            polarization_power,
-            samples,
-            fiducials,
-            frequencies,
-            eff_psd,
-            observation_time,
-            prior;
-            constants = constants,
-            track = false,
-            average_mode = resolved_average_mode
+    @info "starting NUTS" nadapts=sampler.nadapts nsamples=sampler.nsamples target_acceptance=sampler.target_acceptance ad_backend=sampler.ad_backend sample_only=sample_only_tup
+    # S3: the prior declares what is sampled, `constants` what is held fixed, so
+    # the chain carries exactly the sampled variables by construction.
+    prior = sample_only_tup === nothing ? hyperprior :
+            NamedTuple{sample_only_tup}(hyperprior)
+    constants = Base.structdiff(fiducials, prior)
+    turing_model = build_turing_model(
+        model,
+        polarization_power,
+        samples,
+        fiducials,
+        frequencies,
+        eff_psd,
+        observation_time,
+        prior;
+        constants = constants,
+        track = false,
+        average_mode = resolved_average_mode
+    )
+    nuts = Turing.NUTS(
+        sampler.nadapts,
+        sampler.target_acceptance;
+        metricT = AdvancedHMC.DenseEuclideanMetric,
+        adtype = adtype
+    )
+    chain = if DEBUG
+        @info "MCMC skipped for debugging"
+        nothing
+    else
+        sampled_chain = sample(
+            turing_model,
+            nuts,
+            MCMCThreads(),
+            sampler.nsamples,
+            nchains;
+            progress = true,
+            save_state = false,
+            chain_type = VNChain,
+            initial_params = initial_params
         )
-        nuts = Turing.NUTS(
-            sampler.nadapts,
-            sampler.target_acceptance;
-            metricT = AdvancedHMC.DenseEuclideanMetric,
-            adtype = adtype
-        )
-        if DEBUG
-            @info "MCMC skipped for debugging"
-            chain = nothing
-        else
-            chain = sample(
-                turing_model,
-                nuts,
-                MCMCThreads(),
-                sampler.nsamples,
-                nchains;
-                progress = true,
-                save_state = false,
-                chain_type = VNChain,
-                initial_params = initial_params
-            )
-            @info "NUTS finished" chain_size = size(chain)
-        end
+        @info "NUTS finished" chain_size = size(sampled_chain)
+        sampled_chain
     end
     chain
 end
@@ -328,14 +317,15 @@ md"""
 
 # ╔═╡ 9d3e2f1a-4b5c-4d6e-7f8a-9b0c1d2e3f4a
 begin
-    if chain_input_jld2 === nothing && chain != nothing
-        @info "writing chain to JLD2" path = output_jld2
-        atomic_save_chain(output_jld2, chain)
+    if chain !== nothing
+        @info "writing chain to netCDF" path = output_nc
+        idata = InferenceObjects.convert_to_inference_data(chain)
+        InferenceObjects.to_netcdf(idata, output_nc)
         @info "writing run config to TOML" path = output_toml
         save_config(run_config, output_toml)
         @info "done"
     else
-        @info "skipping JLD2 save (chain was loaded from disk)"
+        @info "skipping netCDF save (no chain; DEBUG mode)"
     end
 end
 
@@ -394,13 +384,15 @@ begin
                                      prepare_bns_madau_dickinson_model
     using AstroSGWBInference: build_turing_model, forward_model
     using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
-    using AstroSGWBInference.ChainIO: atomic_save_chain
     using Distributions: Uniform
+    using InferenceObjects: InferenceObjects
+    # `to_netcdf` lives in InferenceObjects' NCDatasets extension, which only
+    # activates when NCDatasets is loaded.
+    using NCDatasets: NCDatasets
     using Turing
     using AdvancedHMC
     using ADTypes
     using Random
-    using JLD2: load
     using Logging
     using FlexiChains
     using FlexiChains: VNChain

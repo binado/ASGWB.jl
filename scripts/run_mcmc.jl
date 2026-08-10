@@ -27,10 +27,13 @@ using AstroSGWBImportanceModels:
                                  prepare_bns_madau_dickinson_model
 using AstroSGWBInference:
                           build_turing_model,
-                          atomic_save_chain,
                           MCMCConfig,
                           load_config,
                           save_config
+using InferenceObjects: InferenceObjects
+# `to_netcdf` lives in InferenceObjects' NCDatasets extension, which only
+# activates when NCDatasets is loaded; it's an explicit dep of this project.
+using NCDatasets: NCDatasets
 using ADTypes: AutoForwardDiff
 using AdvancedHMC: DenseEuclideanMetric
 using Distributions: Uniform
@@ -186,7 +189,7 @@ function run_mcmc(config_file::String)
     det_suffix = join((d.name for d in detectors), ",")
     params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
     base = "$(output_prefix)-$(config_stem)-$(params_suffix)-det=$(det_suffix)-seed$(cfg.seed)-$(timestamp)"
-    output_jld2 = joinpath(output_dir, "$base.jld2")
+    output_nc = joinpath(output_dir, "$base.nc")
     output_toml = joinpath(output_dir, "$base.toml")
 
     adtype = _resolve_adtype(cfg.sampler.ad_backend)
@@ -224,12 +227,13 @@ function run_mcmc(config_file::String)
     )
     @info "NUTS finished" chain_size = size(chain)
 
-    @info "writing chain to JLD2" path = output_jld2
-    atomic_save_chain(output_jld2, chain)
+    @info "writing chain to netCDF" path = output_nc
+    idata = InferenceObjects.convert_to_inference_data(chain)
+    InferenceObjects.to_netcdf(idata, output_nc)
     @info "writing run config to TOML" path = output_toml
     save_config(cfg, output_toml)
-    @info "done" output_jld2 output_toml
-    return output_jld2
+    @info "done" output_nc output_toml
+    return output_nc
 end
 
 end # module AstroSGWBRunMCMC

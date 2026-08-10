@@ -48,16 +48,12 @@ export forward_model,
        AbstractAverageMode,
        AnalyticInclination,
        CatalogInclination,
-       atomic_save_chain,
        MCMCConfig,
        SamplerConfig,
        load_config,
        save_config
 
-include("chain_io.jl")
 include("config.jl")
-include("cli/stack_partial_chains.jl")
-using .ChainIO: atomic_save_chain
 using .Config: MCMCConfig, SamplerConfig, load_config, save_config
 
 end
