@@ -36,6 +36,12 @@ must contain at least two strictly increasing nodes and start at zero, because t
 cumulative comoving-distance integral assumes `d_c(0) = 0`.
 """
 function distance_and_volume_grid(c::AbstractCosmology, z_grid::AbstractVector{<:Real})
+    length(z_grid) >= 2 || throw(ArgumentError(
+        "distance_and_volume_grid requires at least two grid points"))
+    first(z_grid) == 0 || throw(ArgumentError(
+        "distance_and_volume_grid requires a grid starting at zero"))
+    all(diff(z_grid) .> 0) || throw(ArgumentError(
+        "distance_and_volume_grid requires a strictly increasing grid"))
     inv_E = inv.(E.(z_grid, Ref(c)))
     d_h = SPEED_OF_LIGHT_KM_S / H0(c)
     d_c = d_h .* cumtrapz(z_grid, inv_E)

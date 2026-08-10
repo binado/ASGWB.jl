@@ -1,8 +1,7 @@
 using QuadGK
 using Test
 using ForwardDiff
-using Cosmology: CumulativeIntegral1D, cdf, hubble_constant_si, interpolate,
-                 normalizer, cosmology, cosmology_type, cosmology_config_name,
+using Cosmology: hubble_constant_si, cosmology, cosmology_type, cosmology_config_name,
                  SUPPORTED_COSMOLOGIES, comoving_distance, W0CDM, W0WaCDM,
                  GR, ModifiedPropagation,
                  propagation, propagation_type, propagation_config_name,
@@ -234,49 +233,6 @@ end
     end
 end
 
-@testset "CumulativeIntegral1D" begin
-    @testset "analytic linear antiderivative on smooth integrand" begin
-        x = collect(LinRange(0.0, 2π, 513))
-        r = CumulativeIntegral1D(x, sin)
-        @test isapprox(normalizer(r), 0.0; atol = 1e-10)
-        @test isapprox(cdf(r, π), 2.0; rtol = 1e-4)
-        @test interpolate(r, π / 2) ≈ sin(π / 2) atol = 1e-8
-        @test_throws Exception interpolate(r, 2π + 0.1)
-        @test cdf(r, -1.0) == 0.0
-        @test cdf(r, 2π + 0.1) == normalizer(r)
-    end
-
-    @testset "cdf agrees with quadgk on ΛCDM cosmology kernel" begin
-        c = LambdaCDM(67.0, 0.315)
-        inv_E = w -> inv(E(w, c))
-        x = collect(LinRange(0.0, 20.0, 1024))
-        r = CumulativeIntegral1D(x, inv_E)
-        for z in (1e-3, 0.05, 0.17, 1.0, 3.14, 9.87, 19.5)
-            expected, _ = quadgk(inv_E, 0.0, z; rtol = 1e-10)
-            @test cdf(r, z) ≈ expected rtol = 1e-4
-        end
-    end
-
-    @testset "cdf uses exact within-cell linear antiderivative" begin
-        x = [0.0, 1.0, 2.0]
-        r = CumulativeIntegral1D(x, z -> 2.0 + 3.0z)
-        @test cdf(r, 0.25) ≈ 2.0 * 0.25 + 0.5 * 3.0 * 0.25^2
-        @test cdf(r, 1.5) ≈ cdf(r, 1.0) + 1.0 * (5.0 * 0.5 + 0.5 * 3.0 * 0.5^2)
-    end
-
-    @testset "from-values constructor matches function constructor" begin
-        c = LambdaCDM(67.0, 0.315)
-        x = collect(LinRange(0.0, 10.0, 256))
-        inv_E = w -> inv(E(w, c))
-        from_fn = CumulativeIntegral1D(x, inv_E)
-        from_vals = CumulativeIntegral1D(x, map(inv_E, x))
-        @test from_vals.y == from_fn.y
-        @test from_vals.cumulative == from_fn.cumulative
-        @test_throws ArgumentError CumulativeIntegral1D([0.0], [1.0])
-        @test_throws ArgumentError CumulativeIntegral1D(x, [1.0, 2.0])
-    end
-end
-
 @testset "trapz / cumtrapz" begin
     # Linear integrand: the trapezoidal rule is exact, so compare to the antiderivative.
     x = [0.0, 1.0, 2.0]
@@ -290,9 +246,6 @@ end
     @test trapz(xr, yr) === last(cumtrapz(xr, yr))
     @test cumtrapz(xr, yr)[1] == 0.0
 
-    # …and equal to what `CumulativeIntegral1D` stores, which now shares the same kernel.
-    @test cumtrapz(xr, yr) == CumulativeIntegral1D(xr, yr).cumulative
-    @test trapz(xr, yr) === normalizer(CumulativeIntegral1D(xr, yr))
 
     @test_throws ArgumentError trapz([0.0, 1.0], [1.0])
     @test_throws ArgumentError cumtrapz([0.0, 1.0], [1.0])

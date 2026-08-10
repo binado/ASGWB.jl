@@ -1,9 +1,9 @@
 module CBCDistributions
 
+using DataInterpolations: LinearInterpolation
 import Cosmology
 import Cosmology: AbstractCosmology,
-                  CumulativeIntegral1D, cdf, interpolate, normalizer,
-                  distance_and_volume_grid
+                  cumtrapz, distance_and_volume_grid, trapz
 
 export PopulationModel, single_event_prior,
        canonical_hyperparameters, validate_hyperparameters

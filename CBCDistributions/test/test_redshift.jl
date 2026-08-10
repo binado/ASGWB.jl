@@ -36,9 +36,9 @@ end
         grid.differential_comoving_volume,
         source_frame_fn.(z_grid)
     )
-    @test prior.dN_dz.x == z_grid
-    @test prior.dN_dz.y ≈ expected
-    @test redshift_integral(prior) === normalizer(prior.dN_dz)
+    @test prior.x == z_grid
+    @test prior.y ≈ expected
+    @test redshift_integral(prior) === trapz(prior.x, prior.y)
 
     distribution = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ; z_grid)
     @test minimum(distribution) == first(z_grid)

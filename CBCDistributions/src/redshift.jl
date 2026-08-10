@@ -22,25 +22,23 @@ enforces these requirements because its cumulative comoving-distance integral as
 const DEFAULT_Z_GRID = collect(LinRange(0.0, 20.0, 256))
 
 """
-    RedshiftPrior(dN_dz)
+    RedshiftPrior(x, y, interpolant)
 
-Domain wrapper for the detector-frame merger-rate density cumulative integral.
-Its
-  [`normalizer`](@ref) is the redshift integral ``∫ p(z)\\,dz`` driving
-  [`merger_rate_per_sec`](@ref) and its cumulative table supports inverse-CDF
-  sampling in [`RedshiftInterpolatedDistribution`](@ref).
+Domain wrapper for the detector-frame merger-rate density grid and its linear
+interpolant. Cumulative values are computed on demand for inverse-CDF sampling.
 """
-struct RedshiftPrior{P <: CumulativeIntegral1D}
-    dN_dz::P
+struct RedshiftPrior{I, TX <: AbstractVector, TY <: AbstractVector}
+    x::TX
+    y::TY
+    itp::I
 end
 
 """
     redshift_integral(prior::RedshiftPrior) -> Real
 
-Convenience wrapper for `normalizer(prior.dN_dz)` — the detector-frame
-redshift-integrated merger-rate density on the grid.
+Detector-frame redshift-integrated merger-rate density on the grid.
 """
-redshift_integral(prior::RedshiftPrior) = normalizer(prior.dN_dz)
+redshift_integral(prior::RedshiftPrior) = trapz(prior.x, prior.y)
 
 function detector_frame_merger_rate_density(
         z::Real,
@@ -83,9 +81,9 @@ state, `observation_time` included, does not belong on the importance-weighting 
 [`expected_number_of_events`](@ref) keeps its `T`, which it genuinely uses.
 
 The scalar form is what the importance-weighting hot path calls: it needs only the
-redshift integral, so it does not have to build a [`RedshiftPrior`](@ref) just to read
-`normalizer` back out of it. The `RedshiftPrior` form forwards to it and stays the entry
-point for the sampling path.
+redshift integral, so it does not have to build a [`RedshiftPrior`](@ref). The
+`RedshiftPrior` form computes its integral on demand and stays the entry point for
+the sampling path.
 """
 function merger_rate_per_sec(
         redshift_integral_mpc3::Real,
@@ -161,7 +159,8 @@ end
 
 Tabulate the detector-frame redshift density on the caller's grid. Distances and
 comoving volume come from [`distance_and_volume_grid`](@ref); the returned
-[`RedshiftPrior`](@ref) stores only the density and its cumulative integral.
+[`RedshiftPrior`](@ref) stores the grid, density values, and linear interpolant;
+cumulative values are computed on demand for inverse-CDF sampling.
 """
 function build_redshift_prior(
         source_frame_fn,
@@ -177,7 +176,7 @@ function build_redshift_prior(
             source_frame_fn(z_grid_f[i])
         )
     end
-    return RedshiftPrior(CumulativeIntegral1D(z_grid_f, pdf_vals))
+    return RedshiftPrior(z_grid_f, pdf_vals, LinearInterpolation(pdf_vals, z_grid_f))
 end
 
 @inline function _normalized_log_density(pdf_at_value, norm, tiny)
@@ -186,15 +185,15 @@ end
 
 function redshift_log_prob(prior::RedshiftPrior, value::Real)
     norm = redshift_integral(prior)
-    T = promote_type(eltype(prior.dN_dz.y), typeof(norm))
+    T = promote_type(eltype(prior.y), typeof(norm))
     tiny = floatmin(T)
-    pdf_at_value = interpolate(prior.dN_dz, value)
+    pdf_at_value = prior.itp(value)
     return _normalized_log_density(pdf_at_value, norm, tiny)
 end
 
 @inline function _redshift_logpdf(prior::RedshiftPrior, z::Real)
-    x_lo = first(prior.dN_dz.x)
-    x_hi = last(prior.dN_dz.x)
+    x_lo = first(prior.x)
+    x_hi = last(prior.x)
     (z < x_lo || z > x_hi) && return -Inf
     return redshift_log_prob(prior, z)
 end
@@ -208,7 +207,7 @@ redshift contribution (for example `ForwardDiff.Dual` when `prior` was built
 under AD).
 """
 function redshift_logpdf_eltype(prior::RedshiftPrior)
-    return promote_type(eltype(prior.dN_dz.y), typeof(redshift_integral(prior)))
+    return promote_type(eltype(prior.y), typeof(redshift_integral(prior)))
 end
 
 struct RedshiftInterpolatedDistribution{P <: RedshiftPrior} <:
@@ -216,8 +215,8 @@ struct RedshiftInterpolatedDistribution{P <: RedshiftPrior} <:
     prior::P
 end
 
-Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.prior.dN_dz.x)
-Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.prior.dN_dz.x)
+Base.minimum(d::RedshiftInterpolatedDistribution) = first(d.prior.x)
+Base.maximum(d::RedshiftInterpolatedDistribution) = last(d.prior.x)
 Base.eltype(d::RedshiftInterpolatedDistribution) = redshift_logpdf_eltype(d.prior)
 
 function Distributions.insupport(d::RedshiftInterpolatedDistribution, value::Real)
@@ -231,8 +230,8 @@ end
 
 function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)
     target = rand(rng) * redshift_integral(d.prior)
-    cumulative = d.prior.dN_dz.cumulative
-    x = d.prior.dN_dz.x
+    cumulative = cumtrapz(d.prior.x, d.prior.y)
+    x = d.prior.x
     n = length(cumulative)
     idx = searchsortedlast(cumulative, target)
     idx <= 0 && return x[1]

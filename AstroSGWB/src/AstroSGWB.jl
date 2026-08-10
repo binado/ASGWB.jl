@@ -60,10 +60,6 @@ include("snr.jl")
 # Types
 export canonical_hyperparameters,
        validate_hyperparameters,
-       CumulativeIntegral1D,
-       interpolate,
-       cdf,
-       normalizer,
        RedshiftPrior,
        redshift
 
