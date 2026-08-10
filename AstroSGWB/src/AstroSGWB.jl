@@ -8,11 +8,11 @@ sampling, redshift grids, and spectral-density forward models. Turing model cons
 The primary inference artifact is a **`waveform_catalog` v1 HDF5 file**, read by
 [`load_catalog`](@ref) into an [`SGWBCatalog`](@ref): per-sample source parameters,
 the shared frequency axis and in-band mask, and a `(nfreq, nsamples)` per-sample
-flux matrix `|h_+|² + |h_×|²` reduced from the stored complex polarizations.
+polarization-power matrix `|h_+|² + |h_×|²` reduced from the stored complex polarizations.
 Format IO lives in `PlusCross.jl`, so the same file is consumed unchanged by the
 Python `astrogwb` package.
 
-As loaded the flux matrix is referenced to the **electromagnetic** luminosity distance
+As loaded the polarization-power matrix is referenced to the **electromagnetic** luminosity distance
 (before the fiducial `(D_L/D_gw)²` factor). Call
 [`apply_gw_distance_correction!`](@ref) at the fiducial propagation before preparing an
 importance model; the log-weights carry the compensating `+2 log Ξ_fid` term
@@ -27,7 +27,7 @@ derives it from the `inclination` column, and it must be threaded to
 
 Callers define an importance adapter (or use one from `AstroSGWBImportanceModels`),
 fiducial hyperparameters, and a catalog sample adapter in Julia, then pass raw catalog
-`fluxes`, restructured `samples`, and fiducials explicitly. Prepared importance models
+`polarization_power`, restructured `samples`, and fiducials explicitly. Prepared importance models
 cache proposal log-probabilities, redshift interpolants, and rate metadata; detector
 state (banded `frequencies`, network [`effective_psd`](@ref), observation time) is
 passed to inference entry points as flattened arrays.

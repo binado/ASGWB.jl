@@ -3,8 +3,8 @@
 Writes a small ``waveform_catalog`` v1 file together with the polarization power
 that the Python ``astrogwb`` package derives from it. The Julia test in
 ``AstroSGWB/test/test_io.jl`` loads the same ``.h5`` with ``load_catalog`` and
-asserts its ``fluxes`` match the ``.npz`` reference -- i.e. that both languages
-reduce one catalog file to the same numbers.
+asserts its ``polarization_power`` array matches the ``.npz`` reference -- i.e.
+that both languages reduce one catalog file to the same numbers.
 
 This imports ``astrogwb`` deliberately: inlining the reduction here would only
 test this script against itself. Run it with the ``astrogwb`` checkout's
@@ -16,7 +16,7 @@ Writes (both are gitignored, and the Julia test skips when they are absent):
 
 - ``AstroSGWB/test/fixtures/catalog_parity_reference.h5`` -- the catalog itself.
 - ``AstroSGWB/test/fixtures/catalog_parity_reference.npz`` -- arrays
-  ``fluxes`` (``(nfreq, nsamples)``) and ``frequencies``.
+  ``polarization_power`` (``(nfreq, nsamples)``) and ``frequencies``.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import pathlib
 
 import numpy as np
 import pluscross
-from astrogwb.waveform.polarization_power import polarization_power
+from astrogwb.waveform.polarization_power import polarization_power as compute_polarization_power
 
 FIXTURE_DIR = pathlib.Path(__file__).resolve().parents[1] / "AstroSGWB" / "test" / "fixtures"
 
@@ -74,15 +74,15 @@ def main() -> None:
     # Reduce the file as written, not the in-memory object, so any IO-side
     # rounding is part of what the Julia side is compared against.
     reloaded = pluscross.load_catalog(str(h5_path))
-    fluxes = polarization_power(reloaded)
+    polarization_power = compute_polarization_power(reloaded)
 
     np.savez(
         npz_path,
-        fluxes=fluxes,
+        polarization_power=polarization_power,
         frequencies=reloaded.frequencies,
     )
     print(f"wrote {h5_path}")
-    print(f"wrote {npz_path} (fluxes shape {fluxes.shape})")
+    print(f"wrote {npz_path} (polarization_power shape {polarization_power.shape})")
 
 
 if __name__ == "__main__":

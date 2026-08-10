@@ -18,41 +18,44 @@ using Test
 end
 
 @testset "spectral_density primitive" begin
-    fluxes = Float64[1.0 2.0 3.0; 4.0 5.0 6.0]
+    polarization_power = Float64[1.0 2.0 3.0; 4.0 5.0 6.0]
     rate = 2.5
-    nsamples = size(fluxes, 2)
+    nsamples = size(polarization_power, 2)
 
     @testset "unweighted average over samples" begin
-        expected = 0.4 .* rate .* vec(mean(fluxes; dims = 2))
-        @test spectral_density(fluxes, rate) ≈ expected
+        expected = 0.4 .* rate .* vec(mean(polarization_power; dims = 2))
+        @test spectral_density(polarization_power, rate) ≈ expected
     end
 
     @testset "weighted contraction without weight normalization" begin
         w = [0.5, 1.0, 2.0]
-        expected = 0.4 .* rate .* (fluxes * w) ./ nsamples
-        @test spectral_density(fluxes, rate; weights = w) ≈ expected
+        expected = 0.4 .* rate .* (polarization_power * w) ./ nsamples
+        @test spectral_density(polarization_power, rate; weights = w) ≈ expected
     end
 
     @testset "uniform weights equal to ones give the unweighted mean" begin
         w = ones(nsamples)
-        @test spectral_density(fluxes, rate; weights = w) ≈ spectral_density(fluxes, rate)
+        @test spectral_density(polarization_power, rate; weights = w) ≈
+              spectral_density(polarization_power, rate)
     end
 
     @testset "length mismatch errors from matrix multiply" begin
-        @test_throws DimensionMismatch spectral_density(fluxes, rate; weights = [1.0, 2.0])
+        @test_throws DimensionMismatch spectral_density(polarization_power, rate; weights = [
+            1.0, 2.0])
     end
 
     @testset "output length matches nfreq" begin
-        @test length(spectral_density(fluxes, rate)) == size(fluxes, 1)
-        @test length(spectral_density(fluxes, rate; weights = rand(nsamples))) ==
-              size(fluxes, 1)
+        @test length(spectral_density(polarization_power, rate)) ==
+              size(polarization_power, 1)
+        @test length(spectral_density(polarization_power, rate; weights = rand(nsamples))) ==
+              size(polarization_power, 1)
     end
 
     @testset "dual weighted contraction matches generic expression" begin
         w = [
             ForwardDiff.Dual(0.5, 1.0), ForwardDiff.Dual(1.0, -0.5), ForwardDiff.Dual(2.0, 0.25)]
-        expected = 0.4 .* rate .* ((fluxes * w) ./ nsamples)
-        got = spectral_density(fluxes, rate; weights = w)
+        expected = 0.4 .* rate .* ((polarization_power * w) ./ nsamples)
+        got = spectral_density(polarization_power, rate; weights = w)
         @test ForwardDiff.value.(got) ≈ ForwardDiff.value.(expected)
         @test [ForwardDiff.partials(x)[1] for x in got] ≈
               [ForwardDiff.partials(x)[1] for x in expected]
@@ -66,8 +69,8 @@ end
         ]
         rate_dual = ForwardDiff.Dual{Nothing, Float64, 2}(rate, ForwardDiff.Partials((
             0.3, -0.1)))
-        expected = 0.4 .* rate_dual .* ((fluxes * w) ./ nsamples)
-        got = spectral_density(fluxes, rate_dual; weights = w)
+        expected = 0.4 .* rate_dual .* ((polarization_power * w) ./ nsamples)
+        got = spectral_density(polarization_power, rate_dual; weights = w)
         @test ForwardDiff.value.(got) ≈ ForwardDiff.value.(expected)
         for lane in 1:2
             @test [ForwardDiff.partials(x)[lane] for x in got] ≈
@@ -91,9 +94,9 @@ end
 end
 
 @testset "spectral_density average_mode" begin
-    fluxes = Float64[1.0 2.0 3.0; 4.0 5.0 6.0]
+    polarization_power = Float64[1.0 2.0 3.0; 4.0 5.0 6.0]
     rate = 2.5
-    nsamples = size(fluxes, 2)
+    nsamples = size(polarization_power, 2)
     real_weights = [0.5, 1.0, 2.0]
     dual_weights = [
         ForwardDiff.Dual{Nothing, Float64, 2}(0.5, ForwardDiff.Partials((1.0, 0.1))),
@@ -102,13 +105,13 @@ end
     ]
 
     @testset "the default is AnalyticInclination on every dispatch branch" begin
-        @test spectral_density(fluxes, rate) ≈
-              spectral_density(fluxes, rate; average_mode = AnalyticInclination())
-        @test spectral_density(fluxes, rate; weights = real_weights) ≈
-              spectral_density(fluxes, rate; weights = real_weights,
+        @test spectral_density(polarization_power, rate) ≈
+              spectral_density(polarization_power, rate; average_mode = AnalyticInclination())
+        @test spectral_density(polarization_power, rate; weights = real_weights) ≈
+              spectral_density(polarization_power, rate; weights = real_weights,
             average_mode = AnalyticInclination())
-        got = spectral_density(fluxes, rate; weights = dual_weights)
-        ref = spectral_density(fluxes, rate; weights = dual_weights,
+        got = spectral_density(polarization_power, rate; weights = dual_weights)
+        ref = spectral_density(polarization_power, rate; weights = dual_weights,
             average_mode = AnalyticInclination())
         @test ForwardDiff.value.(got) ≈ ForwardDiff.value.(ref)
         for lane in 1:2
@@ -124,27 +127,27 @@ end
                 inclination_factor(AnalyticInclination())
 
         @testset "unweighted" begin
-            analytic = spectral_density(fluxes, rate;
+            analytic = spectral_density(polarization_power, rate;
                 average_mode = AnalyticInclination())
-            catalog = spectral_density(fluxes, rate;
+            catalog = spectral_density(polarization_power, rate;
                 average_mode = CatalogInclination())
             @test catalog ≈ ratio .* analytic
-            @test catalog ≈ rate .* vec(mean(fluxes; dims = 2))
+            @test catalog ≈ rate .* vec(mean(polarization_power; dims = 2))
         end
 
         @testset "real weights" begin
-            analytic = spectral_density(fluxes, rate; weights = real_weights,
+            analytic = spectral_density(polarization_power, rate; weights = real_weights,
                 average_mode = AnalyticInclination())
-            catalog = spectral_density(fluxes, rate; weights = real_weights,
+            catalog = spectral_density(polarization_power, rate; weights = real_weights,
                 average_mode = CatalogInclination())
             @test catalog ≈ ratio .* analytic
-            @test catalog ≈ rate .* (fluxes * real_weights) ./ nsamples
+            @test catalog ≈ rate .* (polarization_power * real_weights) ./ nsamples
         end
 
         @testset "dual weights: values and partials both scale" begin
-            analytic = spectral_density(fluxes, rate; weights = dual_weights,
+            analytic = spectral_density(polarization_power, rate; weights = dual_weights,
                 average_mode = AnalyticInclination())
-            catalog = spectral_density(fluxes, rate; weights = dual_weights,
+            catalog = spectral_density(polarization_power, rate; weights = dual_weights,
                 average_mode = CatalogInclination())
             @test ForwardDiff.value.(catalog) ≈ ratio .* ForwardDiff.value.(analytic)
             # Guards the `ntuple(j -> scale * ...)` line: scaling the primal but
@@ -153,7 +156,7 @@ end
                 @test [ForwardDiff.partials(x)[lane] for x in catalog] ≈
                       ratio .* [ForwardDiff.partials(x)[lane] for x in analytic]
             end
-            expected = rate .* ((fluxes * dual_weights) ./ nsamples)
+            expected = rate .* ((polarization_power * dual_weights) ./ nsamples)
             @test ForwardDiff.value.(catalog) ≈ ForwardDiff.value.(expected)
             for lane in 1:2
                 @test [ForwardDiff.partials(x)[lane] for x in catalog] ≈
@@ -165,9 +168,9 @@ end
     @testset "a dual rate scales with the mode too" begin
         rate_dual = ForwardDiff.Dual{Nothing, Float64, 2}(
             rate, ForwardDiff.Partials((0.3, -0.1)))
-        analytic = spectral_density(fluxes, rate_dual; weights = dual_weights,
+        analytic = spectral_density(polarization_power, rate_dual; weights = dual_weights,
             average_mode = AnalyticInclination())
-        catalog = spectral_density(fluxes, rate_dual; weights = dual_weights,
+        catalog = spectral_density(polarization_power, rate_dual; weights = dual_weights,
             average_mode = CatalogInclination())
         ratio = inclination_factor(CatalogInclination()) /
                 inclination_factor(AnalyticInclination())

@@ -108,49 +108,49 @@ gw_em_distance_ratio(z::Real, ::GR) = one(z)
 gw_em_distance_ratio(z::Real, p::ModifiedPropagation) = gw_em_distance_ratio(z, p.Ξ₀, p.Ξₙ)
 
 """
-    apply_gw_distance_correction!(fluxes, z, prop) -> fluxes
-    apply_gw_distance_correction(fluxes, z, prop)  -> Matrix
+    apply_gw_distance_correction!(polarization_power, z, prop) -> polarization_power
+    apply_gw_distance_correction(polarization_power, z, prop)  -> Matrix
 
-Re-reference a `(nfreq, nsamples)` EM-distance flux matrix to the fiducial GW luminosity
+Re-reference a `(nfreq, nsamples)` EM-distance polarization-power matrix to the fiducial GW luminosity
 distance: `F_GW[:, j] = F_EM[:, j] / Ξ(z[j])²`.
 
 Waveform catalogs store `|h₊|² + |h×|²` referenced to the *electromagnetic* luminosity
 distance `D_L`, while the importance weights reweight the *gravitational-wave* distance
 `D_gw = Ξ(z) D_L`. Under a non-GR fiducial propagation the two disagree by a constant
-`Ξ_fid²`; applying this correction once at setup makes the flux matrix agree with the
+`Ξ_fid²`; applying this correction once at setup makes the polarization-power matrix agree with the
 single weight formula (the one carrying `+2 log Ξ_fid`).
 
-Identity under [`GR`](@ref); the bang form then returns `fluxes` itself, while the
+Identity under [`GR`](@ref); the bang form then returns `polarization_power` itself, while the
 out-of-place form always copies.
 
 **Not idempotent** — applying it twice gives `Ξ⁻⁴`. Prefer the out-of-place form in
 reactive contexts (Pluto) where a cell may re-run.
 """
-function apply_gw_distance_correction!(fluxes::AbstractMatrix{<:Real},
+function apply_gw_distance_correction!(polarization_power::AbstractMatrix{<:Real},
         z::AbstractVector{<:Real}, prop::AbstractPropagation)
-    _check_flux_columns(fluxes, z)
+    _check_polarization_power_columns(polarization_power, z)
     @inbounds @views for j in eachindex(z)
-        fluxes[:, j] ./= gw_em_distance_ratio(z[j], prop)^2
+        polarization_power[:, j] ./= gw_em_distance_ratio(z[j], prop)^2
     end
-    return fluxes
+    return polarization_power
 end
 
 # Ξ ≡ 1: a true no-op resolved at compile time. The shape check is kept deliberately, so a
 # dimension bug does not stay hidden until the day someone changes the fiducial propagation.
-function apply_gw_distance_correction!(fluxes::AbstractMatrix{<:Real},
+function apply_gw_distance_correction!(polarization_power::AbstractMatrix{<:Real},
         z::AbstractVector{<:Real}, ::GR)
-    _check_flux_columns(fluxes, z)
-    return fluxes
+    _check_polarization_power_columns(polarization_power, z)
+    return polarization_power
 end
 
-function apply_gw_distance_correction(fluxes::AbstractMatrix{<:Real},
+function apply_gw_distance_correction(polarization_power::AbstractMatrix{<:Real},
         z::AbstractVector{<:Real}, prop::AbstractPropagation)
-    return apply_gw_distance_correction!(copy(fluxes), z, prop)
+    return apply_gw_distance_correction!(copy(polarization_power), z, prop)
 end
 
-@inline function _check_flux_columns(fluxes, z)
-    size(fluxes, 2) == length(z) || throw(DimensionMismatch(
-        "flux matrix has $(size(fluxes, 2)) sample columns but got $(length(z)) redshifts"))
+@inline function _check_polarization_power_columns(polarization_power, z)
+    size(polarization_power, 2) == length(z) || throw(DimensionMismatch(
+        "polarization-power matrix has $(size(polarization_power, 2)) sample columns but got $(length(z)) redshifts"))
     return nothing
 end
 

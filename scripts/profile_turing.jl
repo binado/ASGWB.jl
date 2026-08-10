@@ -53,7 +53,7 @@ using TOML
 using Turing: DynamicPPL
 
 # Analysis band (Hz). The catalog carries no band information: `frequencies` and the
-# rows of `fluxes` are sliced with this cut before the effective PSD is computed, so
+# rows of `polarization_power` are sliced with this cut before the effective PSD is computed, so
 # every bin handed to the model is scored. Matches the generator band of the production
 # catalog.
 const MINIMUM_FREQUENCY = 2.0
@@ -262,14 +262,14 @@ function _run(;
     # threads the config's `local_merger_rate` in as a constant, matching production.
     θ0 = merge(_theta0_from_toml(init_tbl, order), (; R₀ = local_merger_rate))
     samples = bns_samples_from_catalog(catalog.samples, C, θ0)
-    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, θ0))
     # Band selection is the caller's job: restrict to the analysis band before
     # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= MINIMUM_FREQUENCY) .&
            (catalog.frequencies .<= MAXIMUM_FREQUENCY)
-    fluxes = catalog.fluxes[band, :]
+    polarization_power = catalog.polarization_power[band, :]
     frequencies = catalog.frequencies[band]
     model = prepare_bns_madau_dickinson_model(
         samples,
@@ -283,7 +283,7 @@ function _run(;
     observed = if observed_spectral_density_csv === nothing
         @info "using fiducial spectrum from catalog as observed data"
         forward_model(
-            model, fluxes, samples, θ0;
+            model, polarization_power, samples, θ0;
             average_mode = resolved_average_mode).spectral_density
     else
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
@@ -305,7 +305,7 @@ function _run(;
     # Turing / DynamicPPL path
     turing_model = build_turing_model(
         model,
-        fluxes,
+        polarization_power,
         samples,
         θ0,
         frequencies,
@@ -341,7 +341,8 @@ function _run(;
     @info "warming up (JIT + AD compile)"
     LogDensityProblems.logdensity(lf, z0_turing)
     LogDensityProblems.logdensity_and_gradient(ad_lf, z0_turing)
-    forward_model(model, fluxes, samples, h; average_mode = resolved_average_mode)
+    forward_model(
+        model, polarization_power, samples, h; average_mode = resolved_average_mode)
 
     # ------------------------------------------------------------------
     # BenchmarkTools suite
@@ -359,7 +360,7 @@ function _run(;
     # physics path the Turing model wraps, which is the meaningful comparison anyway.
     suite["primal"]["forward"] = @benchmarkable forward_model(
         $model,
-        $fluxes,
+        $polarization_power,
         $samples,
         $h;
         average_mode = $resolved_average_mode
@@ -379,7 +380,7 @@ function _run(;
     suite["stage"]["rate_and_log_weights"] = @benchmarkable $model($h, $samples)
     suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec($norm0, $(h.R₀))
     suite["stage"]["spectral"] = @benchmarkable spectral_density(
-        $fluxes,
+        $polarization_power,
         $rate0;
         weights = $weights0
     )

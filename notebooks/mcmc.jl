@@ -75,7 +75,7 @@ begin
     observation_time = 1.0
 
     # Analysis band (Hz). The catalog carries no band information: slice
-    # `frequencies` and the rows of `fluxes` with this cut before computing the
+    # `frequencies` and the rows of `polarization_power` with this cut before computing the
     # effective PSD. Matches the generator band of the production catalog.
     minimum_frequency = 2.0
     maximum_frequency = 4096.0
@@ -152,20 +152,20 @@ begin
 
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
 
-    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     # The out-of-place form is deliberate: Pluto re-runs cells reactively and the
-    # correction is not idempotent, so mutating `catalog.fluxes` here would compound to
-    # Ξ⁻⁴, Ξ⁻⁶, ... on every re-execution. Downstream cells use `fluxes`, not
-    # `catalog.fluxes`.
-    fluxes = apply_gw_distance_correction(
-        catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
+    # correction is not idempotent, so mutating `catalog.polarization_power` here would compound to
+    # Ξ⁻⁴, Ξ⁻⁶, ... on every re-execution. Downstream cells use `polarization_power`, not
+    # `catalog.polarization_power`.
+    polarization_power = apply_gw_distance_correction(
+        catalog.polarization_power, catalog.samples.redshift, propagation(P, fiducials))
 
     # Band selection is the caller's job: restrict to the analysis band before
     # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= minimum_frequency) .&
            (catalog.frequencies .<= maximum_frequency)
-    fluxes = fluxes[band, :]
+    polarization_power = polarization_power[band, :]
     frequencies = catalog.frequencies[band]
 
     model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
@@ -219,8 +219,8 @@ In the cells below, we plot ``\Omega_{\mathrm{GW}}(f)`` as a function of the fre
 
 # ╔═╡ d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a
 function plot_fiducial_omega_gw(
-        model, fluxes, samples, fiducials, frequencies, eff_psd, observation_time)
-    forward = forward_model(model, fluxes, samples, fiducials)
+        model, polarization_power, samples, fiducials, frequencies, eff_psd, observation_time)
+    forward = forward_model(model, polarization_power, samples, fiducials)
     rate0, Sh0 = forward.rate, forward.spectral_density
     f = frequencies
     df = frequency_bin_width(f)
@@ -254,7 +254,7 @@ end
 
 # ╔═╡ 5f9a8b7c-0e1d-4a2f-3b6c-7d8e9f0a1b2c
 plot_fiducial_omega_gw(
-    model, fluxes, samples, fiducials, frequencies, eff_psd, observation_time)
+    model, polarization_power, samples, fiducials, frequencies, eff_psd, observation_time)
 
 # ╔═╡ ccf43d43-7f31-41e9-85db-12842561973c
 md"""
@@ -283,7 +283,7 @@ begin
         constants = Base.structdiff(fiducials, prior)
         turing_model = build_turing_model(
             model,
-            fluxes,
+            polarization_power,
             samples,
             fiducials,
             frequencies,

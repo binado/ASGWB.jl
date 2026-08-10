@@ -49,34 +49,36 @@ function _write_parity_catalog!(dir::String, variant::Symbol)
 end
 
 """
-    parity_polarizations(cached_flux) -> (plus, cross)
+    parity_polarizations(cached_polarization_power) -> (plus, cross)
 
 Synthesize complex polarizations whose power `|h₊|² + |h×|²` reproduces
-`cached_flux`. The v1 format stores the fundamental artifact rather than the
-reduction, so fixtures that want a particular flux must back-solve for one.
+`cached_polarization_power`. The v1 format stores the fundamental artifact rather than the
+reduction, so fixtures that want a particular polarization power must back-solve for one.
 
-Putting all the power in `h₊` makes `plus = sqrt(cached_flux)` the obvious
+Putting all the power in `h₊` makes `plus = sqrt(cached_polarization_power)` the obvious
 choice; note that `abs2 ∘ sqrt` is only bit-exact when the square root is
 exactly representable (0.0, 1.0, 3.5, 4.0 among the values used here) and is
-otherwise correct to 1 ulp, so compare recovered fluxes with `≈`.
+otherwise correct to 1 ulp, so compare recovered polarization power with `≈`.
 """
-function parity_polarizations(cached_flux::AbstractMatrix{<:Real})
-    return ComplexF64.(sqrt.(cached_flux)), zeros(ComplexF64, size(cached_flux))
+function parity_polarizations(cached_polarization_power::AbstractMatrix{<:Real})
+    return ComplexF64.(sqrt.(cached_polarization_power)),
+    zeros(ComplexF64, size(cached_polarization_power))
 end
 
 """
-    _write_catalog_h5(dir, samples, cached_flux; inclination=nothing) -> String
+    _write_catalog_h5(dir, samples, cached_polarization_power; inclination=nothing) -> String
 
-Write a `waveform_catalog` v1 fixture reducing to `cached_flux`. `inclination`
+Write a `waveform_catalog` v1 fixture reducing to `cached_polarization_power`. `inclination`
 defaults to an all-zero column, so [`average_mode`](@ref) derives
 `AnalyticInclination()`; pass a non-zero column to exercise the other branch.
 """
-function _write_catalog_h5(dir, samples::NamedTuple, cached_flux::AbstractMatrix{<:Real};
+function _write_catalog_h5(
+        dir, samples::NamedTuple, cached_polarization_power::AbstractMatrix{<:Real};
         inclination = nothing)
     path = joinpath(dir, "catalog.h5")
-    n = size(cached_flux, 2)
+    n = size(cached_polarization_power, 2)
     incl = isnothing(inclination) ? zeros(n) : collect(Float64, inclination)
-    plus, cross = parity_polarizations(cached_flux)
+    plus, cross = parity_polarizations(cached_polarization_power)
     catalog = PlusCross.WaveformCatalog(;
         frequencies = _PARITY_FREQUENCIES,
         plus = plus,
@@ -122,8 +124,8 @@ function _write_posterior_catalog(dir)
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
     )
-    cached_flux = Float64[0.0 0.0; 1.0 4.0; 2.0 5.0]
-    _write_catalog_h5(dir, samples, cached_flux)
+    cached_polarization_power = Float64[0.0 0.0; 1.0 4.0; 2.0 5.0]
+    _write_catalog_h5(dir, samples, cached_polarization_power)
     return dir
 end
 
@@ -140,10 +142,10 @@ function _write_full_intrinsic_catalog(dir)
         lambda2 = [300.0, 600.0, 700.0, 1500.0],
         luminosity_distances = [430.0, 880.0, 1350.0, 2300.0]
     )
-    cached_flux = Float64[0.0 0.0 0.0 0.0
-                          1.0 1.5 2.0 2.5
-                          2.0 2.5 3.0 3.5]
-    _write_catalog_h5(dir, samples, cached_flux)
+    cached_polarization_power = Float64[0.0 0.0 0.0 0.0
+                                        1.0 1.5 2.0 2.5
+                                        2.0 2.5 3.0 3.5]
+    _write_catalog_h5(dir, samples, cached_polarization_power)
     return dir
 end
 
@@ -156,8 +158,8 @@ function _write_importance_context_catalog(dir)
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
     )
-    cached_flux = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
-    _write_catalog_h5(dir, samples, cached_flux)
+    cached_polarization_power = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    _write_catalog_h5(dir, samples, cached_polarization_power)
     return dir
 end
 
@@ -170,8 +172,8 @@ function _write_sampled_inclination_catalog(dir)
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
     )
-    cached_flux = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
-    _write_catalog_h5(dir, samples, cached_flux; inclination = [0.0, 0.7])
+    cached_polarization_power = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    _write_catalog_h5(dir, samples, cached_polarization_power; inclination = [0.0, 0.7])
     return dir
 end
 
@@ -184,8 +186,8 @@ function _write_w0cdm_catalog(dir)
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
     )
-    cached_flux = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
-    _write_catalog_h5(dir, samples, cached_flux)
+    cached_polarization_power = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    _write_catalog_h5(dir, samples, cached_polarization_power)
     return dir
 end
 
@@ -216,7 +218,7 @@ end
 
 """
     parity_problem_context(variant, detectors)
-        -> (; fluxes, samples, fiducials, frequencies, effective_psd,
+        -> (; polarization_power, samples, fiducials, frequencies, effective_psd,
               observation_time, average_mode)
 
 Load the parity catalog for `variant`, restructure its samples, and compute the
@@ -238,7 +240,7 @@ function parity_problem_context(variant::Symbol, detectors)
         _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5))
     end
     samples = parity_bns_samples_from_catalog(catalog.samples)
-    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the importance model's log-weights carry. Every parity variant
     # uses Ξ₀ = 1, so this is currently a no-op; the bang form is safe because each call
     # re-reads `catalog.h5` from scratch.
@@ -247,11 +249,11 @@ function parity_problem_context(variant::Symbol, detectors)
     # Band selection is the caller's job: keep every bin above DC, matching the
     # band edges stored in the fixture files.
     band = catalog.frequencies .> 0.0
-    fluxes = catalog.fluxes[band, :]
+    polarization_power = catalog.polarization_power[band, :]
     frequencies = catalog.frequencies[band]
     eff_psd = effective_psd(frequencies, Vector{Detector}(collect(detectors)))
     return (;
-        fluxes = fluxes,
+        polarization_power = polarization_power,
         samples = samples,
         fiducials = Λ,
         frequencies = frequencies,

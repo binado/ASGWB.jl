@@ -15,7 +15,7 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
     problem = local_problem_context()
     model = build_turing_model(
         problem.model,
-        problem.fluxes,
+        problem.polarization_power,
         problem.samples,
         problem.fiducials,
         problem.frequencies,
@@ -25,16 +25,16 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
         track = false
     )
     forward = forward_model(
-        problem.model, problem.fluxes, problem.samples, problem.fiducials)
+        problem.model, problem.polarization_power, problem.samples, problem.fiducials)
     rate, log_weights = problem.model(problem.fiducials, problem.samples)
     @test forward.rate == rate
     @test forward.weights ≈ exp.(log_weights)
     @test forward.spectral_density ≈
-          spectral_density(problem.fluxes, rate; weights = exp.(log_weights))
+          spectral_density(problem.polarization_power, rate; weights = exp.(log_weights))
 
     tracked = build_turing_model(
         problem.model,
-        problem.fluxes,
+        problem.polarization_power,
         problem.samples,
         problem.fiducials,
         problem.frequencies,
@@ -82,7 +82,7 @@ end
     _build(;
         kwargs...) = build_turing_model(
         problem.model,
-        problem.fluxes,
+        problem.polarization_power,
         problem.samples,
         problem.fiducials,
         problem.frequencies,
@@ -108,10 +108,10 @@ end
             # score `forward_model`'s spectrum with an inline Gaussian instead. Three
             # lines in the test beats a parallel production code path that can drift.
             Sh = forward_model(
-                problem.model, problem.fluxes, problem.samples, problem.theta;
+                problem.model, problem.polarization_power, problem.samples, problem.theta;
                 average_mode = mode).spectral_density
             observed = forward_model(
-                problem.model, problem.fluxes, problem.samples, problem.fiducials;
+                problem.model, problem.polarization_power, problem.samples, problem.fiducials;
                 average_mode = mode).spectral_density
             residual = observed .- Sh
             expected = _log_prior(problem.prior, problem.theta) -
@@ -133,7 +133,7 @@ end
         mismatched = _build(;
             average_mode = AnalyticInclination(),
             observed = forward_model(
-                problem.model, problem.fluxes, problem.samples, problem.fiducials;
+                problem.model, problem.polarization_power, problem.samples, problem.fiducials;
                 average_mode = CatalogInclination()).spectral_density
         )
         @test !isapprox(
@@ -158,7 +158,7 @@ end
     problem = local_problem_context()
     full = build_turing_model(
         problem.model,
-        problem.fluxes,
+        problem.polarization_power,
         problem.samples,
         problem.fiducials,
         problem.frequencies,
@@ -177,7 +177,7 @@ end
 
     restricted = build_turing_model(
         problem.model,
-        problem.fluxes,
+        problem.polarization_power,
         problem.samples,
         problem.fiducials,
         problem.frequencies,
@@ -200,7 +200,7 @@ end
     # would silently shadow the constant the caller asked for. Reject it up front.
     @test_throws ArgumentError build_turing_model(
         problem.model,
-        problem.fluxes,
+        problem.polarization_power,
         problem.samples,
         problem.fiducials,
         problem.frequencies,

@@ -12,7 +12,7 @@ to foreign generics and does not depend on the inference package at all.
 
 `log_Ξ_fid` is `log Ξ(z_i)` at the **fiducial** propagation, captured at prepare time
 because the hot path only ever sees the live `Λ`. It enters the log-weights as
-`+2 log Ξ_fid`, which is the term that makes the weights consistent with a flux matrix
+`+2 log Ξ_fid`, which is the term that makes the weights consistent with a polarization-power matrix
 re-referenced to the fiducial GW distance by [`apply_gw_distance_correction!`](@ref). The
 two must be applied together.
 """
@@ -25,7 +25,7 @@ struct BNSMadauDickinsonImportanceModel{
 end
 
 const _NON_GR_FIDUCIAL_NOTICE = "BNS model: non-GR fiducial propagation; log-weights " *
-                                "carry the +2 log Ξ_fid term — the flux matrix must " *
+                                "carry the +2 log Ξ_fid term — the polarization-power matrix must " *
                                 "have been passed through apply_gw_distance_correction! " *
                                 "at the same fiducials"
 
@@ -62,7 +62,7 @@ putting it in `constants`. `observation_time` is gone entirely: it cancelled
 algebraically, and detector state never belongs in the importance model.
 
 The returned model's log-weights are referenced to the **fiducial GW** luminosity
-distance, so the flux matrix passed alongside must have been through
+distance, so the polarization-power matrix passed alongside must have been through
 [`apply_gw_distance_correction!`](@ref) at the same `fiducials`. Under a `GR` (or
 `Ξ₀ = 1`) fiducial both are no-ops; otherwise a mismatch is a silent `Ξ_fid²` bias, and
 this function emits an `@info` reminder.
@@ -90,7 +90,7 @@ function prepare_bns_madau_dickinson_model(
 
     # `Float64[...]` is load-bearing: a `Vector{Dual}` field here would poison the
     # ForwardDiff fast path in `AstroSGWB.spectral_density`, which dispatches on
-    # `fluxes::AbstractMatrix{<:Real}`.
+    # `polarization_power::AbstractMatrix{<:Real}`.
     prop_fid = propagation(P, fiducials)
     log_Ξ_fid = Float64[log(gw_em_distance_ratio(zi, prop_fid)) for zi in z]
 

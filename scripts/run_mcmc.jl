@@ -59,7 +59,7 @@ const P = ModifiedPropagation
 const AVERAGE_MODE = nothing
 
 # Analysis band (Hz). The catalog carries no band information: `frequencies` and the
-# rows of `fluxes` are sliced with this cut before the effective PSD is computed, so
+# rows of `polarization_power` are sliced with this cut before the effective PSD is computed, so
 # every bin handed to the model is scored. Matches the generator band of the production
 # catalog.
 const MINIMUM_FREQUENCY = 2.0
@@ -165,14 +165,14 @@ function run_mcmc(config_file::String)
     @info "average mode" mode=string(resolved_average_mode) derived=(AVERAGE_MODE===nothing) has_inclination_column=haskey(
         catalog.samples, :inclination)
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
-    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, fiducials))
     # Band selection is the caller's job: restrict to the analysis band before
     # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= MINIMUM_FREQUENCY) .&
            (catalog.frequencies .<= MAXIMUM_FREQUENCY)
-    fluxes = catalog.fluxes[band, :]
+    polarization_power = catalog.polarization_power[band, :]
     frequencies = catalog.frequencies[band]
     model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
     eff_psd = effective_psd(frequencies, detectors)
@@ -193,7 +193,7 @@ function run_mcmc(config_file::String)
     @info "starting NUTS" nadapts=cfg.sampler.nadapts nsamples=cfg.sampler.nsamples target_acceptance=cfg.sampler.target_acceptance ad_backend=cfg.sampler.ad_backend sampled=keys(prior) fixed=keys(constants) nchains
     turing_model = build_turing_model(
         model,
-        fluxes,
+        polarization_power,
         samples,
         fiducials,
         frequencies,

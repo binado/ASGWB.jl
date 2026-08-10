@@ -164,7 +164,7 @@ end
     fid_mod = merge(FIDUCIALS, (Ξ₀ = 1.4, Ξₙ = 0.7))
     prop_fid = propagation(ModifiedPropagation, fid_mod)
     z = SAMPLES.redshift
-    fluxes = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
+    polarization_power = Float64[0.0 0.0; 1.0 1.5; 2.0 2.5]
 
     m_gr, m_mod = prepared(; fiducials = fid_gr), prepared(; fiducials = fid_mod)
     @test m_gr.log_Ξ_fid == zeros(length(z))
@@ -175,14 +175,14 @@ end
     @test w_mod ≈ w_gr .+ 2 .* log.(gw_em_distance_ratio.(z, Ref(prop_fid)))
 
     # The load-bearing invariant, stated on the physical contraction:
-    # corrected fluxes + Ξ_fid weights == uncorrected fluxes + no-Ξ_fid weights.
-    corrected = apply_gw_distance_correction(fluxes, z, prop_fid)
-    @test corrected ≉ fluxes                                   # anti-vacuity guard
-    @test corrected * exp.(w_mod) ≈ fluxes * exp.(w_gr) rtol = 1e-13
+    # corrected polarization_power + Ξ_fid weights == uncorrected polarization_power + no-Ξ_fid weights.
+    corrected = apply_gw_distance_correction(polarization_power, z, prop_fid)
+    @test corrected ≉ polarization_power                                   # anti-vacuity guard
+    @test corrected * exp.(w_mod) ≈ polarization_power * exp.(w_gr) rtol = 1e-13
 
-    @test apply_gw_distance_correction!(fluxes, z, GR()) === fluxes
-    @test apply_gw_distance_correction(fluxes, z,
-        propagation(ModifiedPropagation, fid_gr)) ≈ fluxes
+    @test apply_gw_distance_correction!(polarization_power, z, GR()) === polarization_power
+    @test apply_gw_distance_correction(polarization_power, z,
+        propagation(ModifiedPropagation, fid_gr)) ≈ polarization_power
 end
 
 @testset "ForwardDiff empty and one-sample evaluations" begin
@@ -230,7 +230,7 @@ end
 
 @testset "concrete adapter integrates with Turing" begin
     model = prepared()
-    fluxes = Float64[1.0 1.5; 2.0 2.5]
+    polarization_power = Float64[1.0 1.5; 2.0 2.5]
     frequencies = [20.0, 40.0]
     eff_psd = [1.0, 1.0]
     observation_time = 1.0
@@ -246,7 +246,8 @@ end
     # `R₀` is fixed via `constants` rather than sampled -- the production default. The
     # prior declares the sampled names; `constants` supplies the rest of `Λ`.
     turing_model = build_turing_model(
-        model, fluxes, SAMPLES, FIDUCIALS, frequencies, eff_psd, observation_time, prior;
+        model, polarization_power, SAMPLES, FIDUCIALS,
+        frequencies, eff_psd, observation_time, prior;
         constants = (; R₀ = FIDUCIALS.R₀))
 
     @test turing_model !== nothing
@@ -255,7 +256,7 @@ end
     # And the opt-in: adding `R₀` to the prior makes it a sampled variable, with no
     # change anywhere else.
     sampling_R₀ = build_turing_model(
-        model, fluxes, SAMPLES, FIDUCIALS, frequencies, eff_psd, observation_time,
+        model, polarization_power, SAMPLES, FIDUCIALS, frequencies, eff_psd, observation_time,
         merge(prior, (; R₀ = Uniform(10.0, 1000.0))))
     @test isfinite(Turing.logjoint(sampling_R₀, FIDUCIALS))
     @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(sampling_R₀)))) ==

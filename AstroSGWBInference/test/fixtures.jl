@@ -7,7 +7,7 @@ const LOCAL_MODEL = function (Λ, samples)
 end
 # The fixtures are already band-restricted: the DC row of the underlying parity
 # catalog is sliced off before reaching the model, as a real caller would.
-const LOCAL_FLUXES = Float64[1.0 1.5; 2.0 2.5]
+const LOCAL_POLARIZATION_POWER = Float64[1.0 1.5; 2.0 2.5]
 const LOCAL_SAMPLES = (redshift = [0.1, 0.2],)
 const LOCAL_FIDUCIALS = (rate_scale = 1.0, weight_shift = 0.0)
 const LOCAL_THETA = (rate_scale = 1.1, weight_shift = 0.05)
@@ -22,7 +22,7 @@ const LOCAL_OBSERVATION_TIME = 1.0
 function local_problem_context()
     return (;
         model = LOCAL_MODEL,
-        fluxes = LOCAL_FLUXES,
+        polarization_power = LOCAL_POLARIZATION_POWER,
         samples = LOCAL_SAMPLES,
         fiducials = LOCAL_FIDUCIALS,
         theta = LOCAL_THETA,

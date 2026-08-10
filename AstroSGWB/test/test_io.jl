@@ -31,7 +31,7 @@ end
     # `|h₊|² + |h×|²` reduction is exercised rather than trivially `|h₊|²`.
     plus = ComplexF64[0.0 0.0; 1.0+0.0im 0.0+1.0im; 2.0+0.0im 1.0+1.0im]
     cross = ComplexF64[0.0 0.0; 0.0+0.0im 1.0+0.0im; 1.0+0.0im 0.0+2.0im]
-    expected_fluxes = abs2.(plus) .+ abs2.(cross)
+    expected_polarization_power = abs2.(plus) .+ abs2.(cross)
 
     path, io = mktemp()
     close(io)
@@ -57,13 +57,13 @@ end
         for k in keys(samples)
             @test catalog.samples[k] == samples[k]
         end
-        @test catalog.fluxes == expected_fluxes
+        @test catalog.polarization_power == expected_polarization_power
         @test catalog.frequencies == [0.0, 1.0, 2.0]
         @test catalog.approximant == "IMRPhenomPV2"
-        @test size(catalog.fluxes) == (3, 2)
+        @test size(catalog.polarization_power) == (3, 2)
 
         # The polarizations themselves survive HDF5 byte-for-byte; only the
-        # derived flux is subject to the reduction's rounding.
+        # derived polarization power is subject to the reduction's rounding.
         raw = PlusCross.load_catalog(path)
         @test raw.plus == plus
         @test raw.cross == cross
@@ -88,7 +88,7 @@ end
 # Cross-language parity: both repos read the *same* file. Regenerate from the
 # repo root with the astrogwb checkout's interpreter (see the script docstring)::
 #   ../astrogwb/.venv/bin/python3 scripts/generate_catalog_parity_fixture.py
-@testset "flux reduction matches the Python astrogwb stack" begin
+@testset "polarization-power reduction matches the Python astrogwb stack" begin
     h5_path = joinpath(@__DIR__, "fixtures", "catalog_parity_reference.h5")
     npz_path = joinpath(@__DIR__, "fixtures", "catalog_parity_reference.npz")
     if !(isfile(h5_path) && isfile(npz_path))
@@ -100,12 +100,12 @@ end
 
         # `polarization_power` already returns `(nfreq, nsamples)`, the same
         # orientation HDF5.jl gives Julia, so no transpose is involved.
-        @test size(catalog.fluxes) == size(reference["fluxes"])
+        @test size(catalog.polarization_power) == size(reference["polarization_power"])
         @test catalog.frequencies ≈ vec(reference["frequencies"])
 
         # Julia's `abs2(z)` computes `re² + im²`; NumPy's `abs(z)**2` squares a
         # `hypot`, so the two agree to a few ulp rather than bit-for-bit.
-        @test catalog.fluxes≈reference["fluxes"] rtol=1.0e-13
+        @test catalog.polarization_power≈reference["polarization_power"] rtol=1.0e-13
     end
 end
 
@@ -130,7 +130,7 @@ end
 
     @test redshift(loaded.samples) ≈ [0.1, 0.2]
     @test loaded.samples.luminosity_distance ≈ [430.0, 880.0]
-    @test loaded.fluxes ≈ Float64[1.0 1.5; 2.0 2.5]
+    @test loaded.polarization_power ≈ Float64[1.0 1.5; 2.0 2.5]
 
     Λ = loaded.fiducials
     @test Λ.H0 == 67.0

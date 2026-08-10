@@ -78,7 +78,7 @@ begin
     observation_time_yr = 1.0
 
     # Analysis band (Hz). The catalog carries no band information: slice
-    # `frequencies` and the rows of `fluxes` with this cut before computing the
+    # `frequencies` and the rows of `polarization_power` with this cut before computing the
     # effective PSD. Matches the generator band of the production catalog.
     minimum_frequency = 2.0
     maximum_frequency = 4096.0
@@ -126,17 +126,17 @@ begin
     P = ModifiedPropagation
     samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
 
-    # Re-reference the stored EM-distance fluxes to the fiducial GW distance, matching the
+    # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     # Out-of-place on purpose: the correction is not idempotent and Pluto re-runs cells.
-    fluxes = apply_gw_distance_correction(
-        catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
+    polarization_power = apply_gw_distance_correction(
+        catalog.polarization_power, catalog.samples.redshift, propagation(P, fiducials))
 
     # Band selection is the caller's job: restrict to the analysis band before
     # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= minimum_frequency) .&
            (catalog.frequencies .<= maximum_frequency)
-    fluxes = fluxes[band, :]
+    polarization_power = polarization_power[band, :]
     frequencies = catalog.frequencies[band]
 
     prepared_model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
@@ -152,7 +152,7 @@ begin
 
     @info "using fiducial spectrum from cache as observed data"
     observed = forward_model(
-        prepared_model, fluxes, samples, fiducials;
+        prepared_model, polarization_power, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density
 
     nothing
@@ -173,7 +173,7 @@ begin
             NamedTuple{sample_only_tup}(hyperprior)
     constants = Base.structdiff(fiducials, prior)
     model = build_turing_model(
-        prepared_model, fluxes, samples, fiducials, frequencies, eff_psd,
+        prepared_model, polarization_power, samples, fiducials, frequencies, eff_psd,
         observation_time_yr, prior;
         constants = constants, track = false, observed = observed,
         average_mode = resolved_average_mode)

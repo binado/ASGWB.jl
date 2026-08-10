@@ -20,7 +20,7 @@ end
         track::Bool,
         average_mode::AbstractAverageMode,
         weights_fn,
-        fluxes::AbstractMatrix{<:Real},
+        polarization_power::AbstractMatrix{<:Real},
         samples::NamedTuple,
         frequencies::AbstractVector{<:Real},
         effective_psd::AbstractVector{<:Real},
@@ -36,7 +36,7 @@ end
     # keeps `Λ.γ` type-stable. Sampled values win on collision, which `build_turing_model`
     # rejects up front rather than allowing a silently shadowed constant.
     Λ = merge(constants, Λ_sampled)
-    forward = forward_model(weights_fn, fluxes, samples, Λ; average_mode)
+    forward = forward_model(weights_fn, polarization_power, samples, Λ; average_mode)
     Sh = forward.spectral_density
 
     observed ~ MvNormal(
@@ -58,7 +58,7 @@ end
 end
 
 """
-    build_turing_model(weights_fn, fluxes, samples, fiducial_hyperparameters,
+    build_turing_model(weights_fn, polarization_power, samples, fiducial_hyperparameters,
                        frequencies, effective_psd, observation_time, prior;
                        constants=NamedTuple(), track=false, observed=nothing,
                        average_mode=AnalyticInclination())
@@ -67,7 +67,7 @@ Build the Turing model scoring `weights_fn` against `observed` (synthesized at
 `fiducial_hyperparameters` when omitted). `weights_fn(Λ, samples) -> (rate, log_weights)`
 is the whole model contract; see the `AstroSGWBInference` module docstring.
 
-Every frequency bin is scored: `fluxes`, `observed`, `frequencies`, and `effective_psd`
+Every frequency bin is scored: `polarization_power`, `observed`, `frequencies`, and `effective_psd`
 must already be restricted to the analysis band (slice them with one mask beforehand).
 `effective_psd` is the network effective strain PSD from [`AstroSGWB.effective_psd`](@ref)
 and `observation_time` the duration in years (Julian year); the per-bin Gaussian scale is
@@ -89,7 +89,7 @@ the model needs but neither `prior` nor `constants` supplies surfaces as a `KeyE
 """
 function build_turing_model(
         weights_fn,
-        fluxes::AbstractMatrix{<:Real},
+        polarization_power::AbstractMatrix{<:Real},
         samples::NamedTuple,
         fiducial_hyperparameters::NamedTuple,
         frequencies::AbstractVector{<:Real},
@@ -113,7 +113,7 @@ function build_turing_model(
     # with no other symptom, so they are deliberately not separately settable.
     observed_data = if observed === nothing
         forward_model(
-            weights_fn, fluxes, samples, fiducial_hyperparameters;
+            weights_fn, polarization_power, samples, fiducial_hyperparameters;
             average_mode).spectral_density
     else
         observed
@@ -129,7 +129,7 @@ function build_turing_model(
         track,
         average_mode,
         weights_fn,
-        fluxes,
+        polarization_power,
         samples,
         frequencies,
         effective_psd,

@@ -3,7 +3,7 @@ using ForwardDiff
 # ---------------------------------------------------------------------------
 # Inclination averaging: a property of the *catalog*, not of the kernel. The
 # spectral density needs `⟨|h₊|² + |h×|²⟩` averaged over the inclination angle
-# ι, but `fluxes` already carries whatever ι convention the waveform catalog
+# ι, but `polarization_power` already carries whatever ι convention the waveform catalog
 # was generated under. Only two conventions exist in practice, so the choice is
 # a type token resolved to a scalar prefactor at the public boundary, mirroring
 # the `AbstractPropagation` idiom in `Cosmology/src/model.jl`.
@@ -31,7 +31,7 @@ Base.broadcastable(m::AbstractAverageMode) = Ref(m)
 """
     inclination_factor(mode::AbstractAverageMode) -> Float64
 
-Scalar prefactor applied to the sample-averaged flux under `mode`.
+Scalar prefactor applied to the sample-averaged polarization power under `mode`.
 """
 inclination_factor(::AnalyticInclination) = 0.4
 inclination_factor(::CatalogInclination) = 1.0
@@ -69,56 +69,56 @@ function average_mode_type(name::AbstractString)
 end
 
 """
-    spectral_density(fluxes, merger_rate_per_sec; weights=nothing,
+    spectral_density(polarization_power, merger_rate_per_sec; weights=nothing,
                      average_mode=AnalyticInclination()) -> Vector
 
-Collapse per-sample flux contributions into a spectral density vector.
+Collapse per-sample polarization-power contributions into a spectral density vector.
 
-`fluxes` is a `(nfreq, nsamples)` matrix (column-major friendly). When `weights`
-is `nothing`, samples are averaged uniformly: `mean_flux = sum(fluxes; dims=2) / nsamples`.
-When `weights` is supplied, the contraction is `fluxes * weights / nsamples`
+`polarization_power` is a `(nfreq, nsamples)` matrix (column-major friendly). When `weights`
+is `nothing`, samples are averaged uniformly: `mean_polarization_power = sum(polarization_power; dims=2) / nsamples`.
+When `weights` is supplied, the contraction is `polarization_power * weights / nsamples`
 (no normalization of `weights`).
 
 `average_mode` selects the inclination-averaging convention of the catalog that
-produced `fluxes`; the result is scaled by [`inclination_factor`](@ref). The
+produced `polarization_power`; the result is scaled by [`inclination_factor`](@ref). The
 default [`AnalyticInclination`](@ref) assumes face-on waveforms and applies
 `2/5`; pass [`CatalogInclination`](@ref) when the catalog samples ι, otherwise
 the result is a factor `2.5` low. See [`average_mode`](@ref) for deriving the
 convention from a loaded catalog.
 """
 function spectral_density(
-        fluxes::AbstractMatrix{<:Real},
+        polarization_power::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real;
         weights::Union{Nothing, AbstractVector{<:Real}} = nothing,
         average_mode::AbstractAverageMode = AnalyticInclination()
 )
     return _spectral_density(
-        fluxes, merger_rate_per_sec, weights, inclination_factor(average_mode))
+        polarization_power, merger_rate_per_sec, weights, inclination_factor(average_mode))
 end
 
 # `factor` is a required trailing positional in every `_spectral_density`
 # method: a branch left un-updated is then a `MethodError`, not a silently
 # stale `0.4`.
 function _spectral_density(
-        fluxes::AbstractMatrix{<:Real},
+        polarization_power::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real,
         ::Nothing,
         factor::Real
 )
-    nsamples = size(fluxes, 2)
-    mean_flux = vec(sum(fluxes; dims = 2)) ./ nsamples
-    return factor .* merger_rate_per_sec .* mean_flux
+    nsamples = size(polarization_power, 2)
+    mean_polarization_power = vec(sum(polarization_power; dims = 2)) ./ nsamples
+    return factor .* merger_rate_per_sec .* mean_polarization_power
 end
 
 function _spectral_density(
-        fluxes::AbstractMatrix{<:Real},
+        polarization_power::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real,
         weights::AbstractVector{<:Real},
         factor::Real
 )
-    nsamples = size(fluxes, 2)
-    mean_flux = (fluxes * weights) ./ nsamples
-    return factor .* merger_rate_per_sec .* mean_flux
+    nsamples = size(polarization_power, 2)
+    mean_polarization_power = (polarization_power * weights) ./ nsamples
+    return factor .* merger_rate_per_sec .* mean_polarization_power
 end
 
 # Avoid `Matrix{Float64} * Vector{Dual}` here: on realistic caches the generic
@@ -126,7 +126,7 @@ end
 # values and partials lets BLAS handle the two dense contractions (see
 # `_spectral_density_forwarddiff`). The rate may itself be a same-tag Dual.
 function _spectral_density(
-        fluxes::AbstractMatrix{<:Real},
+        polarization_power::AbstractMatrix{<:Real},
         merger_rate_per_sec::Real,
         weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}},
         factor::Real
@@ -137,7 +137,7 @@ function _spectral_density(
     # then a `MethodError`, since the averaging convention is a constant that is
     # never differentiated.
     return _spectral_density_forwarddiff(
-        fluxes, rate_value, rate_partials, weights, V(factor))
+        polarization_power, rate_value, rate_partials, weights, V(factor))
 end
 
 # Extract `(value, partials)` from a rate that is either a plain `Real` (zero
@@ -155,18 +155,18 @@ end
 
 # See comment above `_spectral_density` for the Dual-weighted dispatch rationale.
 function _spectral_density_forwarddiff(
-        fluxes::AbstractMatrix{<:Real},
+        polarization_power::AbstractMatrix{<:Real},
         rate_value::V,
         rate_partials::NTuple{N, V},
         weights::AbstractVector{<:ForwardDiff.Dual{Tag, V, N}},
         factor::V
 ) where {Tag, V, N}
-    nfreq, nsamples = size(fluxes)
+    nfreq, nsamples = size(polarization_power)
     length(weights) == nsamples ||
-        throw(DimensionMismatch("weight length must match flux sample dimension"))
+        throw(DimensionMismatch("weight length must match polarization-power sample dimension"))
 
     # Pack value + partials into one contiguous `(nsamples, N+1)` buffer so a single
-    # gemm `fluxes * weight_block` yields the primal sum (column 1) and every partial
+    # gemm `polarization_power * weight_block` yields the primal sum (column 1) and every partial
     # sum (columns 2:N+1) at once, instead of a separate gemv + gemm.
     weight_block = Matrix{V}(undef, nsamples, N + 1)
     @inbounds for i in 1:nsamples
@@ -178,7 +178,7 @@ function _spectral_density_forwarddiff(
         end
     end
 
-    sums = fluxes * weight_block
+    sums = polarization_power * weight_block
     scale = factor / V(nsamples)
     out = Vector{ForwardDiff.Dual{Tag, V, N}}(undef, nfreq)
     @inbounds for i in 1:nfreq
@@ -200,7 +200,7 @@ Dimensionless gravitational-wave energy density per logarithmic frequency,
 
 ``\\Omega_{\\mathrm{GW}}(f) = \\frac{4\\pi^2}{3 H_0^2} f^3 S_h(f)``,
 
-where ``S_h(f)`` is the strain spectral density (same units as [`spectral_density`](@ref) on fluxes)
+where ``S_h(f)`` is the strain spectral density (same units as [`spectral_density`](@ref) on polarization power)
 and ``H_0`` is the Hubble constant in **s⁻¹**.
 
 ``H_0`` is passed in **km/s/Mpc** (matching hyperparameter `H0` and [`LambdaCDM`](@ref).`H0`)

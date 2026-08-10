@@ -59,28 +59,30 @@ end
 
 @testset "apply_gw_distance_correction" begin
     z = [0.1, 0.5, 2.0]
-    fluxes = Float64[1.0 2.0 3.0
-                     4.0 5.0 6.0]
+    polarization_power = Float64[1.0 2.0 3.0
+                                 4.0 5.0 6.0]
     p_mod = ModifiedPropagation(1.4, 0.7)
 
     # GR is a true no-op and the bang form hands back the same object.
-    gr_in = copy(fluxes)
+    gr_in = copy(polarization_power)
     @test apply_gw_distance_correction!(gr_in, z, GR()) === gr_in
-    @test gr_in == fluxes
+    @test gr_in == polarization_power
 
     # ModifiedPropagation divides column j by Ξ(z[j])².
     expected = reduce(hcat,
-        [fluxes[:, j] ./ gw_em_distance_ratio(z[j], p_mod)^2 for j in eachindex(z)])
-    @test apply_gw_distance_correction(fluxes, z, p_mod) ≈ expected
+        [polarization_power[:, j] ./ gw_em_distance_ratio(z[j], p_mod)^2
+         for j in eachindex(z)])
+    @test apply_gw_distance_correction(polarization_power, z, p_mod) ≈ expected
     # Ξ₀ = 1 makes ModifiedPropagation exactly the identity too.
-    @test apply_gw_distance_correction(fluxes, z, ModifiedPropagation(1.0, 0.7)) == fluxes
+    @test apply_gw_distance_correction(polarization_power, z, ModifiedPropagation(1.0, 0.7)) ==
+          polarization_power
 
     # Out-of-place never aliases or mutates its input; the bang form mutates in place.
-    untouched = copy(fluxes)
-    out = apply_gw_distance_correction(fluxes, z, p_mod)
-    @test out !== fluxes
-    @test fluxes == untouched
-    bang_target = copy(fluxes)
+    untouched = copy(polarization_power)
+    out = apply_gw_distance_correction(polarization_power, z, p_mod)
+    @test out !== polarization_power
+    @test polarization_power == untouched
+    bang_target = copy(polarization_power)
     @test apply_gw_distance_correction!(bang_target, z, p_mod) === bang_target
     @test bang_target ≈ expected
 
@@ -88,15 +90,20 @@ end
     # reason notebook call sites use the out-of-place form.
     @test apply_gw_distance_correction!(copy(expected), z, p_mod) ≈
           reduce(hcat,
-        [fluxes[:, j] ./ gw_em_distance_ratio(z[j], p_mod)^4 for j in eachindex(z)])
+        [polarization_power[:, j] ./ gw_em_distance_ratio(z[j], p_mod)^4
+         for j in eachindex(z)])
 
-    # A redshift vector that does not match the flux columns (e.g. a subsetted sample
+    # A redshift vector that does not match the polarization-power columns (e.g. a subsetted sample
     # set) is caught rather than silently correcting only a prefix — including under GR.
-    @test_throws DimensionMismatch apply_gw_distance_correction!(copy(fluxes), z[1:2],
+    @test_throws DimensionMismatch apply_gw_distance_correction!(
+        copy(polarization_power), z[1:2],
         p_mod)
-    @test_throws DimensionMismatch apply_gw_distance_correction!(copy(fluxes), z[1:2],
+    @test_throws DimensionMismatch apply_gw_distance_correction!(
+        copy(polarization_power), z[1:2],
         GR())
-    @test_throws DimensionMismatch apply_gw_distance_correction(fluxes, [z; 3.0], p_mod)
+    @test_throws DimensionMismatch apply_gw_distance_correction(
+        polarization_power, [z;
+                             3.0], p_mod)
 end
 
 @testset "cosmology hyperparameters and cosmology" begin
