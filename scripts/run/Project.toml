@@ -5,8 +5,6 @@ AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
 AstroSGWBImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
 AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-CBCDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
-Cosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -29,8 +27,6 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 AstroSGWB = {path = "../../AstroSGWB"}
 AstroSGWBInference = {path = "../../AstroSGWBInference"}
 AstroSGWBImportanceModels = {path = "../../AstroSGWBImportanceModels"}
-CBCDistributions = {path = "../../CBCDistributions"}
-Cosmology = {path = "../../Cosmology"}
 
 [compat]
 ADTypes = "1"
