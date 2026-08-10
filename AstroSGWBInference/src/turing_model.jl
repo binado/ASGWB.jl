@@ -53,8 +53,7 @@ end
     )
 
     track || return nothing
-    snr = sqrt(spectral_snr_squared(
-        Sh, effective_psd, obs_sec, df))
+    snr = spectral_snr(Sh, effective_psd, obs_sec, df)
     return (;
         number_of_sources = forward.rate * obs_sec,
         effective_sample_size = normalized_ess(forward.weights),

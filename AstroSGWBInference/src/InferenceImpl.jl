@@ -5,7 +5,7 @@ using AstroSGWB:
                  AbstractAverageMode,
                  AnalyticInclination,
                  CatalogInclination,
-                 spectral_snr_squared,
+                 spectral_snr,
                  frequency_bin_width,
                  gaussian_bin_scale,
                  year_to_second

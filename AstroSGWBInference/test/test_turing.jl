@@ -48,10 +48,10 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
     @test isfinite(returned_nt.snr)
     Sh_theta = forward_model(
         problem.model, problem.polarization_power, problem.samples, problem.theta).spectral_density
-    @test returned_nt.snr ≈ sqrt(spectral_snr_squared(
+    @test returned_nt.snr ≈ spectral_snr(
         Sh_theta, problem.effective_psd,
         year_to_second(problem.observation_time),
-        frequency_bin_width(problem.frequencies)))
+        frequency_bin_width(problem.frequencies))
 
     chain = sample(
         model,
