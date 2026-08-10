@@ -24,7 +24,6 @@ end
         samples::NamedTuple,
         frequencies::AbstractVector{<:Real},
         effective_psd::AbstractVector{<:Real},
-        sgwb_scale::AbstractVector{<:Real},
         observation_time::Real,
         prior::NamedTuple,
         constants::NamedTuple,
@@ -39,14 +38,21 @@ end
     forward = forward_model(weights_fn, polarization_power, samples, Λ; average_mode)
     Sh = forward.spectral_density
 
+    # Derived from the same `effective_psd`, `frequencies`, and `observation_time` the
+    # tracking branch reads, so the likelihood σ and the SNR convention are identical by
+    # construction. O(nfreq) elementwise work -- noise next to the weight contraction.
+    df = frequency_bin_width(frequencies)
+    obs_sec = year_to_second(observation_time)
+    scale = gaussian_bin_scale(;
+        effective_psd = effective_psd,
+        frequencies = frequencies,
+        observation_time_sec = obs_sec)
     observed ~ MvNormal(
         Sh,
-        Diagonal(sgwb_scale .^ 2)
+        Diagonal(scale .^ 2)
     )
 
     track || return nothing
-    df = frequency_bin_width(frequencies)
-    obs_sec = year_to_second(observation_time)
     snr_sq = spectral_snr_squared(
         Sh, effective_psd, obs_sec, df)
     return (;
@@ -71,8 +77,9 @@ Every frequency bin is scored: `polarization_power`, `observed`, `frequencies`, 
 must already be restricted to the analysis band (slice them with one mask beforehand).
 `effective_psd` is the network effective strain PSD from [`AstroSGWB.effective_psd`](@ref)
 and `observation_time` the duration in years (Julian year); the per-bin Gaussian scale is
-derived once here via [`AstroSGWB.gaussian_bin_scale`](@ref), so the likelihood σ and the
-SNR tracking branch always share one noise convention.
+derived in the model body via [`AstroSGWB.gaussian_bin_scale`](@ref) from `effective_psd`,
+`frequencies`, and `observation_time`, so the likelihood σ and the SNR tracking branch
+always share one noise convention.
 
 `prior` declares what is **sampled** and `constants` declares what is **fixed**; the model
 body evaluates at `merge(constants, Λ_sampled)`. To sample a subset, build the prior with
@@ -118,13 +125,6 @@ function build_turing_model(
     else
         observed
     end
-    # Derived once here, not in the `@model` body: the scale is constant data on the
-    # log-density hot path, and deriving it from the same ingredients the SNR tracking
-    # branch reads keeps the two noise conventions identical by construction.
-    sgwb_scale = gaussian_bin_scale(;
-        effective_psd = effective_psd,
-        frequencies = frequencies,
-        observation_time_sec = year_to_second(observation_time))
     return astrosgwb_importance_turing_model(
         track,
         average_mode,
@@ -133,7 +133,6 @@ function build_turing_model(
         samples,
         frequencies,
         effective_psd,
-        sgwb_scale,
         observation_time,
         prior,
         constants,
