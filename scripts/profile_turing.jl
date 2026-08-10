@@ -36,7 +36,7 @@ using AstroSGWB:
                  source_frame_distribution,
                  load_catalog,
                  average_mode,
-                 build_observation_context,
+                 effective_psd,
                  ModifiedPropagation,
                  LambdaCDM,
                  Detector
@@ -53,8 +53,8 @@ using TOML
 using Turing: DynamicPPL
 
 # Analysis band (Hz). The catalog carries no band information: `frequencies` and the
-# rows of `fluxes` are sliced with this cut before the observation is built, so every
-# bin handed to the model is scored. Matches the generator band of the production
+# rows of `fluxes` are sliced with this cut before the effective PSD is computed, so
+# every bin handed to the model is scored. Matches the generator band of the production
 # catalog.
 const MINIMUM_FREQUENCY = 2.0
 const MAXIMUM_FREQUENCY = 4096.0
@@ -266,7 +266,7 @@ function _run(;
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, θ0))
     # Band selection is the caller's job: restrict to the analysis band before
-    # building the observation, so every bin handed to the model is scored.
+    # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= MINIMUM_FREQUENCY) .&
            (catalog.frequencies .<= MAXIMUM_FREQUENCY)
     fluxes = catalog.fluxes[band, :]
@@ -277,8 +277,8 @@ function _run(;
         C,
         P;
     )
-    observation = build_observation_context(frequencies, detectors, observation_time)
-    @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(samples.redshift)
+    eff_psd = effective_psd(frequencies, detectors)
+    @info "catalog loaded" n_frequency_bins=length(frequencies) n_proposal_samples=length(samples.redshift)
 
     observed = if observed_spectral_density_csv === nothing
         @info "using fiducial spectrum from catalog as observed data"
@@ -289,7 +289,7 @@ function _run(;
         @info "loading observed spectrum from CSV" path = observed_spectral_density_csv
         _load_observed_spectral_density(
             observed_spectral_density_csv,
-            length(observation.frequencies)
+            length(frequencies)
         )
     end
 
@@ -308,7 +308,9 @@ function _run(;
         fluxes,
         samples,
         θ0,
-        observation,
+        frequencies,
+        eff_psd,
+        observation_time,
         priors;
         constants = (; R₀ = local_merger_rate),
         track = false,

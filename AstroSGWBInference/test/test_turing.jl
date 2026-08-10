@@ -18,7 +18,9 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
         problem.fluxes,
         problem.samples,
         problem.fiducials,
-        problem.observation,
+        problem.frequencies,
+        problem.effective_psd,
+        problem.observation_time,
         problem.prior;
         track = false
     )
@@ -35,7 +37,9 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
         problem.fluxes,
         problem.samples,
         problem.fiducials,
-        problem.observation,
+        problem.frequencies,
+        problem.effective_psd,
+        problem.observation_time,
         problem.prior;
         track = true
     )
@@ -62,17 +66,18 @@ end
 @testset "average_mode reaches both sides of build_turing_model" begin
     problem = local_problem_context()
 
-    # `LOCAL_OBSERVATION` carries σ = 1 against a fiducial Sₕ ~ 5e-8, so its
-    # residual term is ~1e-15 and the joint is numerically all prior plus
+    # The fixture's unit PSD carries σ ≈ 9e-5 against a fiducial Sₕ ~ 5e-8, so its
+    # residual term is ~1e-7 and the joint is numerically all prior plus
     # normalization -- every likelihood-sensitive assertion below would pass
-    # vacuously. Score against σ at the signal scale instead.
-    observation = ObservationContext(
-        problem.observation.frequencies,
-        problem.observation.effective_psd,
-        fill(1.0e-8, length(problem.observation.frequencies)),
-        problem.observation.observation_time
-    )
-    σ = observation.sgwb_scale
+    # vacuously. Score against σ at the signal scale instead: `build_turing_model`
+    # derives σ = effective_psd / √(2 T Δf), so pick the PSD that yields σ = 1e-8.
+    nfreq = length(problem.frequencies)
+    σ_target = 1.0e-8
+    eff_psd = fill(
+        σ_target * sqrt(2 * year_to_second(problem.observation_time) *
+             frequency_bin_width(problem.frequencies)),
+        nfreq)
+    σ = fill(σ_target, nfreq)
 
     _build(;
         kwargs...) = build_turing_model(
@@ -80,7 +85,9 @@ end
         problem.fluxes,
         problem.samples,
         problem.fiducials,
-        observation,
+        problem.frequencies,
+        eff_psd,
+        problem.observation_time,
         problem.prior;
         kwargs...
     )
@@ -154,7 +161,9 @@ end
         problem.fluxes,
         problem.samples,
         problem.fiducials,
-        problem.observation,
+        problem.frequencies,
+        problem.effective_psd,
+        problem.observation_time,
         problem.prior
     )
     @test _varinfo_symbols(VarInfo(full)) == Set(keys(problem.prior))
@@ -171,7 +180,9 @@ end
         problem.fluxes,
         problem.samples,
         problem.fiducials,
-        problem.observation,
+        problem.frequencies,
+        problem.effective_psd,
+        problem.observation_time,
         restricted_prior;
         constants = constants
     )
@@ -192,7 +203,9 @@ end
         problem.fluxes,
         problem.samples,
         problem.fiducials,
-        problem.observation,
+        problem.frequencies,
+        problem.effective_psd,
+        problem.observation_time,
         restricted_prior;
         constants = problem.fiducials
     )

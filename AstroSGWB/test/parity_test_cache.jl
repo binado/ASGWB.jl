@@ -216,12 +216,13 @@ end
 
 """
     parity_problem_context(variant, detectors)
-        -> (; fluxes, samples, fiducials, observation)
+        -> (; fluxes, samples, fiducials, frequencies, effective_psd,
+              observation_time, average_mode)
 
-Load the parity catalog for `variant`, restructure its samples, and build its
-[`ObservationContext`](@ref). Physical importance-model preparation is tested by
-`AstroSGWBImportanceModels`; this core fixture only owns catalog, sample, and observation
-data.
+Load the parity catalog for `variant`, restructure its samples, and compute the
+detector network's banded [`effective_psd`](@ref). Physical importance-model
+preparation is tested by `AstroSGWBImportanceModels`; this core fixture only owns
+catalog, sample, and observation data.
 """
 function parity_problem_context(variant::Symbol, detectors)
     dir = parity_catalog_dir(variant)
@@ -247,14 +248,15 @@ function parity_problem_context(variant::Symbol, detectors)
     # band edges stored in the fixture files.
     band = catalog.frequencies .> 0.0
     fluxes = catalog.fluxes[band, :]
-    observation = build_observation_context(
-        catalog.frequencies[band], Vector{Detector}(collect(detectors)),
-        kw.observation_time)
+    frequencies = catalog.frequencies[band]
+    eff_psd = effective_psd(frequencies, Vector{Detector}(collect(detectors)))
     return (;
         fluxes = fluxes,
         samples = samples,
         fiducials = Λ,
-        observation = observation,
+        frequencies = frequencies,
+        effective_psd = eff_psd,
+        observation_time = kw.observation_time,
         average_mode = average_mode(catalog))
 end
 

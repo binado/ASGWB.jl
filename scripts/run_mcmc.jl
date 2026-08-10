@@ -18,7 +18,7 @@ using AstroSGWB:
                  average_mode,
                  AnalyticInclination,
                  CatalogInclination,
-                 build_observation_context,
+                 effective_psd,
                  ModifiedPropagation,
                  W0CDM,
                  Detector
@@ -59,8 +59,8 @@ const P = ModifiedPropagation
 const AVERAGE_MODE = nothing
 
 # Analysis band (Hz). The catalog carries no band information: `frequencies` and the
-# rows of `fluxes` are sliced with this cut before the observation is built, so every
-# bin handed to the model is scored. Matches the generator band of the production
+# rows of `fluxes` are sliced with this cut before the effective PSD is computed, so
+# every bin handed to the model is scored. Matches the generator band of the production
 # catalog.
 const MINIMUM_FREQUENCY = 2.0
 const MAXIMUM_FREQUENCY = 4096.0
@@ -169,15 +169,14 @@ function run_mcmc(config_file::String)
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, fiducials))
     # Band selection is the caller's job: restrict to the analysis band before
-    # building the observation, so every bin handed to the model is scored.
+    # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= MINIMUM_FREQUENCY) .&
            (catalog.frequencies .<= MAXIMUM_FREQUENCY)
     fluxes = catalog.fluxes[band, :]
     frequencies = catalog.frequencies[band]
     model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
-    observation = build_observation_context(
-        frequencies, detectors, cfg.observation_time)
-    @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(
+    eff_psd = effective_psd(frequencies, detectors)
+    @info "catalog loaded" n_frequency_bins=length(frequencies) n_proposal_samples=length(
         samples.redshift,
     )
 
@@ -197,7 +196,9 @@ function run_mcmc(config_file::String)
         fluxes,
         samples,
         fiducials,
-        observation,
+        frequencies,
+        eff_psd,
+        cfg.observation_time,
         prior;
         constants = constants,
         track = true,

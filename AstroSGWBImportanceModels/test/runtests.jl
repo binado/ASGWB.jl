@@ -231,12 +231,9 @@ end
 @testset "concrete adapter integrates with Turing" begin
     model = prepared()
     fluxes = Float64[1.0 1.5; 2.0 2.5]
-    observation = ObservationContext(
-        [20.0, 40.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
-        1.0
-    )
+    frequencies = [20.0, 40.0]
+    eff_psd = [1.0, 1.0]
+    observation_time = 1.0
     prior = (
         H0 = Uniform(20.0, 140.0),
         Ωm = Uniform(0.05, 0.95),
@@ -249,7 +246,7 @@ end
     # `R₀` is fixed via `constants` rather than sampled -- the production default. The
     # prior declares the sampled names; `constants` supplies the rest of `Λ`.
     turing_model = build_turing_model(
-        model, fluxes, SAMPLES, FIDUCIALS, observation, prior;
+        model, fluxes, SAMPLES, FIDUCIALS, frequencies, eff_psd, observation_time, prior;
         constants = (; R₀ = FIDUCIALS.R₀))
 
     @test turing_model !== nothing
@@ -258,7 +255,7 @@ end
     # And the opt-in: adding `R₀` to the prior makes it a sampled variable, with no
     # change anywhere else.
     sampling_R₀ = build_turing_model(
-        model, fluxes, SAMPLES, FIDUCIALS, observation,
+        model, fluxes, SAMPLES, FIDUCIALS, frequencies, eff_psd, observation_time,
         merge(prior, (; R₀ = Uniform(10.0, 1000.0))))
     @test isfinite(Turing.logjoint(sampling_R₀, FIDUCIALS))
     @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(sampling_R₀)))) ==

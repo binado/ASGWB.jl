@@ -5,7 +5,6 @@ using AstroSGWB:
                  effective_psd,
                  gaussian_bin_scale,
                  frequency_bin_width,
-                 build_observation_config,
                  default_detector_data_dir,
                  overlap_reduction_function,
                  pairwise_overlap_reduction_function
@@ -90,12 +89,11 @@ end
     end
     d1 = Detector("H1")
     d2 = Detector("L1")
-    obs = parity_problem_context(:posterior_v2_minimal, [d1, d2]).observation
+    obs = parity_problem_context(:posterior_v2_minimal, [d1, d2])
     @test length(obs.effective_psd) == length(obs.frequencies)
-    # Every bin handed to the context is scored; the DC bin (f=0 Hz, possibly Inf
+    # Every bin handed to the likelihood is scored; the DC bin (f=0 Hz, possibly Inf
     # PSD) is sliced off by the caller, so all bins here are finite.
     @test all(isfinite, obs.effective_psd)
-    @test length(obs.sgwb_scale) == length(obs.frequencies)
 end
 
 @testset "parity observation is deterministic for the same paths and detectors" begin
@@ -103,8 +101,7 @@ end
         include(joinpath(@__DIR__, "parity_test_cache.jl"))
     end
     dets = [Detector("H1"), Detector("L1")]
-    obs1 = parity_problem_context(:posterior, dets).observation
-    obs2 = parity_problem_context(:posterior, dets).observation
+    obs1 = parity_problem_context(:posterior, dets)
+    obs2 = parity_problem_context(:posterior, dets)
     @test obs1.effective_psd == obs2.effective_psd
-    @test obs1.sgwb_scale == obs2.sgwb_scale
 end

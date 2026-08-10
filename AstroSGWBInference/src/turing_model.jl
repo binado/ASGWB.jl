@@ -22,7 +22,10 @@ end
         weights_fn,
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
-        observation::ObservationContext,
+        frequencies::AbstractVector{<:Real},
+        effective_psd::AbstractVector{<:Real},
+        sgwb_scale::AbstractVector{<:Real},
+        observation_time::Real,
         prior::NamedTuple,
         constants::NamedTuple,
         observed::AbstractVector{<:Real}
@@ -38,14 +41,14 @@ end
 
     observed ~ MvNormal(
         Sh,
-        Diagonal(observation.sgwb_scale .^ 2)
+        Diagonal(sgwb_scale .^ 2)
     )
 
     track || return nothing
-    df = frequency_bin_width(observation.frequencies)
-    obs_sec = year_to_second(observation.observation_time)
+    df = frequency_bin_width(frequencies)
+    obs_sec = year_to_second(observation_time)
     snr_sq = spectral_snr_squared(
-        Sh, observation.effective_psd, obs_sec, df)
+        Sh, effective_psd, obs_sec, df)
     return (;
         number_of_sources = forward.rate * obs_sec,
         effective_sample_size = normalized_ess(forward.weights),
@@ -56,15 +59,20 @@ end
 
 """
     build_turing_model(weights_fn, fluxes, samples, fiducial_hyperparameters,
-                       observation, prior; constants=NamedTuple(), track=false,
-                       observed=nothing, average_mode=AnalyticInclination())
+                       frequencies, effective_psd, observation_time, prior;
+                       constants=NamedTuple(), track=false, observed=nothing,
+                       average_mode=AnalyticInclination())
 
 Build the Turing model scoring `weights_fn` against `observed` (synthesized at
 `fiducial_hyperparameters` when omitted). `weights_fn(Λ, samples) -> (rate, log_weights)`
 is the whole model contract; see the `AstroSGWBInference` module docstring.
 
-Every frequency bin is scored: `fluxes`, `observed`, and `observation` must already be
-restricted to the analysis band (slice them with one mask beforehand).
+Every frequency bin is scored: `fluxes`, `observed`, `frequencies`, and `effective_psd`
+must already be restricted to the analysis band (slice them with one mask beforehand).
+`effective_psd` is the network effective strain PSD from [`AstroSGWB.effective_psd`](@ref)
+and `observation_time` the duration in years (Julian year); the per-bin Gaussian scale is
+derived once here via [`AstroSGWB.gaussian_bin_scale`](@ref), so the likelihood σ and the
+SNR tracking branch always share one noise convention.
 
 `prior` declares what is **sampled** and `constants` declares what is **fixed**; the model
 body evaluates at `merge(constants, Λ_sampled)`. To sample a subset, build the prior with
@@ -84,7 +92,9 @@ function build_turing_model(
         fluxes::AbstractMatrix{<:Real},
         samples::NamedTuple,
         fiducial_hyperparameters::NamedTuple,
-        observation::ObservationContext,
+        frequencies::AbstractVector{<:Real},
+        effective_psd::AbstractVector{<:Real},
+        observation_time::Real,
         prior::NamedTuple;
         constants::NamedTuple = NamedTuple(),
         track::Bool = false,
@@ -108,13 +118,23 @@ function build_turing_model(
     else
         observed
     end
+    # Derived once here, not in the `@model` body: the scale is constant data on the
+    # log-density hot path, and deriving it from the same ingredients the SNR tracking
+    # branch reads keeps the two noise conventions identical by construction.
+    sgwb_scale = gaussian_bin_scale(;
+        effective_psd = effective_psd,
+        frequencies = frequencies,
+        observation_time_sec = year_to_second(observation_time))
     return astrosgwb_importance_turing_model(
         track,
         average_mode,
         weights_fn,
         fluxes,
         samples,
-        observation,
+        frequencies,
+        effective_psd,
+        sgwb_scale,
+        observation_time,
         prior,
         constants,
         observed_data

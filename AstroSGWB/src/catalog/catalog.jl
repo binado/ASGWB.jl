@@ -20,9 +20,8 @@ polarization datasets into without a transpose.
 
 `frequencies` comes from the file rather than being derived from
 `(duration, sampling_frequency)` scalars. Band selection is the caller's job:
-slice `frequencies` and the rows of `fluxes` before building an
-[`ObservationContext`](@ref) or calling an inference model. Built by
-[`load_catalog`](@ref) from a `waveform_catalog` v1 file.
+slice `frequencies` and the rows of `fluxes` before calling an inference model.
+Built by [`load_catalog`](@ref) from a `waveform_catalog` v1 file.
 """
 struct SGWBCatalog{S <: NamedTuple}
     frequencies::Vector{Float64}

@@ -5,10 +5,10 @@ using AstroSGWB:
                  AbstractAverageMode,
                  AnalyticInclination,
                  CatalogInclination,
-                 ObservationContext,
                  normalized_ess,
                  spectral_snr_squared,
                  frequency_bin_width,
+                 gaussian_bin_scale,
                  year_to_second
 using Distributions: MvNormal
 using LinearAlgebra: Diagonal

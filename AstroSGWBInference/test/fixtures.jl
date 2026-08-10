@@ -15,12 +15,9 @@ const LOCAL_PRIOR = (
     rate_scale = Uniform(0.5, 1.5),
     weight_shift = Uniform(-0.2, 0.2)
 )
-const LOCAL_OBSERVATION = ObservationContext(
-    [20.0, 40.0],
-    [1.0, 1.0],
-    [1.0, 1.0],
-    1.0
-)
+const LOCAL_FREQUENCIES = [20.0, 40.0]
+const LOCAL_EFFECTIVE_PSD = [1.0, 1.0]
+const LOCAL_OBSERVATION_TIME = 1.0
 
 function local_problem_context()
     return (;
@@ -30,6 +27,8 @@ function local_problem_context()
         fiducials = LOCAL_FIDUCIALS,
         theta = LOCAL_THETA,
         prior = LOCAL_PRIOR,
-        observation = LOCAL_OBSERVATION
+        frequencies = LOCAL_FREQUENCIES,
+        effective_psd = LOCAL_EFFECTIVE_PSD,
+        observation_time = LOCAL_OBSERVATION_TIME
     )
 end

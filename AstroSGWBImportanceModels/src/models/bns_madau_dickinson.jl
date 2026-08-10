@@ -2,8 +2,9 @@
     BNSMadauDickinsonImportanceModel{C, P}
 
 Prepared BNS importance model using a Madau–Dickinson source-frame merger rate,
-background cosmology `C`, and GW propagation model `P`. Detector state is intentionally
-kept in a separate `AstroSGWB.ObservationContext`.
+background cosmology `C`, and GW propagation model `P`. Detector state (frequencies,
+effective PSD, observation time) is intentionally kept out of this model and passed to
+`AstroSGWBInference.build_turing_model` as flattened arrays.
 
 The model is a **functor**: `model(Λ, samples) -> (rate, log_weights)` is the whole
 contract `AstroSGWBInference.build_turing_model` consumes, so this package adds no methods
@@ -51,8 +52,8 @@ end
     prepare_bns_madau_dickinson_model(samples, fiducials, C, P; z_grid=DEFAULT_Z_GRID)
 
 Precompute the Float64 proposal caches for the canonical BNS Madau–Dickinson importance
-adapter. Returns the prepared model directly. Construct detector state separately with
-`AstroSGWB.build_observation_context`.
+adapter. Returns the prepared model directly. Compute the detector-side effective PSD
+separately with `AstroSGWB.effective_psd`.
 
 The local merger rate is a live hyperparameter, read as `Λ.R₀` (in Gpc⁻³ yr⁻¹) on every
 call, not a frozen field -- it is a real astrophysical unknown that scales the rate

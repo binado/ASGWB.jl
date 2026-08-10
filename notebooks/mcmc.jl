@@ -75,8 +75,8 @@ begin
     observation_time = 1.0
 
     # Analysis band (Hz). The catalog carries no band information: slice
-    # `frequencies` and the rows of `fluxes` with this cut before building the
-    # observation. Matches the generator band of the production catalog.
+    # `frequencies` and the rows of `fluxes` with this cut before computing the
+    # effective PSD. Matches the generator band of the production catalog.
     minimum_frequency = 2.0
     maximum_frequency = 4096.0
 
@@ -162,20 +162,20 @@ begin
         catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
 
     # Band selection is the caller's job: restrict to the analysis band before
-    # building the observation, so every bin handed to the model is scored.
+    # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= minimum_frequency) .&
            (catalog.frequencies .<= maximum_frequency)
     fluxes = fluxes[band, :]
     frequencies = catalog.frequencies[band]
 
     model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
-    observation = build_observation_context(frequencies, detectors, observation_time)
+    eff_psd = effective_psd(frequencies, detectors)
     # S2: the prior declares the hyperparameter names; there is no model to ask.
     order = keys(hyperprior_dists)
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
 
-    @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(
+    @info "catalog loaded" n_frequency_bins=length(frequencies) n_proposal_samples=length(
         samples.redshift,
     )
 
@@ -218,15 +218,16 @@ In the cells below, we plot ``\Omega_{\mathrm{GW}}(f)`` as a function of the fre
 """
 
 # ╔═╡ d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a
-function plot_fiducial_omega_gw(model, fluxes, samples, fiducials, observation)
+function plot_fiducial_omega_gw(
+        model, fluxes, samples, fiducials, frequencies, eff_psd, observation_time)
     forward = forward_model(model, fluxes, samples, fiducials)
     rate0, Sh0 = forward.rate, forward.spectral_density
-    f = observation.frequencies
+    f = frequencies
     df = frequency_bin_width(f)
     snr = spectral_snr(
         Sh0,
-        observation.effective_psd,
-        year_to_second(observation.observation_time),
+        eff_psd,
+        year_to_second(observation_time),
         df
     )
 
@@ -252,7 +253,8 @@ function plot_fiducial_omega_gw(model, fluxes, samples, fiducials, observation)
 end
 
 # ╔═╡ 5f9a8b7c-0e1d-4a2f-3b6c-7d8e9f0a1b2c
-plot_fiducial_omega_gw(model, fluxes, samples, fiducials, observation)
+plot_fiducial_omega_gw(
+    model, fluxes, samples, fiducials, frequencies, eff_psd, observation_time)
 
 # ╔═╡ ccf43d43-7f31-41e9-85db-12842561973c
 md"""
@@ -284,7 +286,9 @@ begin
             fluxes,
             samples,
             fiducials,
-            observation,
+            frequencies,
+            eff_psd,
+            observation_time,
             prior;
             constants = constants,
             track = false,
@@ -375,7 +379,7 @@ begin
     using AstroSGWB
     using AstroSGWB:
                      Detector,
-                     build_observation_context,
+                     effective_psd,
                      load_catalog,
                      average_mode,
                      AnalyticInclination,

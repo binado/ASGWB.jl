@@ -29,7 +29,8 @@ Callers define an importance adapter (or use one from `AstroSGWBImportanceModels
 fiducial hyperparameters, and a catalog sample adapter in Julia, then pass raw catalog
 `fluxes`, restructured `samples`, and fiducials explicitly. Prepared importance models
 cache proposal log-probabilities, redshift interpolants, and rate metadata; detector
-state lives separately in an [`ObservationContext`](@ref).
+state (banded `frequencies`, network [`effective_psd`](@ref), observation time) is
+passed to inference entry points as flattened arrays.
 
 Inference state is a flat hyperparameter `NamedTuple`. The caller-owned model contract and
 Turing integration live in `AstroSGWBInference`; this package provides the reusable physics
@@ -45,7 +46,6 @@ import Cosmology: apply_gw_distance_correction, apply_gw_distance_correction!,
                   gw_em_distance_ratio, hyperparameters,
                   propagation, propagation_type
 
-include("types.jl")
 include("catalog/catalog.jl")
 include("catalog/io.jl")
 include("samples.jl")
@@ -59,8 +59,7 @@ include("snr.jl")
 include("diagnostics.jl")
 
 # Types
-export ObservationContext,
-       canonical_hyperparameters,
+export canonical_hyperparameters,
        validate_hyperparameters,
        CumulativeIntegral1D,
        GridInterpolator,
@@ -75,7 +74,7 @@ export SGWBCatalog,
        load_catalog,
        average_mode
 
-# Detector network (ORF / PSD effective strain PSD; used by `build_observation_context`)
+# Detector network (ORF / PSD effective strain PSD and per-bin Gaussian scales)
 export Detector,
        PowerSpectralDensity,
        default_detector_data_dir,
@@ -84,8 +83,7 @@ export Detector,
        effective_psd,
        gaussian_bin_scale,
        gaussian_bin_variance,
-       frequency_bin_width,
-       build_observation_context
+       frequency_bin_width
 
 # Cosmology
 export E,

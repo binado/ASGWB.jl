@@ -46,7 +46,7 @@ null), and `nothing` is omitted on write.
 Schema v2 dropped `local_merger_rate`: it is an ordinary hyperparameter (`R₀`, in
 Gpc⁻³ yr⁻¹) and lives in `[fiducials]`, so it is fixed by default and sampled by adding
 it to `sample_only` and to the runner's hyperprior. `observation_time` stays -- unlike
-the rate it does not cancel, and `build_observation_context` and the SNR tracking branch
+the rate it does not cancel, and the Gaussian bin scale and the SNR tracking branch
 both read it.
 
 Construct from a parsed dict via `MCMCConfig(d)` or from a file via

@@ -141,14 +141,12 @@ end
 
 @testset "parity context constructs catalog and observation data" begin
     loaded = _load_variant(:importance_context)
-    observation = loaded.observation
 
     @test all(isfinite, loaded.samples.luminosity_distance)
     @test all(>(0), loaded.samples.luminosity_distance)
 
-    @test observation.frequencies ≈ [20.0, 40.0]
-    @test length(observation.effective_psd) == length(observation.frequencies)
-    @test length(observation.sgwb_scale) == length(observation.frequencies)
-    @test observation.observation_time == 1.0
-    @test year_to_second(observation.observation_time) ≈ 365.25 * 24 * 3600
+    @test loaded.frequencies ≈ [20.0, 40.0]
+    @test length(loaded.effective_psd) == length(loaded.frequencies)
+    @test loaded.observation_time == 1.0
+    @test year_to_second(loaded.observation_time) ≈ 365.25 * 24 * 3600
 end

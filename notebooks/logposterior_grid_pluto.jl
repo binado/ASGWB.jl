@@ -33,7 +33,7 @@ begin
     using AstroSGWB
     using AstroSGWB:
                      Detector,
-                     build_observation_context,
+                     effective_psd,
                      load_catalog,
                      average_mode,
                      AnalyticInclination,
@@ -78,8 +78,8 @@ begin
     observation_time_yr = 1.0
 
     # Analysis band (Hz). The catalog carries no band information: slice
-    # `frequencies` and the rows of `fluxes` with this cut before building the
-    # observation. Matches the generator band of the production catalog.
+    # `frequencies` and the rows of `fluxes` with this cut before computing the
+    # effective PSD. Matches the generator band of the production catalog.
     minimum_frequency = 2.0
     maximum_frequency = 4096.0
 
@@ -133,21 +133,20 @@ begin
         catalog.fluxes, catalog.samples.redshift, propagation(P, fiducials))
 
     # Band selection is the caller's job: restrict to the analysis band before
-    # building the observation, so every bin handed to the model is scored.
+    # computing the effective PSD, so every bin handed to the model is scored.
     band = (catalog.frequencies .>= minimum_frequency) .&
            (catalog.frequencies .<= maximum_frequency)
     fluxes = fluxes[band, :]
     frequencies = catalog.frequencies[band]
 
     prepared_model = prepare_bns_madau_dickinson_model(samples, fiducials, C, P)
-    observation = build_observation_context(
-        frequencies, detectors, observation_time_yr)
+    eff_psd = effective_psd(frequencies, detectors)
     # S2: the prior declares the hyperparameter names; there is no model to ask.
     order = keys(hyperprior_dists)
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
 
-    @info "catalog loaded" n_frequency_bins=length(observation.frequencies) n_proposal_samples=length(
+    @info "catalog loaded" n_frequency_bins=length(frequencies) n_proposal_samples=length(
         samples.redshift,
     )
 
@@ -174,7 +173,8 @@ begin
             NamedTuple{sample_only_tup}(hyperprior)
     constants = Base.structdiff(fiducials, prior)
     model = build_turing_model(
-        prepared_model, fluxes, samples, fiducials, observation, prior;
+        prepared_model, fluxes, samples, fiducials, frequencies, eff_psd,
+        observation_time_yr, prior;
         constants = constants, track = false, observed = observed,
         average_mode = resolved_average_mode)
     lf = DynamicPPL.LogDensityFunction(model)
