@@ -257,8 +257,10 @@ function _run(;
     P = ModifiedPropagation
     # S2: the prior declares the hyperparameter names; there is no model to ask.
     order = keys(priors)
-    # S7: `R₀` is a live hyperparameter now. The profiler keeps it out of `priors` and
-    # threads the config's `local_merger_rate` in as a constant, matching production.
+    # S7: `R₀` is a live hyperparameter now. The profiler keeps it out of the config's
+    # `priors` table and pins the config's `local_merger_rate` by conditioning, matching
+    # production; the prior still declares every name, so `R₀` gets a nominal entry.
+    full_prior = merge(priors, (; R₀ = Uniform(10.0, 1000.0)))
     θ0 = merge(_theta0_from_toml(init_tbl, order), (; R₀ = local_merger_rate))
     samples = catalog.samples
     # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
@@ -311,10 +313,9 @@ function _run(;
         frequencies,
         eff_psd,
         observation_time,
-        priors,
-        (; R₀ = local_merger_rate),
+        full_prior,
         observed
-    )
+    ) | (; R₀ = local_merger_rate)
     lf, z0_turing = _build_turing_logdensity(turing_model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)
 

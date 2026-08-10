@@ -22,11 +22,12 @@ which keeps full dispatch and type parameters -- and an ad-hoc model is a plain 
     weights_fn = (Λ, samples) -> (1e-7 * Λ.rate_scale,
                                   fill(Λ.weight_shift, length(samples.redshift)))
 
-Hyperparameter *names* are declared by the prior and `constants`, not by the model:
-`keys(prior)` alone determines what is sampled, and `constants` supplies what is held
-fixed. The model body evaluates at `merge(constants, Λ_sampled)`. A name the callable
-needs but neither supplies surfaces as a `KeyError` on `Λ.name` at the first evaluation,
-before the sampler burns wall clock.
+Hyperparameter *names* are declared by the prior, not by the model: `keys(prior)`
+determines the full hyperparameter set and the Turing variable creation order. Fixing a
+hyperparameter is Turing conditioning — `model | (; R₀ = fiducials.R₀)` — so the chain
+carries exactly the sampled variables by construction. A name the callable needs but the
+prior omits surfaces as a `KeyError` on `Λ.name` at the first evaluation, before the
+sampler burns wall clock.
 
 [`forward_model`](@ref) is the single implementation of the forward pass, shared by the
 `@model` body ([`astrosgwb_importance_turing_model`](@ref)) and the caller-side synthesis

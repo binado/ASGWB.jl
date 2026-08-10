@@ -14,7 +14,7 @@ end
 """
     astrosgwb_importance_turing_model(track, average_mode, weights_fn, polarization_power,
                                       samples, frequencies, effective_psd, observation_time,
-                                      prior, constants, observed) -> DynamicPPL.Model
+                                      prior, observed) -> DynamicPPL.Model
 
 The Turing model scoring `weights_fn(Λ, samples) -> (rate, log_weights)` against
 `observed` (see the `AstroSGWBInference` module docstring for the model contract). There
@@ -34,19 +34,18 @@ derived in the model body via [`AstroSGWB.gaussian_bin_scale`](@ref) from `effec
 `frequencies`, and `observation_time`, so the likelihood σ and the `track = true` SNR
 always share one noise convention.
 
-`prior` declares what is **sampled** and `constants` declares what is **fixed**; the model
-body evaluates at `merge(constants, Λ_sampled)`. To sample a subset, build the prior with
-only that subset and pass the rest as `constants` -- the chain then contains exactly the
-sampled variables **by construction**, with no DynamicPPL conditioning and no subset
-validation. A key present in both throws an `ArgumentError` at the first evaluation
-rather than silently shadowing the constant.
+`prior` declares **every** hyperparameter `weights_fn` reads, sampled or not; `keys(prior)`
+controls the Turing variable creation order. Fixing a hyperparameter is Turing
+conditioning at the call site, `model | (; R₀ = fiducials.R₀)`: the pinned value enters
+as an observation, its prior density folds into the joint as a sampling-irrelevant
+constant, and the chain contains exactly the unconditioned variables **by construction** --
+no helpers, no subset validation. A pinned value outside its prior support scores `-Inf`
+at the first evaluation, so a misconfigured pin fails loudly before the sampler burns wall
+clock. A name the callable needs but `prior` omits surfaces as a `KeyError` on `Λ.name` at
+the same point.
 
 When `track` is true, each evaluation also returns `(; number_of_sources,
 effective_sample_size, snr)`.
-
-`keys(prior)` alone declares which hyperparameters are sampled and in what order. A key
-the model needs but neither `prior` nor `constants` supplies surfaces as a `KeyError` on
-`Λ.name` at the first evaluation, before the sampler burns wall clock.
 
 `track` and `average_mode` are positional rather than keywords: the positional path
 through DynamicPPL is what the tests exercise, and positional arguments stay visible in
@@ -63,22 +62,12 @@ through `transform_args` untouched.
         effective_psd::AbstractVector{<:Real},
         observation_time::Real,
         prior::NamedTuple,
-        constants::NamedTuple,
         observed::AbstractVector{<:Real}
 )
-    # `merge` lets the sampled value win on collision, so an overlapping key would
-    # silently ignore the constant the caller asked for. Reject it at the first
-    # evaluation -- the same point where a missing name surfaces as a `KeyError` on `Λ`.
-    overlap = intersect(keys(prior), keys(constants))
-    isempty(overlap) ||
-        throw(ArgumentError("constants and prior both declare $(Tuple(overlap))"))
-
-    Λ_sampled ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
-    # `merge(constants, Λ_sampled)` is the idiomatic Julia `{**constants, **sampled}`:
-    # resolved at compile time on `NamedTuple`s, so it costs nothing per evaluation and
-    # keeps `Λ.γ` type-stable. Sampled values win on collision; the check above rejects
-    # collisions rather than allowing a silently shadowed constant.
-    Λ = merge(constants, Λ_sampled)
+    # `false`: no varname prefixing, so caller-side conditioning (`model | (; R₀ = …)`)
+    # and scoring (`Turing.logjoint(model, θ)`) address the submodel's variables by the
+    # same bare symbols the caller already uses.
+    Λ ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
     forward = forward_model(weights_fn, polarization_power, samples, Λ; average_mode)
     Sh = forward.spectral_density
 

@@ -38,8 +38,8 @@ separately with `AstroSGWB.effective_psd`.
 
 The local merger rate is a live hyperparameter, read as `Λ.R₀` (in Gpc⁻³ yr⁻¹) on every
 call, not a frozen field -- it is a real astrophysical unknown that scales the rate
-linearly, so a caller can sample it by adding `R₀` to the prior or hold it fixed by
-putting it in `constants`. `observation_time` is gone entirely: it cancelled
+linearly, so a caller holds it fixed by conditioning (`model | (; R₀ = …)`) and samples
+it by dropping the conditioning. `observation_time` is gone entirely: it cancelled
 algebraically, and detector state never belongs in the importance model.
 
 The returned model's log-weights are referenced to the **fiducial GW** luminosity

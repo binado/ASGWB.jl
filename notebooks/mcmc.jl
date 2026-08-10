@@ -102,12 +102,14 @@ begin
         κ = 3.0,
         zpeak = 2.0,
         # S7: the local merger rate (Gpc^-3 yr^-1) is an ordinary hyperparameter read as
-        # `Λ.R₀`, not a prepare-time keyword. Fixed here by default; add it to
-        # `hyperprior_dists` and `sample_only` to sample it.
+        # `Λ.R₀`, not a prepare-time keyword. The MCMC cell pins it at this fiducial by
+        # conditioning; name it in `sample_only` to sample it.
         R₀ = local_merger_rate
     )
 
-    # Edit hyperprior bounds here (order: cosmology, then population).
+    # Edit hyperprior bounds here (order: cosmology, then population). The prior declares
+    # every name, sampled or pinned; the `R₀` entry is the nominal distribution its
+    # conditioning pins against.
     hyperprior_dists = (
         H0 = Uniform(20.0, 140.0),
         Ωm = Uniform(0.05, 0.95),
@@ -116,7 +118,8 @@ begin
         Ξₙ = Uniform(0.3, 3.0),
         γ = Uniform(0.5, 10.0),
         κ = Uniform(0.05, 10.0),
-        zpeak = Uniform(0.05, 10.0)
+        zpeak = Uniform(0.05, 10.0),
+        R₀ = Uniform(10.0, 1000.0)
     )
     hyperprior = hyperprior_dists
 
@@ -263,11 +266,13 @@ begin
     adtype = resolve_adtype(sampler.ad_backend)
 
     @info "starting NUTS" nadapts=sampler.nadapts nsamples=sampler.nsamples target_acceptance=sampler.target_acceptance ad_backend=sampler.ad_backend sample_only=sample_only_tup
-    # S3: the prior declares what is sampled, `constants` what is held fixed, so
-    # the chain carries exactly the sampled variables by construction.
-    prior = sample_only_tup === nothing ? hyperprior :
-            NamedTuple{sample_only_tup}(hyperprior)
-    constants = Base.structdiff(fiducials, prior)
+    # S3: the prior declares every hyperparameter name; fixing one is conditioning
+    # (`model | fixed`), so the chain carries exactly the sampled variables by
+    # construction. `R₀` is pinned at its fiducial unless named in `sample_only`.
+    sampled_prior = sample_only_tup === nothing ?
+                    Base.structdiff(hyperprior, (; R₀ = hyperprior.R₀)) :
+                    NamedTuple{sample_only_tup}(hyperprior)
+    fixed = Base.structdiff(fiducials, sampled_prior)
     # No external spectrum to fit: synthesize `observed` at the fiducials. One
     # `resolved_average_mode` reaches both this call and the model that scores it.
     observed = forward_model(
@@ -282,10 +287,9 @@ begin
         frequencies,
         eff_psd,
         observation_time,
-        prior,
-        constants,
+        hyperprior,
         observed
-    )
+    ) | fixed
     nuts = Turing.NUTS(
         sampler.nadapts,
         sampler.target_acceptance;

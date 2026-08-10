@@ -12,19 +12,19 @@ _varinfo_symbols(vi) = Set(getsym(vn) for vn in keys(vi))
 _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
 
 # Constructing the model is caller-owned: synthesize `observed` at the fiducials (or pass
-# an external spectrum) and call the `@model` directly. This helper only spares the test
-# bodies the repetition.
+# an external spectrum), call the `@model` directly, and pin fixed hyperparameters by
+# conditioning (`model | fixed`). This helper only spares the test bodies the repetition.
 function _inline_model(problem; track = false,
         average_mode = AnalyticInclination(),
-        prior = problem.prior, constants = NamedTuple(),
+        prior = problem.prior, fixed = NamedTuple(),
         effective_psd = problem.effective_psd,
         observed = forward_model(
             problem.model, problem.polarization_power, problem.samples, problem.fiducials;
             average_mode = average_mode).spectral_density)
-    return astrosgwb_importance_turing_model(
+    model = astrosgwb_importance_turing_model(
         track, average_mode, problem.model, problem.polarization_power, problem.samples,
-        problem.frequencies, effective_psd, problem.observation_time, prior, constants,
-        observed)
+        problem.frequencies, effective_psd, problem.observation_time, prior, observed)
+    return model | fixed
 end
 
 @testset "Turing model smoke test with local adapter" begin
@@ -136,35 +136,27 @@ end
     end
 end
 
-@testset "constants replace conditioning" begin
+@testset "conditioning pins hyperparameters" begin
     problem = local_problem_context()
     full = _inline_model(problem)
     @test _varinfo_symbols(VarInfo(full)) == Set(keys(problem.prior))
 
-    # Restrict the prior to one parameter and hold the rest fixed at the fiducial. The
-    # chain then contains exactly the sampled variable *by construction* -- no DynamicPPL
-    # conditioning, no complement computation, no subset validation.
-    restricted_prior = (; rate_scale = problem.prior.rate_scale)
-    constants = Base.structdiff(problem.fiducials, restricted_prior)
-    @test keys(constants) == (:weight_shift,)
-
-    restricted = _inline_model(
-        problem; prior = restricted_prior, constants = constants)
+    # The prior declares every name; conditioning on the complement fixes
+    # `weight_shift` at the fiducial. The chain then contains exactly the sampled
+    # variable *by construction* -- no helpers, no subset validation.
+    fixed = (; weight_shift = problem.fiducials.weight_shift)
+    restricted = _inline_model(problem; fixed = fixed)
     @test _varinfo_symbols(VarInfo(restricted)) == Set((:rate_scale,))
 
-    # At a point whose fixed coordinate equals its constant, the restricted model scores
-    # the same likelihood as the full one -- the two differ only by the prior term the
-    # fixed variable no longer contributes.
-    θ = merge(problem.theta, (; weight_shift = problem.fiducials.weight_shift))
+    # Conditioning moves the pinned variable's prior density from the log-prior into the
+    # likelihood, so the conditioned model scored at the free coordinates equals the full
+    # model scored at the same point -- exactly, not up to a dropped prior term.
+    θ = merge(problem.theta, fixed)
     @test Turing.logjoint(restricted, (; rate_scale = θ.rate_scale)) ≈
-          Turing.logjoint(full, θ) -
-          logpdf(problem.prior.weight_shift, problem.fiducials.weight_shift)
+          Turing.logjoint(full, θ)
 
-    # `merge(constants, Λ_sampled)` lets the sampled value win, so an overlapping key
-    # would silently shadow the constant the caller asked for. The model body rejects it
-    # at the first evaluation -- the same point where a missing name surfaces as a
-    # `KeyError` on `Λ.name`.
-    overlapping = _inline_model(
-        problem; prior = restricted_prior, constants = problem.fiducials)
-    @test_throws ArgumentError Turing.logjoint(overlapping, problem.theta)
+    # A pinned value outside its prior support scores -Inf at the first evaluation. Loud
+    # by construction; no support validation anywhere in the pipeline.
+    out_of_support = _inline_model(problem; fixed = (; weight_shift = 1.0))
+    @test Turing.logjoint(out_of_support, (; rate_scale = θ.rate_scale)) == -Inf
 end

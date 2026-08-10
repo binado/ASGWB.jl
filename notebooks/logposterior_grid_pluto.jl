@@ -95,11 +95,13 @@ begin
         κ = 3.0,
         zpeak = 2.0,
         # S7: the local merger rate (Gpc^-3 yr^-1) is an ordinary hyperparameter read as
-        # `Λ.R₀`, not a prepare-time keyword. Fixed here by default; add it to
-        # `hyperprior_dists` and `sample_only` to sample it.
+        # `Λ.R₀`, not a prepare-time keyword. The grid cell pins it at this fiducial by
+        # conditioning; name it in `sample_only` to free it.
         R₀ = local_merger_rate
     )
 
+    # The prior declares every name, sampled or pinned; the `R₀` entry is the nominal
+    # distribution its conditioning pins against.
     hyperprior_dists = (
         H0 = Uniform(20.0, 140.0),
         Ωm = Uniform(0.05, 0.95),
@@ -108,7 +110,8 @@ begin
         Ξₙ = Uniform(0.05, 3.0),
         γ = Uniform(0.5, 10.0),
         κ = Uniform(0.05, 10.0),
-        zpeak = Uniform(0.05, 10.0)
+        zpeak = Uniform(0.05, 10.0),
+        R₀ = Uniform(10.0, 1000.0)
     )
     hyperprior = hyperprior_dists
 end
@@ -166,17 +169,19 @@ Wrap the Turing model with `DynamicPPL.LogDensityFunction` (non-linked ⇒ physi
 
 # ╔═╡ de9f8a7b-0c1d-4e2f-8031-5c6d7e8f9a0b
 begin
-    # S3: restrict the prior to the sampled axes and pass the rest as `constants`.
-    # The model then carries exactly the free parameters by construction.
-    prior = sample_only_tup === nothing ? hyperprior :
-            NamedTuple{sample_only_tup}(hyperprior)
-    constants = Base.structdiff(fiducials, prior)
+    # S3: the prior declares every hyperparameter name; conditioning on the complement
+    # pins the rest, so the model carries exactly the free parameters by construction.
+    # `R₀` is pinned at its fiducial unless named in `sample_only`.
+    sampled_prior = sample_only_tup === nothing ?
+                    Base.structdiff(hyperprior, (; R₀ = hyperprior.R₀)) :
+                    NamedTuple{sample_only_tup}(hyperprior)
+    fixed = Base.structdiff(fiducials, sampled_prior)
     model = astrosgwb_importance_turing_model(
         false, resolved_average_mode, prepared_model, polarization_power, samples,
-        frequencies, eff_psd, observation_time_yr, prior, constants, observed)
+        frequencies, eff_psd, observation_time_yr, hyperprior, observed) | fixed
     lf = DynamicPPL.LogDensityFunction(model)
 
-    free_order = keys(prior)
+    free_order = keys(sampled_prior)
 
     z0 = convert(Vector{Float64}, DynamicPPL.VarInfo(model)[:])
     length(z0) == length(free_order) || error(

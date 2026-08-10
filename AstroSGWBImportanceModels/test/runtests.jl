@@ -188,7 +188,8 @@ end
     # A run that samples a subset leaves the rest `Float64` while the free ones become
     # `Dual`, so `propagation(P, Λ)` sees one `Dual` and one `Float64`. Before the
     # promoting `ModifiedPropagation` constructor this was a `MethodError`, and it is the
-    # exact shape `merge(constants, Λ_sampled)` produces on every gradient evaluation.
+    # exact shape DynamicPPL conditioning produces on every gradient evaluation: free
+    # coordinates are `Dual`, pinned ones `Float64`.
     model = prepared()
     dΞ₀ = ForwardDiff.derivative(1.1) do Ξ₀
         _, w = model(merge(TARGET, (; Ξ₀)), SAMPLES)
@@ -219,27 +220,27 @@ end
         Ξₙ = Uniform(0.0, 3.0),
         γ = Uniform(0.5, 10.0),
         κ = Uniform(0.05, 10.0),
-        zpeak = Uniform(0.05, 10.0)
+        zpeak = Uniform(0.05, 10.0),
+        R₀ = Uniform(10.0, 1000.0)
     )
-    # `R₀` is fixed via `constants` rather than sampled -- the production default. The
-    # prior declares the sampled names; `constants` supplies the rest of `Λ`. `observed`
-    # is synthesized at the fiducials since there is no external spectrum to fit.
+    # The prior declares every hyperparameter the model reads. `R₀` is pinned by
+    # conditioning rather than sampled -- the production default; dropping the
+    # conditioning samples it, with no change anywhere else. `observed` is synthesized
+    # at the fiducials since there is no external spectrum to fit.
     observed = forward_model(
         model, polarization_power, SAMPLES, FIDUCIALS).spectral_density
-    turing_model = astrosgwb_importance_turing_model(
+    unconditioned = astrosgwb_importance_turing_model(
         false, AnalyticInclination(), model, polarization_power, SAMPLES, frequencies,
-        eff_psd, observation_time, prior, (; R₀ = FIDUCIALS.R₀), observed)
+        eff_psd, observation_time, prior, observed)
+    turing_model = unconditioned | (; R₀ = FIDUCIALS.R₀)
 
-    @test turing_model !== nothing
-    @test isfinite(Turing.logjoint(turing_model, FIDUCIALS))
+    Λ_sampled = Base.structdiff(FIDUCIALS, (; R₀ = nothing,))
+    @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(turing_model)))) ==
+          Set(keys(Λ_sampled))
+    @test isfinite(Turing.logjoint(turing_model, Λ_sampled))
 
-    # And the opt-in: adding `R₀` to the prior makes it a sampled variable, with no
-    # change anywhere else.
-    sampling_R₀ = astrosgwb_importance_turing_model(
-        false, AnalyticInclination(), model, polarization_power, SAMPLES, frequencies,
-        eff_psd, observation_time, merge(prior, (; R₀ = Uniform(10.0, 1000.0))),
-        NamedTuple(), observed)
-    @test isfinite(Turing.logjoint(sampling_R₀, FIDUCIALS))
-    @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(sampling_R₀)))) ==
+    # And the opt-in: the unconditioned model samples every name in the prior.
+    @test isfinite(Turing.logjoint(unconditioned, FIDUCIALS))
+    @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(unconditioned)))) ==
           Set(keys(FIDUCIALS))
 end

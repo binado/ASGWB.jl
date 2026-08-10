@@ -68,7 +68,9 @@ const AVERAGE_MODE = nothing
 const MINIMUM_FREQUENCY = 2.0
 const MAXIMUM_FREQUENCY = 4096.0
 
-# Hard-coded hyperprior bounds (matching notebooks/mcmc.jl).
+# Hard-coded hyperprior bounds (matching notebooks/mcmc.jl). The prior declares every
+# hyperparameter name, sampled or pinned; the `R₀` entry is the nominal distribution its
+# conditioning (`model | (; R₀ = …)`) pins against.
 const HYPERPRIOR = (
     H0 = Uniform(20.0, 140.0),
     Ωm = Uniform(0.05, 0.95),
@@ -77,7 +79,8 @@ const HYPERPRIOR = (
     Ξₙ = Uniform(0.3, 3.0),
     γ = Uniform(0.5, 10.0),
     κ = Uniform(0.05, 10.0),
-    zpeak = Uniform(0.05, 10.0)
+    zpeak = Uniform(0.05, 10.0),
+    R₀ = Uniform(10.0, 1000.0)
 )
 
 # --------------------------------------------------------------------------
@@ -97,11 +100,11 @@ end
 """
 Materialize the config's fiducial map as a `NamedTuple`.
 
-This is the **full** point (`prior ∪ constants`) at which `observed` is synthesized, so
-it is built from the config's own keys rather than checked against a model-declared
-order -- there is no longer such an order to check against. A key the model reads but
-the config omits throws a `KeyError` on `Λ.name` at prepare time, before NUTS starts.
-Keys are sorted for a deterministic `NamedTuple` type.
+This is the **full** point (sampled plus conditioned) at which `observed` is
+synthesized, so it is built from the config's own keys rather than checked against a
+model-declared order -- there is no longer such an order to check against. A key the
+model reads but the config omits throws a `KeyError` on `Λ.name` at prepare time, before
+NUTS starts. Keys are sorted for a deterministic `NamedTuple` type.
 """
 function _fiducials_namedtuple(cfg::MCMCConfig)
     names = Tuple(sort!(collect(keys(cfg.fiducials)); by = string))
@@ -152,12 +155,16 @@ function run_mcmc(config_file::String)
 
     @info "model" cosmology=string(C) propagation=string(P) sampleable=keys(HYPERPRIOR)
     fiducials = _fiducials_namedtuple(cfg)
-    # S3: the prior declares what is sampled, `constants` what is held fixed. The chain
-    # then carries exactly the sampled variables by construction -- no DynamicPPL
-    # conditioning, no complement computation, no subset validation.
-    prior = _restrict_prior(HYPERPRIOR, cfg.sample_only)
-    constants = Base.structdiff(fiducials, prior)
-    sample_only = keys(prior) == keys(HYPERPRIOR) ? nothing : keys(prior)
+    # S3: the prior declares every hyperparameter name; fixing one is conditioning
+    # (`model | fixed`), so the chain carries exactly the sampled variables by
+    # construction -- no complement computation, no subset validation. `R₀` is pinned at
+    # its fiducial unless named in `sample_only`.
+    sample_only = cfg.sample_only === nothing || isempty(cfg.sample_only) ? nothing :
+                  cfg.sample_only
+    sampleable = sample_only === nothing ?
+                 Base.structdiff(HYPERPRIOR, (; R₀ = HYPERPRIOR.R₀)) : HYPERPRIOR
+    prior = _restrict_prior(sampleable, cfg.sample_only)
+    fixed = Base.structdiff(fiducials, prior)
 
     @info "seeding RNG" seed = cfg.seed
     Random.seed!(cfg.seed)
@@ -193,7 +200,7 @@ function run_mcmc(config_file::String)
     output_toml = joinpath(output_dir, "$base.toml")
 
     adtype = _resolve_adtype(cfg.sampler.ad_backend)
-    @info "starting NUTS" nadapts=cfg.sampler.nadapts nsamples=cfg.sampler.nsamples target_acceptance=cfg.sampler.target_acceptance ad_backend=cfg.sampler.ad_backend sampled=keys(prior) fixed=keys(constants) nchains
+    @info "starting NUTS" nadapts=cfg.sampler.nadapts nsamples=cfg.sampler.nsamples target_acceptance=cfg.sampler.target_acceptance ad_backend=cfg.sampler.ad_backend sampled=keys(prior) fixed=keys(fixed) nchains
     # No external spectrum to fit: synthesize `observed` at the fiducials. One
     # `resolved_average_mode` reaches both this call and the model that scores it.
     observed = forward_model(
@@ -208,10 +215,9 @@ function run_mcmc(config_file::String)
         frequencies,
         eff_psd,
         cfg.observation_time,
-        prior,
-        constants,
+        HYPERPRIOR,
         observed
-    )
+    ) | fixed
     nuts = Turing.NUTS(
         cfg.sampler.nadapts,
         cfg.sampler.target_acceptance;
