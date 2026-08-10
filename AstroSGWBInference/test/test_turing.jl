@@ -45,8 +45,13 @@ _log_prior(prior, Λ) = sum(logpdf(prior[k], Λ[k]) for k in keys(prior))
     )
     returned_nt = Turing.returned(tracked, problem.theta)
     @test 0 < returned_nt.effective_sample_size <= 1
-    @test isfinite(returned_nt.spectral_snr)
-    @test returned_nt.spectral_snr^2 ≈ returned_nt.spectral_snr_squared
+    @test isfinite(returned_nt.snr)
+    Sh_theta = forward_model(
+        problem.model, problem.polarization_power, problem.samples, problem.theta).spectral_density
+    @test returned_nt.snr ≈ sqrt(spectral_snr_squared(
+        Sh_theta, problem.effective_psd,
+        year_to_second(problem.observation_time),
+        frequency_bin_width(problem.frequencies)))
 
     chain = sample(
         model,
