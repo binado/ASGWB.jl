@@ -76,7 +76,6 @@ function prepare_bns_madau_dickinson_model(
 ) where {C <: AbstractCosmology, P <: AbstractPropagation}
     z = samples.redshift
     zg = collect(Float64, z_grid)
-    validate_redshift_grid(zg)
 
     # DataInterpolations throws outside the grid. Report this as a model-setup error
     # before preparing proposal values. `all` on an empty collection is `true`, so

@@ -25,8 +25,7 @@ using Cosmology:
                  gw_em_distance_ratio,
                  luminosity_distance,
                  propagation,
-                 trapz,
-                 validate_redshift_grid
+                 trapz
 using DataInterpolations: LinearInterpolation
 
 export BNSMadauDickinsonImportanceModel,

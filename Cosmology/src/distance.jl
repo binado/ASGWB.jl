@@ -36,7 +36,6 @@ must contain at least two strictly increasing nodes and start at zero, because t
 cumulative comoving-distance integral assumes `d_c(0) = 0`.
 """
 function distance_and_volume_grid(c::AbstractCosmology, z_grid::AbstractVector{<:Real})
-    validate_redshift_grid(z_grid)
     inv_E = inv.(E.(z_grid, Ref(c)))
     d_h = SPEED_OF_LIGHT_KM_S / H0(c)
     d_c = d_h .* cumtrapz(z_grid, inv_E)
@@ -45,24 +44,6 @@ function distance_and_volume_grid(c::AbstractCosmology, z_grid::AbstractVector{<
         luminosity_distance = (1 .+ z_grid) .* d_c,
         differential_comoving_volume = @. d_h * d_c^2 * inv_E
     )
-end
-
-"""
-    validate_redshift_grid(z_grid) -> nothing
-
-Require at least two strictly increasing redshift nodes starting at zero. These are the
-preconditions for cumulative distance tabulation.
-"""
-function validate_redshift_grid(z_grid::AbstractVector{<:Real})
-    n = length(z_grid)
-    n >= 2 || throw(ArgumentError("redshift grid must contain at least two points"))
-    iszero(first(z_grid)) ||
-        throw(ArgumentError("redshift grid must start at zero"))
-    @inbounds for i in 1:(n - 1)
-        z_grid[i + 1] > z_grid[i] ||
-            throw(ArgumentError("redshift grid must be strictly increasing"))
-    end
-    return nothing
 end
 
 """
