@@ -5,7 +5,6 @@ using AstroSGWB:
                  AbstractAverageMode,
                  AnalyticInclination,
                  CatalogInclination,
-                 normalized_ess,
                  spectral_snr_squared,
                  frequency_bin_width,
                  gaussian_bin_scale,
@@ -15,6 +14,7 @@ using LinearAlgebra: Diagonal
 using Turing
 
 include("forward.jl")
+include("diagnostics.jl")
 include("turing_model.jl")
 
 export forward_model,

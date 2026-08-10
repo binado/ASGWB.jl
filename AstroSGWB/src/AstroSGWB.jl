@@ -56,7 +56,6 @@ include("detector/effective_psd.jl")
 include("detector/observation.jl")
 include("spectral_density.jl")
 include("snr.jl")
-include("diagnostics.jl")
 
 # Types
 export canonical_hyperparameters,
@@ -148,9 +147,6 @@ export spectral_density,
        spectral_snr_squared,
        spectral_snr,
        Ωgw
-
-# Diagnostics
-export normalized_ess
 
 # Time conversions
 export JULIAN_YEAR_SEC,
