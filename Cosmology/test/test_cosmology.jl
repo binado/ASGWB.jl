@@ -4,9 +4,9 @@ using ForwardDiff
 using Cosmology: CumulativeIntegral1D, cdf, hubble_constant_si, interpolate,
                  normalizer, cosmology, cosmology_type, cosmology_config_name,
                  SUPPORTED_COSMOLOGIES, comoving_distance, W0CDM, W0WaCDM,
-                 GR, ModifiedPropagation, hyperparameters,
+                 GR, ModifiedPropagation,
                  propagation, propagation_type, propagation_config_name,
-                 propagation_hyperparameters, SUPPORTED_PROPAGATIONS
+                 SUPPORTED_PROPAGATIONS
 
 @testset "hubble_constant_si" begin
     H0 = 70.0
@@ -107,11 +107,7 @@ end
                              3.0], p_mod)
 end
 
-@testset "cosmology hyperparameters and cosmology" begin
-    @test hyperparameters(LambdaCDM) == (:H0, :Ωm)
-    @test hyperparameters(W0CDM) == (:H0, :Ωm, :w0)
-    @test hyperparameters(W0WaCDM) == (:H0, :Ωm, :w0, :wa)
-
+@testset "cosmology construction" begin
     h_lcdm = (H0 = 67.0, Ωm = 0.315)
     @test cosmology(LambdaCDM, h_lcdm) == LambdaCDM(67.0, 0.315)
     @test LambdaCDM(h_lcdm) == LambdaCDM(67.0, 0.315)
@@ -134,9 +130,6 @@ end
 end
 
 @testset "propagation axis" begin
-    @test propagation_hyperparameters(GR) == ()
-    @test propagation_hyperparameters(ModifiedPropagation) == (:Ξ₀, :Ξₙ)
-
     @test propagation(GR, (;)) === GR()
     h_mod = (Ξ₀ = 1.2, Ξₙ = 2.0)
     p_mod = propagation(ModifiedPropagation, h_mod)

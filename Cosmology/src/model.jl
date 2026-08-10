@@ -35,18 +35,9 @@ const SUPPORTED_COSMOLOGIES = (
 )
 
 """
-    hyperparameters(::Type{C}) -> Tuple{Vararg{Symbol}}
-
-Hyperparameter symbols for cosmology subtype `C`, in struct field order.
-"""
-hyperparameters(::Type{C}) where {C <: AbstractCosmology} = fieldnames(C)
-
-const cosmology_parameters = hyperparameters
-
-"""
     cosmology(::Type{C}, h::NamedTuple) -> C
 
-Build cosmology subtype `C` from hyperparameter state `h` (fields must match [`hyperparameters`](@ref)(`C`)).
+Build cosmology subtype `C` from the corresponding fields in hyperparameter state `h`.
 """
 function cosmology(::Type{C}, h::NamedTuple) where {C <: AbstractCosmology}
     fn = fieldnames(C)
@@ -123,14 +114,6 @@ Base.broadcastable(p::AbstractPropagation) = Ref(p)
 
 """Supported configurable propagation subtypes (registration order)."""
 const SUPPORTED_PROPAGATIONS = (GR, ModifiedPropagation)
-
-"""
-    propagation_hyperparameters(::Type{P}) -> Tuple{Vararg{Symbol}}
-
-Hyperparameter symbols owned by propagation subtype `P`.
-"""
-propagation_hyperparameters(::Type{GR}) = ()
-propagation_hyperparameters(::Type{<:ModifiedPropagation}) = (:Ξ₀, :Ξₙ)
 
 """
     propagation(::Type{P}, h::NamedTuple) -> AbstractPropagation

@@ -4,7 +4,6 @@ using CBCDistributions
 
 @testset "PopulationModel interface — TestPop" begin
     pop = TestPop()
-    @test hyperparameters(pop) == (:α, :β)
 
     hp = population_hyperprior(pop)
     @test hp isa Distributions.ProductNamedTupleDistribution
@@ -27,10 +26,8 @@ end
     @test maximum(prior.dists.redshift) == last(z_grid)
 end
 
-@testset "full_hyperparameters and merge_hyperpriors" begin
+@testset "caller-owned hyperprior composition" begin
     pop = TestPop()
-    @test full_hyperparameters(LambdaCDM, ModifiedPropagation, pop) ==
-          (:H0, :Ωm, :Ξ₀, :Ξₙ, :α, :β)
 
     hp = merge_hyperpriors(
         cosmology_hyperprior(LambdaCDM),
@@ -39,10 +36,6 @@ end
     )
     @test hp isa Distributions.ProductNamedTupleDistribution
     @test keys(hp.dists) == (:H0, :Ωm, :Ξ₀, :Ξₙ, :α, :β)
-
-    @test full_hyperparameters(LambdaCDM, GR, pop) == (:H0, :Ωm, :α, :β)
-    @test full_hyperparameters(W0CDM, ModifiedPropagation, pop) ==
-          (:H0, :Ωm, :w0, :Ξ₀, :Ξₙ, :α, :β)
 end
 
 @testset "cosmology_hyperprior for cosmology types" begin

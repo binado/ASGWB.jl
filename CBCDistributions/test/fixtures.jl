@@ -5,9 +5,6 @@ using CBCDistributions
 struct TestPop <: PopulationModel end
 struct TestRedshiftPop <: PopulationModel end
 
-CBCDistributions.hyperparameters(::TestPop) = (:α, :β)
-CBCDistributions.hyperparameters(::TestRedshiftPop) = (:γ, :κ, :zpeak)
-
 function population_hyperprior(::TestPop)
     return product_distribution((
         α = Uniform(0.0, 1.0),

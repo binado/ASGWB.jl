@@ -19,9 +19,9 @@ begin
                      redshift_prior,
                      luminosity_distance
     using Cosmology: AbstractCosmology
-    using CBCDistributions: DefaultBBHMassPair, PopulationModel, hyperparameters,
+    using CBCDistributions: DefaultBBHMassPair, PopulationModel,
                             single_event_prior
-    import CBCDistributions: hyperparameters, single_event_prior
+    import CBCDistributions: single_event_prior
     using Distributions: Uniform, product_distribution, ProductNamedTupleDistribution
     using DataFrames
     using CSV
@@ -68,26 +68,16 @@ end
 md"""
 ## Defining the model
 
-All we need to do to define a population model is to create a struct which subtypes `PopulationModel` and defines two methods:
-- a `hyperparameters(model)` method which returns a tuple of symbols of the hyperparameters of the model
-- a `single_event_prior(model, cosmology, Λ; z_grid)` method which, for a given hyperparameter vector ``Λ``, returns ``p(\theta | \Lambda,~\textrm{cosmo})``
+To define a population model, create a struct which subtypes `PopulationModel` and define
+`single_event_prior(model, cosmology, Λ; z_grid)`. For a given flat hyperparameter
+state ``Λ``, it returns ``p(\theta | \Lambda,~\textrm{cosmo})``. The caller-owned
+hyperprior declares the names in ``Λ``.
 """
 
 # ╔═╡ a1b2c3d4-0004-4e5f-9a0b-1c2d3e4f5a6b
 begin
     struct BNSUniformMassAlignedSpinTidalSFR <: PopulationModel end
     struct BBHAlignedSpinModel <: PopulationModel end
-
-    function hyperparameters(::BNSUniformMassAlignedSpinTidalSFR)
-        (:γ, :κ, :zpeak, :m_low, :m_high, :a_max, :lambda_max)
-    end
-
-    function hyperparameters(::BBHAlignedSpinModel)
-        (
-            :γ, :κ, :zpeak, :α1, :α2, :m_break, :μ1, :σ1, :μ2, :σ2,
-            :m1_low, :δm1, :λ0, :λ1, :βq, :m2_low, :δm2, :m_high, :a_max
-        )
-    end
 
     function single_event_prior(
             ::BNSUniformMassAlignedSpinTidalSFR,

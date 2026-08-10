@@ -4,9 +4,8 @@ using Distributions
     PopulationModel
 
 Abstract supertype for caller-defined population models.  Concrete subtypes
-must implement the two-method contract:
+must implement:
 
-- `hyperparameters(pop) -> NTuple{N, Symbol}` — ordered population parameter names.
 - `single_event_prior(pop, cosmology, Λ; z_grid) -> ProductNamedTupleDistribution`
   — per-event distribution conditioned on the cosmology and hyperparameters `Λ`.
   Build the redshift component with `redshift_prior(sf_model, cosmology, Λ; z_grid)`.
@@ -19,14 +18,6 @@ abstract type PopulationModel end
 Base.broadcastable(m::PopulationModel) = Ref(m)
 
 """
-    hyperparameters(pop::PopulationModel) -> NTuple{N,Symbol}
-
-Ordered tuple of hyperparameter symbols owned by `pop`.  Implement on concrete
-subtypes; do not overlap with the cosmology symbols.
-"""
-function hyperparameters end
-
-"""
     single_event_prior(pop, cosmology, Λ; z_grid) -> ProductNamedTupleDistribution
 
 Per-event distribution over intrinsic parameters for a cosmology and hyperparameter
@@ -34,21 +25,6 @@ state `Λ`. Implement on concrete `PopulationModel` subtypes, threading `z_grid`
 `redshift_prior` when the population includes redshift.
 """
 function single_event_prior end
-
-"""
-    full_hyperparameters(C, P, pop) -> NTuple{N,Symbol}
-
-Concatenation of cosmology, propagation, and population hyperparameter symbols, in
-the order used for the flat HMC/Turing parameter vector: `(cosmo…, Ξ₀, Ξₙ, pop…)`.
-"""
-function full_hyperparameters(
-        ::Type{C}, ::Type{P},
-        pop::PopulationModel
-) where {C <: AbstractCosmology, P <: AbstractPropagation}
-    return (Cosmology.hyperparameters(C)...,
-        Cosmology.propagation_hyperparameters(P)...,
-        hyperparameters(pop)...)
-end
 
 """
     validate_hyperparameters(order, Λ; context) -> nothing

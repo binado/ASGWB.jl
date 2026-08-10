@@ -43,7 +43,7 @@ using Cosmology
 import CBCDistributions: single_event_prior
 import Cosmology: apply_gw_distance_correction, apply_gw_distance_correction!,
                   cosmology, cosmology_type,
-                  gw_em_distance_ratio, hyperparameters,
+                  gw_em_distance_ratio,
                   propagation, propagation_type
 
 include("catalog/catalog.jl")
@@ -96,7 +96,6 @@ export E,
        cosmology_type,
        SUPPORTED_COSMOLOGIES,
        propagation,
-       propagation_hyperparameters,
        propagation_type,
        propagation_config_name,
        SUPPORTED_PROPAGATIONS,

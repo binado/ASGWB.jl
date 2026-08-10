@@ -47,13 +47,13 @@ julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
 1. Provide a waveform **catalog** HDF5 file (`catalog.h5`) at the repo root or set `catalog_path` in the notebook. Catalogs store per-sample intrinsic parameters and a `(nfreq, nsamples)` polarization-power matrix `|h₊|² + |h×|²` (before fiducial `(D_L/D_gw)²` scaling). Use [`AstroSGWB.load_catalog`](AstroSGWB/src/catalog/io.jl) / [`AstroSGWB.save_catalog`](AstroSGWB/src/catalog/io.jl).
 2. Select an importance adapter. The built-in BNS Madau–Dickinson path is
    `AstroSGWBImportanceModels.BNSMadauDickinsonImportanceModel`; custom caller-owned
-   adapters remain supported through the same two-method inference contract.
+   adapters remain supported through the same callable inference contract.
 3. The catalog's `samples` NamedTuple already carries both `redshift` and
    `luminosity_distance`; pass it through directly.
 4. Keep the catalog polarization power, restructured samples, and fiducial hyperparameters as explicit values; these are passed directly to forward-model and inference helpers.
 5. Prepare the built-in model with `prepare_bns_madau_dickinson_model(...)`, or assemble
-   a caller-owned model implementing `AstroSGWBInference.hyperparameters(model)` and
-   `merger_rate_and_log_weights(model, Λ, samples)`. Compute the detector network's
+   a caller-owned callable implementing `weights_fn(Λ, samples) -> (rate, log_weights)`.
+   The prior declares every hyperparameter name. Compute the detector network's
    effective PSD separately with `effective_psd(frequencies, detectors)`.
 6. Synthesize `observed` at the fiducials with `AstroSGWBInference.forward_model(model, polarization_power, samples, fiducials).spectral_density` when there is no external spectrum to fit, so the modified-propagation factors `Ξ(z)` are applied consistently; construct the Turing model directly with `AstroSGWBInference.astrosgwb_importance_turing_model(track, average_mode, model, polarization_power, samples, frequencies, effective_psd, observation_time, prior, observed)` — the prior declares all hyperparameter names, and fixing one is conditioning, e.g. `model | (; R₀ = fiducials.R₀)` — sample with Turing NUTS, and save chains to netCDF via `InferenceObjects.convert_to_inference_data(chain)` + `InferenceObjects.to_netcdf`.
 

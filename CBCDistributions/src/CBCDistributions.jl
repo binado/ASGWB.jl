@@ -1,12 +1,11 @@
 module CBCDistributions
 
 import Cosmology
-import Cosmology: AbstractCosmology, AbstractPropagation,
+import Cosmology: AbstractCosmology,
                   CumulativeIntegral1D, cdf, interpolate, normalizer,
-                  distance_and_volume_grid, hyperparameters, propagation_hyperparameters
+                  distance_and_volume_grid
 
-export PopulationModel, hyperparameters, single_event_prior,
-       full_hyperparameters,
+export PopulationModel, single_event_prior,
        canonical_hyperparameters, validate_hyperparameters
 export MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior, DEFAULT_Z_GRID
 export DefaultBBHPrimaryMass, DefaultBBHMassPair, planck_taper

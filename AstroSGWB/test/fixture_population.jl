@@ -1,15 +1,12 @@
 # Test-only reference population implementing the PopulationModel contract.
 using AstroSGWB: DEFAULT_Z_GRID, OrderedUniformSourceMassPair, AlignedSpinChiSimple,
                  redshift_prior, MadauDickinsonSourceFrame
-using CBCDistributions: PopulationModel, full_hyperparameters, single_event_prior
-import Cosmology
+using CBCDistributions: PopulationModel, single_event_prior
 import Cosmology: AbstractCosmology
 import CBCDistributions: single_event_prior
 using Distributions: Uniform, product_distribution
 
 struct ParityBNSPopulation <: PopulationModel end
-
-Cosmology.hyperparameters(::ParityBNSPopulation) = (:γ, :κ, :zpeak)
 
 function parity_population_hyperprior()
     return product_distribution((

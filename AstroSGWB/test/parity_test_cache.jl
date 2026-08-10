@@ -18,17 +18,15 @@ const _PARITY_MAXIMUM_FREQUENCY = 40.0
 const _PARITY_REFERENCE_FREQUENCY = 20.0
 const _PARITY_SAMPLING_FREQUENCY = 80.0
 
-function _parity_hyperparameters(C, P, pop, overrides::NamedTuple = NamedTuple())
+function _parity_hyperparameters(overrides::NamedTuple = NamedTuple())
     defaults = (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
-    order = full_hyperparameters(C, P, pop)
-    return canonical_hyperparameters(order, merge(defaults, overrides))
+    return canonical_hyperparameters(keys(defaults), merge(defaults, overrides))
 end
 
-function _parity_hyperparameters_w0(C, P, pop, overrides::NamedTuple = NamedTuple())
+function _parity_hyperparameters_w0(overrides::NamedTuple = NamedTuple())
     defaults = (H0 = 67.0, Ωm = 0.315, w0 = -0.9, Ξ₀ = 1.0, Ξₙ = 0.0,
         γ = 2.7, κ = 3.0, zpeak = 2.5)
-    order = full_hyperparameters(C, P, pop)
-    return canonical_hyperparameters(order, merge(defaults, overrides))
+    return canonical_hyperparameters(keys(defaults), merge(defaults, overrides))
 end
 
 function _write_parity_catalog!(dir::String, variant::Symbol)
@@ -116,10 +114,6 @@ function _make_bns_samples(masses1, masses2, redshifts; chi1 = nothing, chi2 = n
 end
 
 function _write_posterior_catalog(dir)
-    C, P = LambdaCDM, ModifiedPropagation
-    pop = ParityBNSPopulation()
-    Λ = _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.0))
-
     samples = _make_bns_samples(
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
@@ -130,10 +124,6 @@ function _write_posterior_catalog(dir)
 end
 
 function _write_full_intrinsic_catalog(dir)
-    C, P = LambdaCDM, ModifiedPropagation
-    pop = ParityBNSPopulation()
-    Λ = _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.0))
-
     samples = _make_bns_samples(
         [1.8, 2.2, 1.4, 2.4], [1.2, 1.7, 1.1, 1.3], [0.1, 0.2, 0.3, 0.5];
         chi1 = [0.0, 0.2, -0.1, 0.5],
@@ -150,10 +140,6 @@ function _write_full_intrinsic_catalog(dir)
 end
 
 function _write_importance_context_catalog(dir)
-    C, P = LambdaCDM, ModifiedPropagation
-    pop = ParityBNSPopulation()
-    Λ = _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5))
-
     samples = _make_bns_samples(
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
@@ -178,10 +164,6 @@ function _write_sampled_inclination_catalog(dir)
 end
 
 function _write_w0cdm_catalog(dir)
-    C, P = W0CDM, ModifiedPropagation
-    pop = ParityBNSPopulation()
-    Λ = _parity_hyperparameters_w0(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5))
-
     samples = _make_bns_samples(
         [1.4, 1.4], [1.2, 1.2], [0.1, 0.2];
         luminosity_distances = [430.0, 880.0]
@@ -229,15 +211,13 @@ catalog, sample, and observation data.
 function parity_problem_context(variant::Symbol, detectors)
     dir = parity_catalog_dir(variant)
     catalog = load_catalog(joinpath(dir, "catalog.h5"))
-    pop = ParityBNSPopulation()
-    C = variant == :w0cdm ? W0CDM : LambdaCDM
     P = ModifiedPropagation
     Λ = variant == :w0cdm ?
-        _parity_hyperparameters_w0(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5)) :
+        _parity_hyperparameters_w0((γ = 2.7, κ = 3.0, zpeak = 2.5)) :
         if variant == :posterior || variant == :full_intrinsic
-        _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.0))
+        _parity_hyperparameters((γ = 2.7, κ = 3.0, zpeak = 2.0))
     else
-        _parity_hyperparameters(C, P, pop, (γ = 2.7, κ = 3.0, zpeak = 2.5))
+        _parity_hyperparameters((γ = 2.7, κ = 3.0, zpeak = 2.5))
     end
     samples = parity_bns_samples_from_catalog(catalog.samples)
     # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
