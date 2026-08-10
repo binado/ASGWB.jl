@@ -48,8 +48,8 @@ julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
 2. Select an importance adapter. The built-in BNS Madau–Dickinson path is
    `AstroSGWBImportanceModels.BNSMadauDickinsonImportanceModel`; custom caller-owned
    adapters remain supported through the same two-method inference contract.
-3. Restructure catalog columns with
-   `AstroSGWBImportanceModels.bns_samples_from_catalog` (or a custom adapter).
+3. The catalog's `samples` NamedTuple already carries both `redshift` and
+   `luminosity_distance`; pass it through directly.
 4. Keep the catalog polarization power, restructured samples, and fiducial hyperparameters as explicit values; these are passed directly to forward-model and inference helpers.
 5. Prepare the built-in model with `prepare_bns_madau_dickinson_model(...)`, or assemble
    a caller-owned model implementing `AstroSGWBInference.hyperparameters(model)` and

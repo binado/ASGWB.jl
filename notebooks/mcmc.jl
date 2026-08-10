@@ -34,8 +34,6 @@ The canonical adapter is `BNSMadauDickinsonImportanceModel{C, P}` from
 
 Hyperparameter *names* are declared by the hyperprior below, not by the model: a name the
 model reads but the prior omits throws a `KeyError` on `Λ.name` at the first evaluation.
-
-`bns_samples_from_catalog` keeps only the catalog columns the weight loop reads (`redshift` and `luminosity_distance`); when the catalog omits `luminosity_distance` it is generated once from redshift at the fiducial cosmology, so the `samples` NamedTuple stays the single source of truth for the EM distance.
 """
 
 # ╔═╡ b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e
@@ -148,7 +146,7 @@ begin
     @info "average mode" mode=string(resolved_average_mode) has_inclination_column=haskey(
         catalog.samples, :inclination)
 
-    samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
+    samples = catalog.samples
 
     # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
@@ -380,7 +378,6 @@ begin
                      year_to_second,
                      Ωgw
     using AstroSGWBImportanceModels:
-                                     bns_samples_from_catalog,
                                      prepare_bns_madau_dickinson_model
     using AstroSGWBInference: build_turing_model, forward_model
     using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config

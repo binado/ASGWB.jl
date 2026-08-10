@@ -42,7 +42,6 @@ begin
                      ModifiedPropagation
     using AstroSGWBInference: build_turing_model, forward_model
     using AstroSGWBImportanceModels:
-                                     bns_samples_from_catalog,
                                      prepare_bns_madau_dickinson_model
     using Distributions: Uniform
     using Turing
@@ -124,7 +123,7 @@ begin
     @info "average mode" mode = string(resolved_average_mode)
     C = W0CDM
     P = ModifiedPropagation
-    samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
+    samples = catalog.samples
 
     # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.

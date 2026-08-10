@@ -30,25 +30,6 @@ const _NON_GR_FIDUCIAL_NOTICE = "BNS model: non-GR fiducial propagation; log-wei
                                 "at the same fiducials"
 
 """
-    bns_samples_from_catalog(catalog_samples, C, fiducials) -> NamedTuple
-
-Keep the catalog columns used by the BNS importance-weight loop. A stored
-`luminosity_distance` column is copied verbatim; otherwise EM luminosity distances are
-synthesized at the fiducial cosmology `C`.
-"""
-function bns_samples_from_catalog(
-        catalog_samples::NamedTuple,
-        ::Type{C},
-        fiducials::NamedTuple
-) where {C <: AbstractCosmology}
-    z = copy(catalog_samples.redshift)
-    d_l = haskey(catalog_samples, :luminosity_distance) ?
-          copy(catalog_samples.luminosity_distance) :
-          luminosity_distance.(z, Ref(cosmology(C, fiducials)))
-    return (redshift = z, luminosity_distance = d_l)
-end
-
-"""
     prepare_bns_madau_dickinson_model(samples, fiducials, C, P; z_grid=DEFAULT_Z_GRID)
 
 Precompute the Float64 proposal caches for the canonical BNS Madau–Dickinson importance

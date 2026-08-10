@@ -23,7 +23,6 @@ using AstroSGWB:
                  W0CDM,
                  Detector
 using AstroSGWBImportanceModels:
-                                 bns_samples_from_catalog,
                                  prepare_bns_madau_dickinson_model
 using AstroSGWBInference:
                           build_turing_model,
@@ -167,7 +166,7 @@ function run_mcmc(config_file::String)
     resolved_average_mode = AVERAGE_MODE === nothing ? average_mode(catalog) : AVERAGE_MODE
     @info "average mode" mode=string(resolved_average_mode) derived=(AVERAGE_MODE===nothing) has_inclination_column=haskey(
         catalog.samples, :inclination)
-    samples = bns_samples_from_catalog(catalog.samples, C, fiducials)
+    samples = catalog.samples
     # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, fiducials))

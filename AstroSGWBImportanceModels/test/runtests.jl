@@ -54,27 +54,6 @@ end
     @test length(log_weights) == length(SAMPLES.redshift)
 end
 
-@testset "catalog sample adaptation" begin
-    stored = (
-        redshift = [0.1, 0.2],
-        luminosity_distance = [12.0, 34.0],
-        unused = [1, 2]
-    )
-    adapted = bns_samples_from_catalog(stored, LambdaCDM, FIDUCIALS)
-    @test adapted == (redshift = [0.1, 0.2], luminosity_distance = [12.0, 34.0])
-    @test adapted.redshift !== stored.redshift
-    @test adapted.luminosity_distance !== stored.luminosity_distance
-
-    without_distance = (redshift = [0.1, 0.2], unused = [1, 2])
-    synthesized = bns_samples_from_catalog(without_distance, LambdaCDM, FIDUCIALS)
-    expected = luminosity_distance.(
-        without_distance.redshift, Ref(cosmology(LambdaCDM, FIDUCIALS)))
-    @test synthesized.redshift == without_distance.redshift
-    @test synthesized.luminosity_distance ≈ expected
-    @test all(isfinite, synthesized.luminosity_distance)
-    @test all(>(0), synthesized.luminosity_distance)
-end
-
 @testset "preparation caches and fixed-fixture parity" begin
     model = prepared()
     @test model isa BNSMadauDickinsonImportanceModel{LambdaCDM, ModifiedPropagation}
@@ -130,16 +109,6 @@ end
     grid_samples = (redshift = z, luminosity_distance = d_l_grid)
     _, w = model(FIDUCIALS, grid_samples)
     @test maximum(abs, w) < 1e-14
-
-    # With the production sample adapter the residual is NOT zero: it synthesizes `d_L`
-    # with `quadgk` while the hot path reads a 256-point grid. Pre-existing systematic
-    # (~4.6e-2 in log-weight at z = 0.1), tracked separately. astrogwb has the same
-    # residual for the same reason — its catalog `luminosity_distance` column also does
-    # not come from the 256-point grid the weights are evaluated on.
-    _,
-    w_quadgk = model(FIDUCIALS,
-        bns_samples_from_catalog((redshift = z,), LambdaCDM, FIDUCIALS))
-    @test 1e-3 < maximum(abs, w_quadgk) < 1e-1
 end
 
 @testset "DEFAULT_Z_GRID starts at zero" begin

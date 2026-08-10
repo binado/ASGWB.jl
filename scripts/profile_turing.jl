@@ -20,7 +20,6 @@ using Distributions: logpdf, Uniform
 using AstroSGWB
 using AstroSGWBInference: build_turing_model, forward_model
 using AstroSGWBImportanceModels:
-                                 bns_samples_from_catalog,
                                  prepare_bns_madau_dickinson_model
 using AstroSGWB:
                  merger_rate_per_sec,
@@ -261,7 +260,7 @@ function _run(;
     # S7: `R₀` is a live hyperparameter now. The profiler keeps it out of `priors` and
     # threads the config's `local_merger_rate` in as a constant, matching production.
     θ0 = merge(_theta0_from_toml(init_tbl, order), (; R₀ = local_merger_rate))
-    samples = bns_samples_from_catalog(catalog.samples, C, θ0)
+    samples = catalog.samples
     # Re-reference the stored EM-distance polarization power to the fiducial GW distance, matching the
     # `+2 log Ξ_fid` term the prepared model's log-weights carry. No-op under Ξ₀ = 1.
     apply_gw_distance_correction!(catalog, propagation(P, θ0))

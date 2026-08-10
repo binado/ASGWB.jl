@@ -23,13 +23,11 @@ using Cosmology:
                  cosmology,
                  distance_and_volume_grid,
                  gw_em_distance_ratio,
-                 luminosity_distance,
                  propagation,
                  trapz
 using DataInterpolations: LinearInterpolation
 
 export BNSMadauDickinsonImportanceModel,
-       bns_samples_from_catalog,
        prepare_bns_madau_dickinson_model
 
 include("models/bns_madau_dickinson.jl")
