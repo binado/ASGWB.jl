@@ -40,7 +40,6 @@ module AstroSGWB
 
 using CBCDistributions
 using Cosmology
-import CBCDistributions: single_event_prior
 import Cosmology: apply_gw_distance_correction, apply_gw_distance_correction!,
                   cosmology, cosmology_type,
                   gw_em_distance_ratio,

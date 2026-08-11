@@ -108,7 +108,8 @@ function _bns_grid_terms(
         z_samples::AbstractVector{<:Real}
 ) where {C <: AbstractCosmology}
     g = distance_and_volume_grid(cosmology(C, Λ), zg)
-    sfd = source_frame_distribution.(Ref(MadauDickinsonSourceFrame()), zg, Ref(Λ))
+    source_model = MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+    sfd = source_frame_distribution.(Ref(source_model), zg)
     dN_dz = detector_frame_merger_rate_density.(zg, g.differential_comoving_volume, sfd)
     norm = trapz(zg, dN_dz)
     p = _linear_interpolate(dN_dz, zg, z_samples)

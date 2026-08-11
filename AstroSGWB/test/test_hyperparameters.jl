@@ -1,10 +1,6 @@
 using Test
 using AstroSGWB
 
-if !@isdefined ParityBNSPopulation
-    include(joinpath(@__DIR__, "fixture_population.jl"))
-end
-
 @testset "caller-owned hyperparameter validation" begin
     expected_order = (:H0, :Ωm, :Ξ₀, :Ξₙ, :γ, :κ, :zpeak)
 

@@ -325,8 +325,9 @@ function _run(;
     # Mirrors what the importance model's hot path now does: one cosmology pass on the
     # grid, then a trapezoid normalizer without constructing a sampling distribution.
     grid0 = distance_and_volume_grid(c0, model.z_grid)
-    sfd0 = source_frame_distribution.(
-        Ref(MadauDickinsonSourceFrame()), model.z_grid, Ref(h))
+    source_model0 = MadauDickinsonSourceFrame(
+        γ = h.γ, κ = h.κ, zpeak = h.zpeak)
+    sfd0 = source_frame_distribution.(Ref(source_model0), model.z_grid)
     dN_dz0 = detector_frame_merger_rate_density.(
         model.z_grid, grid0.differential_comoving_volume, sfd0)
     norm0 = trapz(model.z_grid, dN_dz0)

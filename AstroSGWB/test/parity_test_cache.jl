@@ -2,10 +2,6 @@
 
 import PlusCross
 
-if !@isdefined ParityBNSPopulation
-    include(joinpath(@__DIR__, "fixture_population.jl"))
-end
-
 const _PARITY_APPROXIMANT = "IMRPhenomPV2_NRTidalv2"
 
 # The frequency axis and band edges are stored in the catalog file, not derived

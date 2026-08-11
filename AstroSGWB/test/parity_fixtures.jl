@@ -5,10 +5,6 @@
 using AstroSGWB: canonical_hyperparameters
 using Distributions: Uniform, product_distribution
 
-if !@isdefined ParityBNSPopulation
-    include(joinpath(@__DIR__, "fixture_population.jl"))
-end
-
 # Cosmology bounds duplicated from CBCDistributions/test/fixtures.jl (canonical test values).
 const PARITY_PRIORS = product_distribution(merge(
     (

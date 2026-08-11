@@ -18,8 +18,8 @@ end
         @test madau_dickinson_source_frame_distribution(z; γ, κ, zpeak) ≈
               _madau_dickinson_with_denom_exp(z, γ, denom_exp, zpeak)
     end
-    @test source_frame_distribution(
-        MadauDickinsonSourceFrame(), 1.0, (; γ, κ, zpeak)) ≈
+    model = MadauDickinsonSourceFrame(; γ, κ, zpeak)
+    @test source_frame_distribution(model, 1.0) ≈
           madau_dickinson_source_frame_distribution(1.0; γ, κ, zpeak)
 end
 
@@ -27,7 +27,9 @@ end
     Λ = (γ = 2.7, κ = 3.0, zpeak = 2.5)
     cosmo = LambdaCDM(67.0, 0.315)
     z_grid = collect(LinRange(0.0, 2.0, 101))
-    source_frame_fn = z -> source_frame_distribution(MadauDickinsonSourceFrame(), z, Λ)
+    source_model = MadauDickinsonSourceFrame(
+        γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+    source_frame_fn = z -> source_frame_distribution(source_model, z)
 
     prior = build_redshift_prior(source_frame_fn, cosmo, z_grid)
     grid = distance_and_volume_grid(cosmo, z_grid)
@@ -40,7 +42,7 @@ end
     @test prior.y ≈ expected
     @test redshift_integral(prior) === trapz(prior.x, prior.y)
 
-    distribution = redshift_prior(MadauDickinsonSourceFrame(), cosmo, Λ; z_grid)
+    distribution = redshift_prior(source_model, cosmo; z_grid)
     @test minimum(distribution) == first(z_grid)
     @test maximum(distribution) == last(z_grid)
     @test isfinite(logpdf(distribution, 0.5))
@@ -55,12 +57,9 @@ end
     Λ = (γ = 2.7, κ = 3.0, zpeak = 2.5)
     z_grid = collect(LinRange(0.0, 2.0, 101))
     f = Ωm -> begin
-        distribution = redshift_prior(
-            MadauDickinsonSourceFrame(),
-            LambdaCDM(67.0, Ωm),
-            Λ;
-            z_grid
-        )
+        source_model = MadauDickinsonSourceFrame(
+            γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+        distribution = redshift_prior(source_model, LambdaCDM(67.0, Ωm); z_grid)
         redshift_integral(distribution.prior)
     end
     derivative = ForwardDiff.derivative(f, 0.315)

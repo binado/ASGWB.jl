@@ -119,38 +119,46 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    MadauDickinsonSourceFrame
+    MadauDickinsonSourceFrame(; γ, κ, zpeak)
 
-Dispatch tag for the Madau–Dickinson (2014) star-formation-rate source-frame
-merger-rate model.  Pass to [`source_frame_distribution`](@ref) or
-[`redshift_prior`](@ref).
+Parameterized Madau–Dickinson (2014) source-frame merger-rate model.
 """
-struct MadauDickinsonSourceFrame end
+struct MadauDickinsonSourceFrame{Tγ <: Real, Tκ <: Real, Tzpeak <: Real}
+    γ::Tγ
+    κ::Tκ
+    zpeak::Tzpeak
+end
 
-"""
-    source_frame_distribution(::MadauDickinsonSourceFrame, z, Λ) -> Real
-
-Source-frame merger-rate density at redshift `z` under the Madau–Dickinson model.
-Reads `γ`, `κ`, `zpeak` from `Λ`; the denominator exponent is `γ + κ`.
-"""
-function source_frame_distribution(::MadauDickinsonSourceFrame, z::Real, Λ::NamedTuple)
-    return madau_dickinson_source_frame_distribution(z; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+function MadauDickinsonSourceFrame(; γ::Real, κ::Real, zpeak::Real)
+    γ′, κ′, zpeak′ = promote(γ, κ, zpeak)
+    return MadauDickinsonSourceFrame(γ′, κ′, zpeak′)
 end
 
 """
-    redshift_prior(sf_model, cosmology, Λ; z_grid) -> RedshiftInterpolatedDistribution
+    source_frame_distribution(model::MadauDickinsonSourceFrame, z) -> Real
+
+Source-frame merger-rate density at redshift `z` under the Madau–Dickinson model.
+The denominator exponent is `γ + κ`.
+"""
+function source_frame_distribution(model::MadauDickinsonSourceFrame, z::Real)
+    return madau_dickinson_source_frame_distribution(
+        z; γ = model.γ, κ = model.κ, zpeak = model.zpeak)
+end
+
+"""
+    redshift_prior(model, cosmology; z_grid) -> RedshiftInterpolatedDistribution
 
 Build the detector-frame redshift distribution on `z_grid` (default
 [`DEFAULT_Z_GRID`](@ref)). The cosmology package tabulates distance and volume; this
 module owns the redshift density, normalization, and inverse-CDF sampling state.
 """
 function redshift_prior(
-        sf_model,
+        model::MadauDickinsonSourceFrame,
         cosmo::AbstractCosmology,
-        Λ::NamedTuple;
+        ;
         z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
 )
-    sfn = z -> source_frame_distribution(sf_model, z, Λ)
+    sfn = z -> source_frame_distribution(model, z)
     return RedshiftInterpolatedDistribution(build_redshift_prior(sfn, cosmo, z_grid))
 end
 
