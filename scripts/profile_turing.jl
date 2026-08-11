@@ -311,8 +311,7 @@ function _run(;
         frequencies,
         eff_psd,
         observation_time,
-        resolved_average_mode,
-        false
+        resolved_average_mode
     ) | (; R₀ = local_merger_rate)
     lf, z0_turing = _build_turing_logdensity(turing_model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)

@@ -3,7 +3,7 @@
 # Cosmology family and importance adapter are fixed in the script
 # (W0CDM + ModifiedPropagation + BNSMadauDickinsonImportanceModel).
 
-version = 2
+version = 3
 
 # Catalog path is relative to the repo root unless absolute.
 catalog_path = "catalog.h5"
@@ -12,6 +12,17 @@ detectors = ["E1", "E2", "E3", "C2"]
 # Hyperparameters to sample; the rest are fixed at their fiducial values.
 # Omit this key (or set to []) to sample every hyperparameter.
 sample_only = ["H0"]
+
+# Likelihood: "default" samples every hyperparameter in sample_only, while
+# "amplitude_marginalized" integrates one strictly multiplicative parameter out of the
+# Gaussian likelihood and reconstructs it in post-processing. The marginalized parameter
+# is named by amplitude_parameter (required for, and only valid under, that likelihood),
+# must appear in [fiducials], and must NOT appear in sample_only -- it has no latent
+# variable at all, though it does end up in the saved posterior group.
+likelihood = "default"
+# amplitude_parameter = "H0"      # "H0" or "R₀"
+amplitude_num_nodes = 1024        # quadrature nodes for the marginalization integral
+amplitude_prior_span_sigma = 10.0 # grid half-width in prior standard deviations
 
 seed = 42
 observation_time = 1.0

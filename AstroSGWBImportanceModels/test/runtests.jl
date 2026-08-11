@@ -231,7 +231,7 @@ end
         model, polarization_power, SAMPLES, FIDUCIALS).spectral_density
     unconditioned = astrosgwb_importance_turing_model(
         model, polarization_power, SAMPLES, prior, observed, frequencies,
-        eff_psd, observation_time, AnalyticInclination(), false)
+        eff_psd, observation_time, AnalyticInclination())
     turing_model = unconditioned | (; R₀ = FIDUCIALS.R₀)
 
     Λ_sampled = Base.structdiff(FIDUCIALS, (; R₀ = nothing,))
@@ -243,4 +243,127 @@ end
     @test isfinite(Turing.logjoint(unconditioned, FIDUCIALS))
     @test Set(Symbol.(keys(Turing.DynamicPPL.VarInfo(unconditioned)))) ==
           Set(keys(FIDUCIALS))
+end
+
+# --------------------------------------------------------------------------
+# Amplitude scalings
+# --------------------------------------------------------------------------
+
+@testset "amplitude scalings dispatch" begin
+    @test AMPLITUDE_PARAMETERS == (:H0, :R₀)
+
+    h0 = bns_amplitude_scalings(:H0)
+    @test h0.amplitude_fn === amplitude_H0
+    @test h0.merger_rate_fn === merger_rate_amplitude_H0
+    r0 = bns_amplitude_scalings(:R₀)
+    @test r0.amplitude_fn === amplitude_R₀
+    @test r0.merger_rate_fn === merger_rate_amplitude_R₀
+
+    # `f = g_R · g_F`: H0 has g_F = φ², R₀ has g_F = 1.
+    @test amplitude_H0(70.0) ≈ merger_rate_amplitude_H0(70.0) * 70.0^2
+    @test amplitude_R₀(161.0) == merger_rate_amplitude_R₀(161.0)
+
+    # A parameter that is not strictly multiplicative must not silently marginalize.
+    @test_throws ArgumentError bns_amplitude_scalings(:Ωm)
+    @test_throws ArgumentError bns_amplitude_scalings(:zpeak)
+end
+
+@testset "the amplitude parameters are exactly multiplicative" begin
+    # This is the assumption the entire marginalization rests on, and it has no Python
+    # counterpart: `astrosgwb_amplitude_marginalized_turing_model` integrates
+    # `A(φ) = f(φ)/f(φ_fid)` out of the likelihood analytically, which is only correct if
+    # the *real* forward model factorizes as `μ(φ, θ) = A(φ) m(θ)`. Assert it against
+    # `forward_model` itself rather than re-deriving the scalings.
+    polarization_power = Float64[1.0 1.5; 2.0 2.5]
+    # Production families: neither the dark-energy equation of state nor modified
+    # propagation may spoil the factorization, so both are exercised away from their GR /
+    # ΛCDM values.
+    for (C, P, base) in (
+        (LambdaCDM, ModifiedPropagation, FIDUCIALS),
+        (W0CDM, ModifiedPropagation, merge(FIDUCIALS, (w0 = -0.8, Ξ₀ = 1.4, Ξₙ = 0.7)))
+    )
+        model = prepared(; C, P, fiducials = base)
+        for (name, amplitude_fn) in ((:H0, amplitude_H0), (:R₀, amplitude_R₀))
+            fid = base[name]
+            template = forward_model(model, polarization_power, SAMPLES,
+                merge(TARGET, base, NamedTuple{(name,)}((fid,)))).spectral_density
+            for φ in (0.6 * fid, 0.85 * fid, fid, 1.3 * fid, 1.8 * fid)
+                Λ = merge(TARGET, base, NamedTuple{(name,)}((φ,)))
+                scaled = forward_model(
+                    model, polarization_power, SAMPLES, Λ).spectral_density
+                @test scaled ≈ (amplitude_fn(φ) / amplitude_fn(fid)) .* template rtol = 1.0e-10
+            end
+        end
+
+        # Anti-vacuity: the spectrum really does move with these parameters, so the
+        # assertions above are not comparing a constant against itself.
+        for name in AMPLITUDE_PARAMETERS
+            fid = base[name]
+            @test !isapprox(
+                forward_model(model, polarization_power, SAMPLES,
+                    merge(TARGET, base, NamedTuple{(name,)}((fid,)))).spectral_density,
+                forward_model(model, polarization_power, SAMPLES,
+                    merge(TARGET, base,
+                        NamedTuple{(name,)}((1.8 * fid,)))).spectral_density)
+        end
+    end
+end
+
+@testset "the BNS adapter marginalizes against the general likelihood" begin
+    # End-to-end on the real adapter: the marginalized model's log density must equal the
+    # numerically integrated general one. Same identity as the inference package's
+    # equivalence test, but here the multiplicative structure comes from the physics
+    # rather than from a three-line fixture.
+    model = prepared()
+    polarization_power = Float64[1.0 1.5; 2.0 2.5]
+    frequencies = [20.0, 40.0]
+    observation_time = 1.0
+
+    amplitude_prior = Uniform(100.0, 250.0)
+    grid = quadrature_grid(amplitude_prior; num_nodes = 4096)
+    # The prior declares *every* hyperparameter name, sampled or not; `fixed` pins the
+    # rest by conditioning, leaving `zpeak` as the only shape latent.
+    full_prior = (
+        H0 = Uniform(20.0, 140.0),
+        Ωm = Uniform(0.05, 0.95),
+        Ξ₀ = Uniform(0.5, 5.0),
+        Ξₙ = Uniform(0.0, 3.0),
+        γ = Uniform(0.5, 10.0),
+        κ = Uniform(0.05, 10.0),
+        zpeak = Uniform(0.05, 10.0),
+        R₀ = amplitude_prior
+    )
+    fixed = Base.structdiff(FIDUCIALS, NamedTuple{(:zpeak, :R₀)}(FIDUCIALS))
+    observed = forward_model(
+        model, polarization_power, SAMPLES, FIDUCIALS).spectral_density
+
+    # Scale the noise to the signal. An arbitrary PSD here puts ρ at 1e21, where the
+    # conditional posterior is a delta function on any grid and the identity below is
+    # testing floating-point noise rather than the marginalization. σ = 5% of the signal
+    # puts ρ in the tens, which is also the regime the marginalization exists for.
+    σ_target = 0.05 * maximum(observed)
+    eff_psd = fill(
+        σ_target * sqrt(2 * year_to_second(observation_time) *
+             frequency_bin_width(frequencies)),
+        length(frequencies))
+
+    general = astrosgwb_importance_turing_model(
+        model, polarization_power, SAMPLES, full_prior, observed, frequencies, eff_psd,
+        observation_time, AnalyticInclination()) | fixed
+    # The marginalized model's prior omits `R₀` entirely -- it is pinned inside the model,
+    # not conditioned at the call site, which is the one place the two models' plumbing
+    # genuinely differs.
+    marginalized = astrosgwb_amplitude_marginalized_turing_model(
+        model, polarization_power, SAMPLES, Base.structdiff(full_prior, (; R₀ = nothing)),
+        observed, frequencies, eff_psd, observation_time, AnalyticInclination(),
+        (; R₀ = FIDUCIALS.R₀), bns_amplitude_scalings(:R₀).amplitude_fn,
+        amplitude_prior, grid) | fixed
+
+    θ = (; zpeak = TARGET.zpeak)
+    log_integrand = [Turing.logjoint(general, merge(θ, (; R₀ = φ))) for φ in grid]
+    m = maximum(log_integrand)
+    y = exp.(log_integrand .- m)
+    reference = m + log(sum(0.5 .* (y[1:(end - 1)] .+ y[2:end]) .* diff(collect(grid))))
+
+    @test Turing.logjoint(marginalized, θ) ≈ reference rtol = 1.0e-10
 end

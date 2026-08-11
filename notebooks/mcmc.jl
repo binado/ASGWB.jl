@@ -65,6 +65,17 @@ begin
     detectors = map(Detector ∘ string, detnames)
     sample_only = (:H0,)
 
+    # Likelihood: `"default"` samples every name in `sample_only`;
+    # `"amplitude_marginalized"` integrates `amplitude_parameter` out of the Gaussian
+    # likelihood and reconstructs it in post-processing. The marginalized parameter must
+    # be one of `AstroSGWBImportanceModels.AMPLITUDE_PARAMETERS` (`:H0` or `:R₀`) and must
+    # *not* be in `sample_only` -- it gets no latent variable at all, though it does end
+    # up in the saved posterior.
+    likelihood = "default"
+    amplitude_parameter = nothing   # e.g. :H0
+    amplitude_num_nodes = 1024
+    amplitude_prior_span_sigma = 10.0
+
     seed = 42
     @info "seeding RNG" rng_seed = seed
     Random.seed!(seed)
@@ -174,6 +185,25 @@ begin
     @info order
     sample_only_tup = sample_only === nothing ? nothing : Tuple(sample_only)
 
+    # Everything the marginalized likelihood needs, built once so the model and the
+    # post-processing reconstruction cannot be paired with different conditionals.
+    amplitude = if likelihood == "amplitude_marginalized"
+        scalings = bns_amplitude_scalings(amplitude_parameter)
+        amplitude_prior = hyperprior[amplitude_parameter]
+        (;
+            name = amplitude_parameter,
+            fiducial = NamedTuple{(amplitude_parameter,)}((fiducials[amplitude_parameter],)),
+            prior = amplitude_prior,
+            scalings.amplitude_fn,
+            scalings.merger_rate_fn,
+            grid = quadrature_grid(amplitude_prior;
+                num_nodes = amplitude_num_nodes,
+                span_sigma = amplitude_prior_span_sigma)
+        )
+    else
+        nothing
+    end
+
     @info "catalog loaded" n_frequency_bins=length(frequencies) n_proposal_samples=length(
         samples.redshift,
     )
@@ -181,14 +211,19 @@ begin
     mkpath(output_dir)
     timestamp = format(now(), "yyyymmdd-HHMMSS")
     det_suffix = join((d.name for d in detectors), ",")
-    params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
+    # The *saved* parameters: under marginalization the chain carries one parameter NUTS
+    # never proposed.
+    saved_params = amplitude === nothing ? sample_only :
+                   (sample_only === nothing ? (amplitude.name,) :
+                    (sample_only..., amplitude.name))
+    params_suffix = saved_params === nothing ? "all" : join(saved_params, "-")
     base = "$(output_prefix)-$(params_suffix)-det=$(det_suffix)-seed$(seed)-$(timestamp)"
     output_nc = joinpath(output_dir, "$base.nc")
     output_toml = joinpath(output_dir, "$base.toml")
 
     # Reproducible record of this run's settings, dumped on a successful run.
     run_config = MCMCConfig(
-        2,
+        3,
         catalog_path,
         string.(detnames),
         seed,
@@ -202,6 +237,10 @@ begin
         ),
         Dict{Symbol, Float64}(k => Float64(v) for (k, v) in pairs(fiducials)),
         sample_only_tup === nothing ? nothing : collect(Symbol, sample_only_tup),
+        likelihood,
+        amplitude_parameter,
+        amplitude_num_nodes,
+        amplitude_prior_span_sigma,
         output_dir,
         output_prefix
     )
@@ -272,24 +311,52 @@ begin
     sampled_prior = sample_only_tup === nothing ?
                     Base.structdiff(hyperprior, (; R₀ = hyperprior.R₀)) :
                     NamedTuple{sample_only_tup}(hyperprior)
+    # Under the marginalized likelihood the amplitude parameter is neither a latent nor a
+    # conditioned value: the model pins it internally to build the template.
+    if amplitude !== nothing
+        sampled_prior = Base.structdiff(sampled_prior, amplitude.fiducial)
+    end
+    model_prior = amplitude === nothing ? hyperprior :
+                  Base.structdiff(hyperprior, amplitude.fiducial)
     fixed = Base.structdiff(fiducials, sampled_prior)
+    if amplitude !== nothing
+        fixed = Base.structdiff(fixed, amplitude.fiducial)
+    end
     # No external spectrum to fit: synthesize `observed` at the fiducials. One
     # `resolved_average_mode` reaches both this call and the model that scores it.
     observed = forward_model(
         model, polarization_power, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density
-    turing_model = astrosgwb_importance_turing_model(
-        model,
-        polarization_power,
-        samples,
-        hyperprior,
-        observed,
-        frequencies,
-        eff_psd,
-        observation_time,
-        resolved_average_mode,
-        false
-    ) | fixed
+    unconditioned = if amplitude === nothing
+        astrosgwb_importance_turing_model(
+            model,
+            polarization_power,
+            samples,
+            model_prior,
+            observed,
+            frequencies,
+            eff_psd,
+            observation_time,
+            resolved_average_mode
+        )
+    else
+        astrosgwb_amplitude_marginalized_turing_model(
+            model,
+            polarization_power,
+            samples,
+            model_prior,
+            observed,
+            frequencies,
+            eff_psd,
+            observation_time,
+            resolved_average_mode,
+            amplitude.fiducial,
+            amplitude.amplitude_fn,
+            amplitude.prior,
+            amplitude.grid
+        )
+    end
+    turing_model = unconditioned | fixed
     nuts = Turing.NUTS(
         sampler.nadapts,
         sampler.target_acceptance;
@@ -325,9 +392,44 @@ md"""
 # ╔═╡ 9d3e2f1a-4b5c-4d6e-7f8a-9b0c1d2e3f4a
 begin
     if chain !== nothing
-        @info "writing chain to netCDF" path = output_nc
         idata = InferenceObjects.convert_to_inference_data(chain)
-        InferenceObjects.to_netcdf(idata, output_nc)
+
+        if amplitude !== nothing
+            # Post-processing against the saved chain alone -- no catalog, no
+            # (nfreq, nsamples) contraction. Seeded distinctly from the sampler because
+            # these are fresh draws from the conditional.
+            @info "reconstructing marginalized parameter" parameter = amplitude.name
+            posterior = idata.posterior
+            reconstruction = reconstruct_amplitude(
+                Random.Xoshiro(seed + 1),
+                collect(posterior.amplitude_mle),
+                collect(posterior.template_optimal_snr),
+                collect(posterior.template_merger_rate);
+                amplitude.amplitude_fn,
+                amplitude.merger_rate_fn,
+                prior = amplitude.prior,
+                fiducial = only(amplitude.fiducial),
+                grid = amplitude.grid
+            )
+            min_nodes = minimum(reconstruction.quadrature_effective_nodes)
+            min_nodes < 30 &&
+                @warn "quadrature grid may not resolve the conditional posterior; increase amplitude_num_nodes" min_effective_nodes=min_nodes threshold=30
+            idata = merge_into_posterior(
+                idata,
+                merge(
+                    NamedTuple{(amplitude.name,)}((reconstruction.parameter,)),
+                    (;
+                        reconstruction.total_merger_rate,
+                        reconstruction.quadrature_effective_nodes
+                    )
+                )
+            )
+            @info "reconstruction done" min_effective_nodes=min_nodes reconstructed=extrema(reconstruction.parameter)
+        end
+
+        @info "writing chain to netCDF" path = output_nc
+        # Unicode hyperparameter names become ASCII at the file boundary only.
+        InferenceObjects.to_netcdf(rename_posterior_for_netcdf(idata), output_nc)
         @info "writing run config to TOML" path = output_toml
         save_config(run_config, output_toml)
         @info "done"
@@ -387,8 +489,12 @@ begin
                      year_to_second,
                      Ωgw
     using AstroSGWBImportanceModels:
-                                     prepare_bns_madau_dickinson_model
-    using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
+                                     prepare_bns_madau_dickinson_model,
+                                     bns_amplitude_scalings
+    using AstroSGWBInference: astrosgwb_importance_turing_model,
+                              astrosgwb_amplitude_marginalized_turing_model,
+                              forward_model, quadrature_grid, reconstruct_amplitude,
+                              rename_posterior_for_netcdf, merge_into_posterior
     using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
     using Distributions: Uniform
     using InferenceObjects: InferenceObjects

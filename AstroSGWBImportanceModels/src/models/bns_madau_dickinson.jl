@@ -1,4 +1,88 @@
 """
+    AMPLITUDE_PARAMETERS
+
+Hyperparameters of [`BNSMadauDickinsonImportanceModel`](@ref) that enter the predicted
+spectrum as a **pure multiplicative factor**, and can therefore be integrated out of the
+Gaussian likelihood by
+`AstroSGWBInference.astrosgwb_amplitude_marginalized_turing_model` instead of sampled.
+
+The property is exact for this adapter and independent of `w0`, `Ωm`, `Ξ₀`, and `Ξₙ`; it
+is asserted directly against `forward_model` in this package's tests.
+"""
+const AMPLITUDE_PARAMETERS = (:H0, :R₀)
+
+# The predicted spectrum factorizes into two independently-scaling pieces -- the total
+# merger rate and the importance-weighted polarization-power contraction (the mean energy
+# flux) -- so the full scaling is `f = g_R · g_F`.
+#
+# `R₀` enters only through `merger_rate_per_sec(∫, Λ.R₀)` (linear, and absent from
+# `log_weights`), so `g_R = φ`, `g_F = 1`, `f = φ`.
+#
+# `H0` enters the rate through `dV_c/dz ∝ H0⁻³` and the weights through
+# `-2 log d_L ∝ H0²` -- the normalized redshift density `log_p - log(norm)` is
+# H0-invariant, so that is the *only* surviving H0 dependence in the weights. Hence
+# `g_R = φ⁻³`, `g_F = φ²`, `f = φ⁻¹`.
+#
+# These are plain top-level callables, not closures over the fiducial: the consumer forms
+# the ratio `f(φ)/f(φ_fid)` itself, and a top-level `const` function keeps them cheap to
+# pass around and identical across constructions. Nothing here imports
+# `AstroSGWBInference` -- like `merger_rate_and_log_weights_fn`, the scalings reach the
+# sampler as callables passed in at the call site.
+
+"""
+    merger_rate_amplitude_H0(φ)
+
+Merger-rate scaling ``g_R(H_0) = H_0^{-3}``, from ``dV_c/dz \\propto H_0^{-3}``.
+"""
+merger_rate_amplitude_H0(φ) = φ^-3
+
+"""
+    amplitude_H0(φ)
+
+Total multiplicative scaling ``f(H_0) = g_R g_F = H_0^{-3} \\cdot H_0^{2} = H_0^{-1}``.
+"""
+amplitude_H0(φ) = inv(φ)
+
+"""
+    merger_rate_amplitude_R₀(φ)
+
+Merger-rate scaling ``g_R(\\mathcal{R}_0) = \\mathcal{R}_0``.
+"""
+merger_rate_amplitude_R₀(φ) = φ
+
+"""
+    amplitude_R₀(φ)
+
+Total multiplicative scaling ``f(\\mathcal{R}_0) = g_R g_F = \\mathcal{R}_0 \\cdot 1``.
+"""
+amplitude_R₀(φ) = φ
+
+"""
+    bns_amplitude_scalings(name::Symbol) -> (; amplitude_fn, merger_rate_fn)
+
+Look up the amplitude scalings for the hyperparameter `name`.
+
+`amplitude_fn` is the full ``f = g_R g_F`` the marginalization integrates against;
+`merger_rate_fn` is ``g_R`` alone, which post-processing needs to turn the published
+`template_merger_rate` back into the physical rate (see
+`AstroSGWBInference.reconstruct_amplitude`). Only ratios to the fiducial are ever used, so
+an overall normalization of either cancels.
+
+Throws an `ArgumentError` for any name outside [`AMPLITUDE_PARAMETERS`](@ref) -- a
+parameter that is not strictly multiplicative would be silently mis-marginalized.
+"""
+function bns_amplitude_scalings(name::Symbol)
+    name === :H0 && return (; amplitude_fn = amplitude_H0,
+        merger_rate_fn = merger_rate_amplitude_H0)
+    name === :R₀ && return (; amplitude_fn = amplitude_R₀,
+        merger_rate_fn = merger_rate_amplitude_R₀)
+    throw(ArgumentError(
+        "unsupported amplitude parameter $(repr(name)); the BNS Madau-Dickinson adapter " *
+        "supports $(AMPLITUDE_PARAMETERS)",
+    ))
+end
+
+"""
     BNSMadauDickinsonImportanceModel{C, P}
 
 Prepared BNS importance model using a Madau–Dickinson source-frame merger rate,

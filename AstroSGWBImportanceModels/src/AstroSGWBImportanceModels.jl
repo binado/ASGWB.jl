@@ -28,7 +28,13 @@ using AstroSGWBCosmology:
 using DataInterpolations: LinearInterpolation
 
 export BNSMadauDickinsonImportanceModel,
-       prepare_bns_madau_dickinson_model
+       prepare_bns_madau_dickinson_model,
+       AMPLITUDE_PARAMETERS,
+       amplitude_H0,
+       amplitude_R₀,
+       merger_rate_amplitude_H0,
+       merger_rate_amplitude_R₀,
+       bns_amplitude_scalings
 
 include("models/bns_madau_dickinson.jl")
 

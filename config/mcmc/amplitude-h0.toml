@@ -1,0 +1,50 @@
+# Amplitude-marginalized MCMC run: H0 is integrated out of the Gaussian likelihood
+# instead of sampled, and reconstructed in post-processing from the amplitude sufficient
+# statistics the chain publishes. Compare against a `sample_only = ["H0"]` run of the
+# default likelihood on the same catalog and seed -- the two posteriors should agree to
+# within MC error, at a fraction of the sampling cost.
+
+version = 3
+
+catalog_path = "catalog.h5"
+detectors = ["E1", "E2", "E3", "C2"]
+
+# H0 is deliberately absent: it has no latent variable under this likelihood. It still
+# ends up in the saved posterior group, via the reconstruction.
+sample_only = ["zpeak"]
+
+likelihood = "amplitude_marginalized"
+amplitude_parameter = "H0"
+# Not the 1024 default. At this network the template SNR is ρ ≈ 400, so the conditional
+# posterior's width in H0 is σ_A/|A'(H0)| = (1/ρ)·H0_fid ≈ 0.17 -- against a Uniform(20, 140)
+# prior, 1024 nodes give 0.117 spacing, i.e. about 1.5 nodes per σ. Measured
+# `quadrature_effective_nodes`: 2.2 at 1024, 18.6 at 8192, 37.2 at 16384, which is the
+# first value comfortably above the 30 threshold `scripts/run_mcmc.jl` warns below.
+# The reconstruction is converged by 8192 (draws agree to 5 decimals with 16384), but the
+# diagnostic is what tells you that, so keep it green.
+amplitude_num_nodes = 16384
+amplitude_prior_span_sigma = 10.0
+
+seed = 42
+observation_time = 1.0
+
+output_dir = "chains"
+output_prefix = "chains"
+
+[sampler]
+nsamples = 3000
+nadapts = 3000
+target_acceptance = 0.9
+ad_backend = "ForwardDiff"
+nchains = 0
+
+[fiducials]
+H0 = 67.66
+"Ωm" = 0.3096
+w0 = -1.0
+"Ξ₀" = 1.0
+"Ξₙ" = 1.91
+"γ" = 2.7
+"κ" = 5.7
+zpeak = 2.0
+"R₀" = 161.0

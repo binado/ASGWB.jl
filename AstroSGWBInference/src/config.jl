@@ -2,13 +2,40 @@ module Config
 
 using TOML
 
-export MCMCConfig, SamplerConfig, load_config, save_config
+export MCMCConfig, SamplerConfig, load_config, save_config, posterior_params,
+       NETCDF_PARAMETER_NAMES
 
 """Current config schema version. Bump on any breaking layout change."""
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 """AD backends the notebook knows how to resolve (mirrors `resolve_adtype`)."""
 const SUPPORTED_AD_BACKENDS = ("ForwardDiff",)
+
+"""Likelihoods `scripts/run_mcmc.jl` knows how to build."""
+const SUPPORTED_LIKELIHOODS = ("default", "amplitude_marginalized")
+
+"""
+    NETCDF_PARAMETER_NAMES
+
+Unicode hyperparameter name → ASCII netCDF variable name, applied by
+`AstroSGWBInference.rename_posterior_for_netcdf` **on write only**.
+
+The Unicode names (`Ωm`, `Ξ₀`, `γ`, …) are the physics notation the Julia code, the config
+TOML, and the tests all use, and they stay put. Renaming happens at the file boundary so a
+chain written here and a chain written by the Python `astrogwb` stack carry the same
+variable names and can be diffed directly. `H0`, `w0`, and every derived name
+(`total_merger_rate`, `amplitude_mle`, …) are already ASCII and map to themselves by
+falling through this map unchanged.
+"""
+const NETCDF_PARAMETER_NAMES = Dict(
+    :Ωm => :Omega_m,
+    :Ξ₀ => :xi_0,
+    :Ξₙ => :xi_n,
+    :γ => :gamma,
+    :κ => :kappa,
+    :zpeak => :z_peak,
+    :R₀ => :local_merger_rate
+)
 
 """
     SamplerConfig
@@ -46,8 +73,16 @@ null), and `nothing` is omitted on write.
 Schema v2 dropped `local_merger_rate`: it is an ordinary hyperparameter (`R₀`, in
 Gpc⁻³ yr⁻¹) and lives in `[fiducials]`, so it is fixed by default and sampled by adding
 it to `sample_only` and to the runner's hyperprior. `observation_time` stays -- unlike
-the rate it does not cancel, and the Gaussian bin scale and the SNR tracking branch
+the rate it does not cancel, and the Gaussian bin scale and the amplitude inner products
 both read it.
+
+Schema v3 added the likelihood selection. `likelihood == "amplitude_marginalized"`
+switches the runner to `astrosgwb_amplitude_marginalized_turing_model`, which integrates
+`amplitude_parameter` out of the likelihood instead of sampling it;
+`amplitude_num_nodes` and `amplitude_prior_span_sigma` size the quadrature grid (see
+`AstroSGWBInference.quadrature_grid`). The marginalized parameter is *not* in
+`sample_only` -- it has no latent variable at all -- but it *is* in the saved chain, so
+use [`posterior_params`](@ref), not `sample_only`, to describe what the posterior holds.
 
 Construct from a parsed dict via `MCMCConfig(d)` or from a file via
 [`load_config`](@ref); serialize with [`save_config`](@ref).
@@ -61,6 +96,10 @@ struct MCMCConfig
     sampler::SamplerConfig
     fiducials::Dict{Symbol, Float64}
     sample_only::Union{Nothing, Vector{Symbol}}
+    likelihood::String
+    amplitude_parameter::Union{Nothing, Symbol}
+    amplitude_num_nodes::Int
+    amplitude_prior_span_sigma::Float64
     output_dir::String
     output_prefix::String
 end
@@ -128,6 +167,50 @@ function MCMCConfig(d::AbstractDict)
     sample_only = sample_only_raw === nothing ? nothing :
                   Vector{Symbol}(Symbol.(sample_only_raw))
 
+    likelihood = String(get(d, "likelihood", "default"))
+    amplitude_parameter_raw = get(d, "amplitude_parameter", nothing)
+    amplitude_parameter = amplitude_parameter_raw === nothing ? nothing :
+                          Symbol(amplitude_parameter_raw)
+    amplitude_num_nodes = Int(get(d, "amplitude_num_nodes", 1024))
+    amplitude_prior_span_sigma = Float64(get(d, "amplitude_prior_span_sigma", 10.0))
+
+    likelihood in SUPPORTED_LIKELIHOODS || throw(ArgumentError(
+        "unsupported likelihood $(repr(likelihood)); supported: $(SUPPORTED_LIKELIHOODS)",
+    ))
+    # `amplitude_parameter` is required by exactly one likelihood and meaningless under
+    # the other, so both halves of the coupling are enforced: a marginalized run with no
+    # parameter has nothing to integrate, and a default run with one silently ignores it.
+    marginalized = likelihood == "amplitude_marginalized"
+    if marginalized && amplitude_parameter === nothing
+        throw(ArgumentError(
+            "amplitude_parameter is required when likelihood == \"amplitude_marginalized\"",
+        ))
+    elseif !marginalized && amplitude_parameter !== nothing
+        throw(ArgumentError(
+            "amplitude_parameter is only valid when likelihood == \"amplitude_marginalized\"",
+        ))
+    end
+    if amplitude_parameter !== nothing
+        haskey(fiducials, amplitude_parameter) || throw(ArgumentError(
+            "amplitude_parameter $(repr(amplitude_parameter)) must appear in [fiducials]; " *
+            "it is the reference value that defines the template",
+        ))
+        # Sampling and marginalizing the same parameter double-counts it with no visible
+        # symptom, so it is rejected here rather than at the first model evaluation.
+        if sample_only !== nothing && amplitude_parameter in sample_only
+            throw(ArgumentError(
+                "amplitude_parameter $(repr(amplitude_parameter)) is marginalized " *
+                "analytically and cannot also be in sample_only",
+            ))
+        end
+    end
+    amplitude_num_nodes > 1 || throw(ArgumentError(
+        "amplitude_num_nodes must be > 1; got $amplitude_num_nodes",
+    ))
+    amplitude_prior_span_sigma > 0 || throw(ArgumentError(
+        "amplitude_prior_span_sigma must be > 0; got $amplitude_prior_span_sigma",
+    ))
+
     return MCMCConfig(
         version,
         String(d["catalog_path"]),
@@ -137,9 +220,33 @@ function MCMCConfig(d::AbstractDict)
         sampler,
         fiducials,
         sample_only,
+        likelihood,
+        amplitude_parameter,
+        amplitude_num_nodes,
+        amplitude_prior_span_sigma,
         String(d["output_dir"]),
         String(d["output_prefix"])
     )
+end
+
+"""
+    posterior_params(cfg::MCMCConfig) -> Vector{Symbol}
+
+The hyperparameters the **saved chain** carries, as opposed to the ones the sampler had a
+latent variable for.
+
+Under the default likelihood the two coincide and this is just `sample_only` (an empty
+vector when `sample_only` is absent, i.e. "every hyperparameter"). Under
+`likelihood == "amplitude_marginalized"` they differ: the amplitude parameter is
+integrated out of the potential, so it is not in `sample_only` and NUTS never proposes it,
+but `reconstruct_amplitude` writes it back into the posterior group afterwards. Use this
+for anything describing what the output file holds -- filenames, plot labels, comparisons
+against another run.
+"""
+function posterior_params(cfg::MCMCConfig)
+    params = cfg.sample_only === nothing ? Symbol[] : copy(cfg.sample_only)
+    cfg.amplitude_parameter === nothing || push!(params, cfg.amplitude_parameter)
+    return params
 end
 
 """
@@ -166,6 +273,9 @@ function save_config(cfg::MCMCConfig, path::AbstractString)
         "observation_time" => cfg.observation_time,
         "output_dir" => cfg.output_dir,
         "output_prefix" => cfg.output_prefix,
+        "likelihood" => cfg.likelihood,
+        "amplitude_num_nodes" => cfg.amplitude_num_nodes,
+        "amplitude_prior_span_sigma" => cfg.amplitude_prior_span_sigma,
         "sampler" => Dict{String, Any}(
             "nsamples" => cfg.sampler.nsamples,
             "nadapts" => cfg.sampler.nadapts,
@@ -177,6 +287,9 @@ function save_config(cfg::MCMCConfig, path::AbstractString)
     )
     if cfg.sample_only !== nothing
         d["sample_only"] = String.(cfg.sample_only)
+    end
+    if cfg.amplitude_parameter !== nothing
+        d["amplitude_parameter"] = String(cfg.amplitude_parameter)
     end
 
     tmp = path * ".tmp"

@@ -23,13 +23,20 @@ using AstroSGWB:
                  W0CDM,
                  Detector
 using AstroSGWBImportanceModels:
-                                 prepare_bns_madau_dickinson_model
+                                 prepare_bns_madau_dickinson_model,
+                                 bns_amplitude_scalings
 using AstroSGWBInference:
                           astrosgwb_importance_turing_model,
+                          astrosgwb_amplitude_marginalized_turing_model,
                           forward_model,
+                          quadrature_grid,
+                          reconstruct_amplitude,
+                          rename_posterior_for_netcdf,
+                          merge_into_posterior,
                           MCMCConfig,
                           load_config,
-                          save_config
+                          save_config,
+                          posterior_params
 using InferenceObjects: InferenceObjects
 # `to_netcdf` lives in InferenceObjects' NCDatasets extension, which only
 # activates when NCDatasets is loaded; it's an explicit dep of this project.
@@ -129,6 +136,37 @@ function _restrict_prior(prior::NamedTuple, sample_only)
     return NamedTuple{names}(prior)
 end
 
+"""
+Build the amplitude marginalization for a `likelihood = "amplitude_marginalized"` config.
+
+Everything here is *live*: the prior distribution and the two scalings are objects, not
+derived numbers, so nothing can go stale against the config it came from. The one array,
+`grid`, is a quadrature scheme rather than a tabulation of the density.
+
+The same values must reach both the model and `reconstruct_amplitude` -- a mismatch is
+silent, because the sufficient statistics stay finite and plausible whatever conditional
+you pair them with -- so they are built once, here.
+"""
+function _amplitude_marginalization(cfg::MCMCConfig, prior::NamedTuple, fiducials)
+    name = cfg.amplitude_parameter
+    haskey(prior, name) || throw(ArgumentError(
+        "amplitude_parameter $(repr(name)) is not in HYPERPRIOR; it needs a prior to be " *
+        "marginalized under",
+    ))
+    scalings = bns_amplitude_scalings(name)
+    amplitude_prior = prior[name]
+    return (;
+        name,
+        fiducial = NamedTuple{(name,)}((fiducials[name],)),
+        prior = amplitude_prior,
+        scalings.amplitude_fn,
+        scalings.merger_rate_fn,
+        grid = quadrature_grid(amplitude_prior;
+            num_nodes = cfg.amplitude_num_nodes,
+            span_sigma = cfg.amplitude_prior_span_sigma)
+    )
+end
+
 # --------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------
@@ -164,7 +202,22 @@ function run_mcmc(config_file::String)
     sampleable = sample_only === nothing ?
                  Base.structdiff(HYPERPRIOR, (; R₀ = HYPERPRIOR.R₀)) : HYPERPRIOR
     prior = _restrict_prior(sampleable, cfg.sample_only)
-    fixed = Base.structdiff(fiducials, prior)
+
+    # Under the marginalized likelihood the amplitude parameter is neither a latent nor a
+    # conditioned value: the model pins it internally to build the template. The config
+    # already rejects it in `sample_only`, but `sample_only = nothing` means "sample
+    # everything", so it is dropped from the prior here as well.
+    amplitude = cfg.likelihood == "amplitude_marginalized" ?
+                _amplitude_marginalization(cfg, HYPERPRIOR, fiducials) : nothing
+    if amplitude === nothing
+        model_prior = HYPERPRIOR
+        fixed = Base.structdiff(fiducials, prior)
+    else
+        prior = Base.structdiff(prior, amplitude.fiducial)
+        model_prior = Base.structdiff(HYPERPRIOR, amplitude.fiducial)
+        fixed = Base.structdiff(Base.structdiff(fiducials, prior), amplitude.fiducial)
+        @info "amplitude marginalization" parameter=amplitude.name fiducial=only(amplitude.fiducial) prior=amplitude.prior num_nodes=length(amplitude.grid) grid=extrema(amplitude.grid)
+    end
 
     @info "seeding RNG" seed = cfg.seed
     Random.seed!(cfg.seed)
@@ -194,7 +247,10 @@ function run_mcmc(config_file::String)
     timestamp = format(now(), "yyyymmdd-HHMMSS")
     config_stem = splitext(basename(config_file))[1]
     det_suffix = join((d.name for d in detectors), ",")
-    params_suffix = sample_only === nothing ? "all" : join(sample_only, "-")
+    # The *saved* parameters, not the sampler's latents: under marginalization the chain
+    # carries one parameter NUTS never proposed.
+    saved_params = posterior_params(cfg)
+    params_suffix = isempty(saved_params) ? "all" : join(saved_params, "-")
     base = "$(output_prefix)-$(config_stem)-$(params_suffix)-det=$(det_suffix)-seed$(cfg.seed)-$(timestamp)"
     output_nc = joinpath(output_dir, "$base.nc")
     output_toml = joinpath(output_dir, "$base.toml")
@@ -206,18 +262,36 @@ function run_mcmc(config_file::String)
     observed = forward_model(
         model, polarization_power, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density
-    turing_model = astrosgwb_importance_turing_model(
-        model,
-        polarization_power,
-        samples,
-        HYPERPRIOR,
-        observed,
-        frequencies,
-        eff_psd,
-        cfg.observation_time,
-        resolved_average_mode,
-        true
-    ) | fixed
+    unconditioned = if amplitude === nothing
+        astrosgwb_importance_turing_model(
+            model,
+            polarization_power,
+            samples,
+            model_prior,
+            observed,
+            frequencies,
+            eff_psd,
+            cfg.observation_time,
+            resolved_average_mode
+        )
+    else
+        astrosgwb_amplitude_marginalized_turing_model(
+            model,
+            polarization_power,
+            samples,
+            model_prior,
+            observed,
+            frequencies,
+            eff_psd,
+            cfg.observation_time,
+            resolved_average_mode,
+            amplitude.fiducial,
+            amplitude.amplitude_fn,
+            amplitude.prior,
+            amplitude.grid
+        )
+    end
+    turing_model = unconditioned | fixed
     nuts = Turing.NUTS(
         cfg.sampler.nadapts,
         cfg.sampler.target_acceptance;
@@ -238,9 +312,49 @@ function run_mcmc(config_file::String)
     )
     @info "NUTS finished" chain_size = size(chain)
 
-    @info "writing chain to netCDF" path = output_nc
     idata = InferenceObjects.convert_to_inference_data(chain)
-    InferenceObjects.to_netcdf(idata, output_nc)
+
+    if amplitude !== nothing
+        # Post-processing, against the saved chain alone: no catalog, no (nfreq, nsamples)
+        # contraction, O(length(grid)) per draw. The RNG is seeded distinctly from the
+        # sampler because these are fresh draws from the conditional, not a deterministic
+        # function of the chain.
+        @info "reconstructing marginalized parameter" parameter = amplitude.name
+        posterior = idata.posterior
+        reconstruction = reconstruct_amplitude(
+            Random.Xoshiro(cfg.seed + 1),
+            collect(posterior.amplitude_mle),
+            collect(posterior.template_optimal_snr),
+            collect(posterior.template_merger_rate);
+            amplitude.amplitude_fn,
+            amplitude.merger_rate_fn,
+            prior = amplitude.prior,
+            fiducial = only(amplitude.fiducial),
+            grid = amplitude.grid
+        )
+        min_nodes = minimum(reconstruction.quadrature_effective_nodes)
+        # "Exact up to quadrature error" only holds if the grid resolves the conditional
+        # posterior. A handful of nodes under the bump still yields a finite, plausible
+        # log evidence, so this is the only symptom there is.
+        min_nodes < 30 &&
+            @warn "quadrature grid may not resolve the conditional posterior; increase amplitude_num_nodes" min_effective_nodes=min_nodes threshold=30
+        idata = merge_into_posterior(
+            idata,
+            merge(
+                NamedTuple{(amplitude.name,)}((reconstruction.parameter,)),
+                (;
+                    reconstruction.total_merger_rate,
+                    reconstruction.quadrature_effective_nodes
+                )
+            )
+        )
+        @info "reconstruction done" min_effective_nodes=min_nodes reconstructed=extrema(reconstruction.parameter)
+    end
+
+    @info "writing chain to netCDF" path = output_nc
+    # Unicode hyperparameter names become ASCII at the file boundary only, so this netCDF
+    # and a Python `astrogwb` one carry the same variable names.
+    InferenceObjects.to_netcdf(rename_posterior_for_netcdf(idata), output_nc)
     @info "writing run config to TOML" path = output_toml
     save_config(cfg, output_toml)
     @info "done" output_nc output_toml

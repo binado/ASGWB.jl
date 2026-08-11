@@ -57,7 +57,7 @@ end
 
 function _config(detectors::Vector{String}, sample_only::Vector{Symbol})
     return MCMCConfig(
-        2,
+        3,
         CATALOG_PATH,
         copy(detectors),
         42,
@@ -65,6 +65,12 @@ function _config(detectors::Vector{String}, sample_only::Vector{Symbol})
         BASE_SAMPLER,
         copy(BASE_FIDUCIALS),
         copy(sample_only),
+        # The sweep is a default-likelihood sweep; amplitude marginalization is opted into
+        # per-config, since it changes which parameter has a latent variable at all.
+        "default",
+        nothing,
+        1024,
+        10.0,
         "chains",
         "chains"
     )
