@@ -17,5 +17,6 @@ include("cumulative_integral.jl")
 include("conversion.jl")
 include("model.jl")
 include("distance.jl")
+include("modified_propagation.jl")
 
 end # module
