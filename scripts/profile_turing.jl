@@ -26,7 +26,6 @@ using AstroSGWB:
                  spectral_density,
                  MadauDickinsonSourceFrame,
                  redshift,
-                 canonical_hyperparameters,
                  cosmology,
                  luminosity_distance,
                  distance_and_volume_grid,
@@ -130,19 +129,18 @@ function _priors_from_toml(priors_tbl::Dict)
 end
 
 function _theta0_from_toml(init_tbl::Dict, order::Tuple{Vararg{Symbol}})
-    return canonical_hyperparameters(
-        order,
-        (;
-            H0 = init_tbl["H0"],
-            Ωm = init_tbl["Omega_m"],
-            Ξ₀ = init_tbl["Xi_0"],
-            Ξₙ = init_tbl["Xi_n"],
-            γ = init_tbl["gamma"],
-            κ = init_tbl["kappa"],
-            zpeak = init_tbl["z_peak"]
-        );
-        context = "initial hyperparameters"
+    values = (
+        H0 = init_tbl["H0"],
+        Ωm = init_tbl["Omega_m"],
+        Ξ₀ = init_tbl["Xi_0"],
+        Ξₙ = init_tbl["Xi_n"],
+        γ = init_tbl["gamma"],
+        κ = init_tbl["kappa"],
+        zpeak = init_tbl["z_peak"]
     )
+    Set(keys(values)) == Set(order) || throw(
+        ArgumentError("initial hyperparameters must match $(order)"))
+    return (; (name => Float64(values[name]) for name in order)...)
 end
 
 function _validate_init_in_priors(prior, init_tbl::Dict)

@@ -57,9 +57,7 @@ include("spectral_density.jl")
 include("snr.jl")
 
 # Types
-export canonical_hyperparameters,
-       validate_hyperparameters,
-       RedshiftPrior,
+export RedshiftPrior,
        redshift
 
 # Catalog I/O

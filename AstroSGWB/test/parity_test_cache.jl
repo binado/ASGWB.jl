@@ -16,13 +16,15 @@ const _PARITY_SAMPLING_FREQUENCY = 80.0
 
 function _parity_hyperparameters(overrides::NamedTuple = NamedTuple())
     defaults = (H0 = 67.0, Ωm = 0.315, Ξ₀ = 1.0, Ξₙ = 0.0, γ = 2.7, κ = 3.0, zpeak = 2.5)
-    return canonical_hyperparameters(keys(defaults), merge(defaults, overrides))
+    values = merge(defaults, overrides)
+    return (; (name => Float64(values[name]) for name in keys(defaults))...)
 end
 
 function _parity_hyperparameters_w0(overrides::NamedTuple = NamedTuple())
     defaults = (H0 = 67.0, Ωm = 0.315, w0 = -0.9, Ξ₀ = 1.0, Ξₙ = 0.0,
         γ = 2.7, κ = 3.0, zpeak = 2.5)
-    return canonical_hyperparameters(keys(defaults), merge(defaults, overrides))
+    values = merge(defaults, overrides)
+    return (; (name => Float64(values[name]) for name in keys(defaults))...)
 end
 
 function _write_parity_catalog!(dir::String, variant::Symbol)
