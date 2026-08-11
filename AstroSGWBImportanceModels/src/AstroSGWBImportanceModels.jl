@@ -11,20 +11,20 @@ generics. The two-package split is a convenience, not a coupling.
 """
 module AstroSGWBImportanceModels
 
-using CBCDistributions:
-                        DEFAULT_Z_GRID,
-                        MadauDickinsonSourceFrame,
-                        detector_frame_merger_rate_density,
-                        merger_rate_per_sec,
-                        source_frame_distribution
-using Cosmology:
-                 AbstractCosmology,
-                 AbstractPropagation,
-                 cosmology,
-                 distance_and_volume_grid,
-                 gw_em_distance_ratio,
-                 propagation,
-                 trapz
+using AstroSGWBDistributions:
+                              DEFAULT_Z_GRID,
+                              MadauDickinsonSourceFrame,
+                              detector_frame_merger_rate_density,
+                              merger_rate_per_sec,
+                              source_frame_distribution
+using AstroSGWBCosmology:
+                          AbstractCosmology,
+                          AbstractPropagation,
+                          cosmology,
+                          distance_and_volume_grid,
+                          gw_em_distance_ratio,
+                          propagation,
+                          trapz
 using DataInterpolations: LinearInterpolation
 
 export BNSMadauDickinsonImportanceModel,

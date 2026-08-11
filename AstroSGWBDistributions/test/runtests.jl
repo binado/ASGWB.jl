@@ -1,6 +1,6 @@
 using Test
-using CBCDistributions
-using Cosmology
+using AstroSGWBDistributions
+using AstroSGWBCosmology
 
 include("test_utils.jl")
 include("test_mass.jl")

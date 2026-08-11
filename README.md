@@ -11,8 +11,8 @@ The root repository is organized as a monorepo comprised of different small pack
 | [`AstroSGWB/`](AstroSGWB/) | Core library: redshift and spectral-density evaluation, detector PSDs/ORFs, catalog I/O (re-exports cosmology helpers) |
 | [`AstroSGWBInference/`](AstroSGWBInference/) | Inference layer on top of `AstroSGWB`: Turing model construction, log-posterior helpers, chain I/O |
 | [`AstroSGWBImportanceModels/`](AstroSGWBImportanceModels/) | Canonical concrete importance adapters, including the BNS Madau–Dickinson model used by production workflows |
-| [`CBCDistributions/`](CBCDistributions/) | Shared population-distribution building blocks and the optional `PopulationModel` contract |
-| [`Cosmology/`](Cosmology/) | Cosmology and GW-propagation models, distances, and reusable interpolation caches |
+| [`AstroSGWBDistributions/`](AstroSGWBDistributions/) | Shared population-distribution building blocks and the optional `PopulationModel` contract |
+| [`AstroSGWBCosmology/`](AstroSGWBCosmology/) | Cosmology and GW-propagation models, distances, and reusable interpolation caches |
 | [`notebooks/`](notebooks/) | **Canonical MCMC workflows** (Pluto / Jupytext): model configuration, `load_catalog`, NUTS sampling, diagnostics. |
 | [`config/`](config/) | TOML for developer scripts and headless MCMC runs (e.g. [`config/mcmc/example.toml`](config/mcmc/example.toml)). |
 | [`scripts/`](scripts/) | Developer utilities (profiling, chain tools, benchmarks) and [`scripts/run_mcmc.jl`](scripts/run_mcmc.jl) for config-driven cluster runs. |

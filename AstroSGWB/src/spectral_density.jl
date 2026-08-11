@@ -6,7 +6,7 @@ using ForwardDiff
 # ι, but `polarization_power` already carries whatever ι convention the waveform catalog
 # was generated under. Only two conventions exist in practice, so the choice is
 # a type token resolved to a scalar prefactor at the public boundary, mirroring
-# the `AbstractPropagation` idiom in `Cosmology/src/model.jl`.
+# the `AbstractPropagation` idiom in `AstroSGWBCosmology/src/model.jl`.
 # ---------------------------------------------------------------------------
 
 """Abstract supertype for inclination-averaging conventions."""
@@ -204,13 +204,13 @@ where ``S_h(f)`` is the strain spectral density (same units as [`spectral_densit
 and ``H_0`` is the Hubble constant in **s⁻¹**.
 
 ``H_0`` is passed in **km/s/Mpc** (matching hyperparameter `H0` and [`LambdaCDM`](@ref).`H0`)
-and converted internally via [`Cosmology.hubble_constant_si`](@ref).
+and converted internally via [`AstroSGWBCosmology.hubble_constant_si`](@ref).
 
 `frequency` and `spectral_density` may be scalars or arrays; they broadcast together (e.g. same-length
 vectors for one spectrum per frequency bin).
 """
 function Ωgw(spectral_density, frequency, H0::Real)
-    h0_si = Cosmology.hubble_constant_si(H0)
+    h0_si = AstroSGWBCosmology.hubble_constant_si(H0)
     pre = 4 * pi^2 / (3 * h0_si^2)
     return @. pre * frequency^3 * spectral_density
 end

@@ -2,7 +2,7 @@ using Test
 using AstroSGWB
 using AstroSGWBImportanceModels
 using AstroSGWBInference
-using Cosmology
+using AstroSGWBCosmology
 using DataInterpolations: LinearInterpolation
 using Distributions: Uniform
 using ForwardDiff

@@ -1,9 +1,9 @@
-module CBCDistributions
+module AstroSGWBDistributions
 
 using DataInterpolations: LinearInterpolation
-import Cosmology
-import Cosmology: AbstractCosmology,
-                  cumtrapz, distance_and_volume_grid, trapz
+import AstroSGWBCosmology
+import AstroSGWBCosmology: AbstractCosmology,
+                           cumtrapz, distance_and_volume_grid, trapz
 
 export MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior, DEFAULT_Z_GRID
 export DefaultBBHPrimaryMass, DefaultBBHMassPair, planck_taper

@@ -38,12 +38,12 @@ and array kernels used to implement that contract.
 """
 module AstroSGWB
 
-using CBCDistributions
-using Cosmology
-import Cosmology: apply_gw_distance_correction, apply_gw_distance_correction!,
-                  cosmology, cosmology_type,
-                  gw_em_distance_ratio,
-                  propagation, propagation_type
+using AstroSGWBDistributions
+using AstroSGWBCosmology
+import AstroSGWBCosmology: apply_gw_distance_correction, apply_gw_distance_correction!,
+                           cosmology, cosmology_type,
+                           gw_em_distance_ratio,
+                           propagation, propagation_type
 
 include("catalog/catalog.jl")
 include("catalog/io.jl")

@@ -1,4 +1,4 @@
 using Test
-using Cosmology
+using AstroSGWBCosmology
 
 include("test_cosmology.jl")

@@ -30,7 +30,7 @@ end
 function _q_planck_reference(d::DefaultBBHMassPair, m1::Real)
     q_low = d.m2_low / m1
     q_low < 1 || return zero(promote_type(typeof(q_low), typeof(d.βq)))
-    d.δm2 == 0 && return CBCDistributions._q_power_integral(d, q_low, one(q_low))
+    d.δm2 == 0 && return AstroSGWBDistributions._q_power_integral(d, q_low, one(q_low))
 
     δq = d.δm2 / m1
     q_taper_high = min(q_low + δq, one(q_low))
@@ -39,12 +39,12 @@ function _q_planck_reference(d::DefaultBBHMassPair, m1::Real)
         h = (q_taper_high - q_low) / δq
         band,
         _ = quadgk(
-            t -> (q_low + δq * t)^d.βq * CBCDistributions._planck_unit_taper(t),
+            t -> (q_low + δq * t)^d.βq * AstroSGWBDistributions._planck_unit_taper(t),
             zero(h), h; rtol = 1e-12)
         z += δq * band
     end
     if q_taper_high < 1
-        z += CBCDistributions._q_power_integral(d, q_taper_high, one(q_low))
+        z += AstroSGWBDistributions._q_power_integral(d, q_taper_high, one(q_low))
     end
     return z
 end
@@ -61,7 +61,7 @@ end
 end
 
 @testset "BrokenPowerLaw normalization and support" begin
-    d = CBCDistributions.BrokenPowerLaw(1.5, 4.0, 35.0, 5.0, 120.0)
+    d = AstroSGWBDistributions.BrokenPowerLaw(1.5, 4.0, 35.0, 5.0, 120.0)
     z, _ = quadgk(m -> pdf(d, m), minimum(d), maximum(d))
 
     @test z≈1.0 rtol=1e-8
@@ -133,8 +133,8 @@ end
     broken = d.broken
     peak1 = d.peak1
     peak2 = d.peak2
-    z1 = CBCDistributions.normalizer(broken.lower)
-    z2 = CBCDistributions.normalizer(broken.upper)
+    z1 = AstroSGWBDistributions.normalizer(broken.lower)
+    z2 = AstroSGWBDistributions.normalizer(broken.upper)
     z = z1 + z2
     g1 = peak1
     g2 = peak2
@@ -218,14 +218,14 @@ end
 
         d = _default_bbh_pair(βq = βq)
         ref = _q_planck_reference(d, m1)
-        @test CBCDistributions._q_normalizer(d, m1)≈ref rtol=2e-8
+        @test AstroSGWBDistributions._q_normalizer(d, m1)≈ref rtol=2e-8
     end
 
     # Untapered limit reduces to the closed-form power integral.
     d0 = _default_bbh_pair(δm2 = 0.0)
     q_low = d0.m2_low / 35.0
     ref0, _ = quadgk(q -> q^d0.βq, q_low, 1.0; rtol = 1e-12)
-    @test CBCDistributions._q_normalizer(d0, 35.0)≈ref0 rtol=1e-10
+    @test AstroSGWBDistributions._q_normalizer(d0, 35.0)≈ref0 rtol=1e-10
 end
 
 @testset "DefaultBBHMassPair fixed Planck rule convergence" begin
@@ -236,8 +236,10 @@ end
         q_low = d.m2_low / m1
         δq = d.δm2 / m1
         h = (min(q_low + δq, 1.0) - q_low) / δq
-        z16 = CBCDistributions._q_planck_taper_band_integral(q_low, δq, d.βq, h, Val(16))
-        z32 = CBCDistributions._q_planck_taper_band_integral(q_low, δq, d.βq, h, Val(32))
+        z16 = AstroSGWBDistributions._q_planck_taper_band_integral(
+            q_low, δq, d.βq, h, Val(16))
+        z32 = AstroSGWBDistributions._q_planck_taper_band_integral(
+            q_low, δq, d.βq, h, Val(32))
         @test z16≈z32 rtol=1e-7 atol=1e-12
     end
 end

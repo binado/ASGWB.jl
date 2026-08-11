@@ -1,7 +1,7 @@
 using AstroSGWB: Ωgw, spectral_density, AnalyticInclination, CatalogInclination,
                  inclination_factor, average_mode_config_name, average_mode_type,
                  SUPPORTED_AVERAGE_MODES
-using Cosmology: hubble_constant_si
+using AstroSGWBCosmology: hubble_constant_si
 using ForwardDiff
 using Statistics
 using Test

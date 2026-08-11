@@ -1,4 +1,4 @@
-module Cosmology
+module AstroSGWBCosmology
 
 export AbstractCosmology, LambdaCDM, W0CDM, W0WaCDM,
        AbstractPropagation, GR, ModifiedPropagation,

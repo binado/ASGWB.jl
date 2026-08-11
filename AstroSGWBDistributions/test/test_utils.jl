@@ -1,4 +1,4 @@
-using CBCDistributions
+using AstroSGWBDistributions
 using Test
 
 @testset "time conversions" begin

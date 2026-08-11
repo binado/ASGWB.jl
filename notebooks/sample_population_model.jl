@@ -18,8 +18,8 @@ begin
                      MadauDickinsonSourceFrame,
                      redshift_prior,
                      luminosity_distance
-    using Cosmology: AbstractCosmology
-    using CBCDistributions: DefaultBBHMassPair
+    using AstroSGWBCosmology: AbstractCosmology
+    using AstroSGWBDistributions: DefaultBBHMassPair
     using Distributions: Uniform, product_distribution, ProductNamedTupleDistribution
     using DataFrames
     using CSV

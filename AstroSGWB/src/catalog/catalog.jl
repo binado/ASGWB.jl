@@ -41,7 +41,7 @@ the polarization-power matrix with the catalog's own `redshift` column. This is 
 call sites: it removes the one way the correction can go mechanically wrong, namely
 pairing the polarization-power matrix with a redshift vector that has been subsetted or reordered.
 
-Not idempotent — see [`Cosmology.apply_gw_distance_correction!`](@ref).
+Not idempotent — see [`AstroSGWBCosmology.apply_gw_distance_correction!`](@ref).
 """
 function apply_gw_distance_correction!(c::SGWBCatalog, prop::AbstractPropagation)
     apply_gw_distance_correction!(c.polarization_power, c.samples.redshift, prop)
