@@ -73,7 +73,6 @@ export Detector,
        pairwise_overlap_reduction_function,
        effective_psd,
        gaussian_bin_scale,
-       gaussian_bin_variance,
        frequency_bin_width
 
 # Cosmology

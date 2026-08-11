@@ -12,26 +12,12 @@ function frequency_bin_width(frequencies::AbstractVector{<:Real})
     return df
 end
 
-function gaussian_bin_variance(;
+function gaussian_bin_scale(;
         effective_psd::AbstractVector{<:Real},
         frequencies::AbstractVector{<:Real},
         observation_time_sec::Real
 )
     df = frequency_bin_width(frequencies)
     # effective_psd is amplitude √(variance); bin variance is (effective_psd)² / (2 T Δf)
-    return effective_psd .^ 2 ./ (2.0 * Float64(observation_time_sec) * df)
-end
-
-function gaussian_bin_scale(;
-        effective_psd::AbstractVector{<:Real},
-        frequencies::AbstractVector{<:Real},
-        observation_time_sec::Real
-)
-    return sqrt.(
-        gaussian_bin_variance(;
-        effective_psd = effective_psd,
-        frequencies = frequencies,
-        observation_time_sec = observation_time_sec
-    ),
-    )
+    return sqrt.(effective_psd .^ 2 ./ (2.0 * Float64(observation_time_sec) * df))
 end
