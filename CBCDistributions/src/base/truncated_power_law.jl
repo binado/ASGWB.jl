@@ -13,22 +13,6 @@ const _SQRT_EPS_FLOAT64 = sqrt(eps(Float64))
     return (high^a - low^a) / a
 end
 
-@inline function _broken_power_integral(
-        α::Real,
-        low::Real,
-        high::Real,
-        m_break::Real
-)
-    high > low ||
-        return zero(promote_type(typeof(α), typeof(low), typeof(high), typeof(m_break)))
-    T = promote_type(typeof(α), typeof(low), typeof(high), typeof(m_break))
-    a = one(T) - α
-    if abs(a) <= _SQRT_EPS_FLOAT64
-        return m_break * log(high / low)
-    end
-    return m_break * ((high / m_break)^a - (low / m_break)^a) / a
-end
-
 struct TruncatedPowerLaw{T <: Real} <: ContinuousUnivariateDistribution
     α::T       # power-law slope (density ∝ (m / pivot)^(-α))
     pivot::T   # shared pivot for scale continuity
@@ -43,9 +27,10 @@ function TruncatedPowerLaw(α::Real, pivot::Real, low::Real, high::Real)
     low = T(low);
     high = T(high)
     0 < low < high || throw(ArgumentError("bounds must satisfy 0 < low < high"))
-    _broken_power_integral(α, low, high, pivot) > 0 ||
+    d = TruncatedPowerLaw{T}(α, pivot, low, high)
+    normalizer(d) > 0 ||
         throw(ArgumentError("truncated power-law normalizer must be positive"))
-    return TruncatedPowerLaw{T}(α, pivot, low, high)
+    return d
 end
 
 Base.minimum(d::TruncatedPowerLaw) = d.low
@@ -62,7 +47,14 @@ function Distributions.logpdf(d::TruncatedPowerLaw, value::Real)
     return -d.α * log(value / d.pivot) - log(normalizer(d))
 end
 
-normalizer(d::TruncatedPowerLaw) = _broken_power_integral(d.α, d.low, d.high, d.pivot)
+@inline function normalizer(d::TruncatedPowerLaw)
+    d.high > d.low || return zero(d.α)
+    a = one(d.α) - d.α
+    if abs(a) <= _SQRT_EPS_FLOAT64
+        return d.pivot * log(d.high / d.low)
+    end
+    return d.pivot * ((d.high / d.pivot)^a - (d.low / d.pivot)^a) / a
+end
 
 function _rand_scaled_power(rng::AbstractRNG, low::Real, high::Real, exponent::Real)
     u = rand(rng)
