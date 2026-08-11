@@ -19,5 +19,5 @@ function gaussian_bin_scale(;
 )
     df = frequency_bin_width(frequencies)
     # effective_psd is amplitude √(variance); bin variance is (effective_psd)² / (2 T Δf)
-    return sqrt.(effective_psd .^ 2 ./ (2.0 * Float64(observation_time_sec) * df))
+    return sqrt.(effective_psd .^ 2 ./ (2.0 * observation_time_sec * df))
 end
