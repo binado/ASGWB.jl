@@ -15,14 +15,14 @@ sample_only = ["zpeak"]
 
 likelihood = "amplitude_marginalized"
 amplitude_parameter = "H0"
-# Not the 1024 default. At this network the template SNR is ρ ≈ 400, so the conditional
-# posterior's width in H0 is σ_A/|A'(H0)| = (1/ρ)·H0_fid ≈ 0.17 -- against a Uniform(20, 140)
-# prior, 1024 nodes give 0.117 spacing, i.e. about 1.5 nodes per σ. Measured
-# `quadrature_effective_nodes`: 2.2 at 1024, 18.6 at 8192, 37.2 at 16384, which is the
-# first value comfortably above the 30 threshold `scripts/run_mcmc.jl` warns below.
-# The reconstruction is converged by 8192 (draws agree to 5 decimals with 16384), but the
-# diagnostic is what tells you that, so keep it green.
-amplitude_num_nodes = 16384
+# The 1024 default, and that is not a concession. The model's log Z is spectrally accurate
+# at 1024 nodes even at the ρ ≈ 400 of this network (the trapezoid's endpoint corrections
+# vanish for a bump deep inside the prior box), and the reconstruction's quantile/rand
+# re-mesh onto a localized bracket internally (see `QUADRATURE_NODES.md` and
+# `AstroSGWBInference/src/amplitude.jl`'s module docstring) — the 2.2/18.6/37.2
+# `quadrature_effective_nodes` progression that once forced 16384 measured a single
+# prior-wide mesh and says nothing about the refined one the draws actually use.
+amplitude_num_nodes = 1024
 amplitude_prior_span_sigma = 10.0
 
 seed = 42

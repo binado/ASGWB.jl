@@ -42,17 +42,25 @@ integrated by a max-shifted trapezoid rule on a fixed 1D grid. Squaring
 overflowing ``\\rho^2`` at very high SNR, and is load-bearing there.
 
 **The grid is a quadrature scheme, not the distribution.** The support is the *prior's*,
-and [`Distributions.logpdf`](@ref) evaluates the analytic density at any ``\\varphi``
+and [`Distributions.logpdf`](@ref) evaluates the analytic density at any ``\varphi``
 without touching the grid. The one place the asymmetry shows is `rand`/`quantile`, which
-invert a CDF tabulated on the grid and therefore return draws clipped to
-`[grid[1], grid[end]]` -- slightly tighter than the declared support. That is deliberate:
-the grid must cover essentially all the prior mass anyway (see [`quadrature_grid`](@ref)),
-or the normalizer is wrong for a reason no amount of clipping would fix.
+invert a tabulated CDF and therefore return draws clipped to the mesh -- slightly tighter
+than the declared support. That is deliberate: the grid must cover essentially all the
+prior mass anyway (see [`quadrature_grid`](@ref)), or the normalizer is wrong for a
+reason no amount of clipping would fix.
 
-"Exact up to quadrature error" only holds if the grid resolves the conditional posterior,
-whose width in ``\\varphi`` is ``\\sigma_A / |A'(\\varphi)|``. No quadrature rule rescues a
-Gaussian bump spanning three nodes, so grid adequacy must be **checked** with
-[`effective_nodes`](@ref), not assumed.
+The two grid consumers have completely different error behaviour. [`log_normalizer`](@ref)
+is a global sum whose trapezoid corrections are all endpoint differences, so with the
+conditional posterior a bump deep inside a prior-span grid it is spectrally accurate --
+~1024 nodes suffice even when the bump spans only a couple of cells. `rand`/`quantile` are
+*local* readouts whose resolution is capped at the cell size, so they run a **two-pass**
+scheme: bracket the posterior mass on the prior-span grid (cheap and forgiving -- the
+max-shift pins the bracket to the peak's cell even when the integrand underflows
+everywhere else), pad one coarse cell each side, then rebuild and invert the CDF on an
+equally dense mesh spanning just that bracket. Even so, grid adequacy must be **checked**
+with [`effective_nodes`](@ref), which measures the refined mesh that actually backs the
+draw: a value below about 30 there means the conditional genuinely cannot be resolved at
+that node count.
 
 Unlike the Python original this distribution is **scalar**: one draw's statistics, not a
 batch. Batching there is a JAX/`Predictive` requirement; here `reconstruct_amplitude`
@@ -115,8 +123,9 @@ The three consumers, all backed by the single `_log_density` implementation:
 
 - [`log_normalizer`](@ref) -- ``\\ln Z``, which *is* the marginalization factor
   `astrosgwb_amplitude_marginalized_turing_model` adds to the log-likelihood at the MLE;
-- `rand` / `Distributions.quantile` -- inverse-transform draws of ``\\varphi`` for
-  post-processing reconstruction, clipped to the grid;
+- `rand` / `Distributions.quantile` -- inverse-transform draws of ``\varphi`` for
+  post-processing reconstruction on a two-pass refined mesh (see
+  [`Distributions.quantile`](@ref)), clipped to that mesh;
 - [`effective_nodes`](@ref) -- the grid-adequacy diagnostic.
 
 The statistics arrive as `ForwardDiff.Dual`s inside the model body, so `amplitude_mle`,
@@ -200,6 +209,69 @@ function _cumulative_trapezoid(y::AbstractVector, x::AbstractVector)
 end
 
 """
+Tail mass fraction cut from each side when [`_fine_mesh`](@ref) localizes the refinement
+mesh for `quantile`/`rand`/`effective_nodes`. `1e-6` is ≈ 4.75σ for a Gaussian bump; the
+one-cell padding on top absorbs the coarse pass's only job, locating the peak.
+"""
+const _REFINE_EPSILON = 1e-6
+
+"""
+    _quantile_from_cdf(cdf, grid, q) -> Real
+
+Inverse CDF by linear-in-CDF inversion: the answer sits in the one cell where `cdf`
+crosses `q`, approximated as a straight line. `cdf` must start at 0 and be normalized.
+
+`count(<(q), cdf)` is the number of nodes strictly below `q`; clamping to `[1, n-1]`
+picks the bracketing cell `[i, i+1]` even for `q = 0` or `q = 1`. Deep in the tails the
+shifted integrand underflows to 0, so the CDF has long flat plateaus; the division guard
+lands those draws at `grid_lo` instead of a NaN from 0/0.
+"""
+function _quantile_from_cdf(cdf::AbstractVector, grid::AbstractVector, q::Real)
+    n = length(grid)
+    i = clamp(count(<(q), cdf), 1, n - 1)
+    cdf_lo, cdf_hi = cdf[i], cdf[i + 1]
+    grid_lo, grid_hi = grid[i], grid[i + 1]
+    fraction = cdf_hi > cdf_lo ? (q - cdf_lo) / (cdf_hi - cdf_lo) : zero(q)
+    return grid_lo + fraction * (grid_hi - grid_lo)
+end
+
+"""
+    _fine_mesh(c::AmplitudeConditional) -> (grid, shifted_integrand)
+
+The two-pass localized mesh backing `quantile`/`rand`/`effective_nodes`.
+
+Inverse-CDF inversion is a *local* readout: its resolution is capped at the cell size, so
+on a prior-span grid a conditional posterior of width ``\\sigma_\\varphi`` is quantized to
+`h` -- at ρ ≈ 400 over `Uniform(20, 140)` that inflates the 68% width by ~9% at 1024
+nodes (see `QUADRATURE_NODES.md`). The fix is a cheap localization pass followed by a
+dense re-mesh:
+
+1. Coarse CDF of the (max-shifted) integrand on `c.grid`.
+2. Bracket the posterior mass between the `_REFINE_EPSILON` and `1 - _REFINE_EPSILON`
+   quantiles, padded one coarse cell each side. Index-based padding makes no uniformity
+   assumption on the grid, and the max-shift pins the bracket to the peak's cell even when
+   the integrand underflows everywhere else -- so this survives σ/h < 1 on the coarse
+   mesh, the regime where a non-shifted rule would lose the peak entirely.
+3. Rebuild grid and integrand on an equally dense `range(lo, hi; length(c.grid))` mesh.
+"""
+function _fine_mesh(c::AmplitudeConditional)
+    log_y = _log_integrand(c)
+    shifted = exp.(log_y .- maximum(log_y))
+    cdf = _cumulative_trapezoid(shifted, c.grid)
+    cdf ./= cdf[end]
+
+    n = length(c.grid)
+    i_lo = clamp(count(<(_REFINE_EPSILON), cdf), 1, n - 1)
+    i_hi = clamp(count(<(1 - _REFINE_EPSILON), cdf), 1, n - 1)
+    lo = c.grid[max(i_lo - 1, 1)]
+    hi = c.grid[min(i_hi + 2, n)]
+
+    fine = range(lo, hi; length = n)
+    fine_log_y = [_log_density(c, φ) for φ in fine]
+    return fine, exp.(fine_log_y .- maximum(fine_log_y))
+end
+
+"""
     log_normalizer(c::AmplitudeConditional) -> Real
 
 ``\\ln Z`` of the conditional -- **the marginalization factor itself**.
@@ -218,17 +290,20 @@ end
 """
     effective_nodes(c::AmplitudeConditional) -> Real
 
-Grid-adequacy diagnostic: how many nodes actually carry the conditional posterior.
+Grid-adequacy diagnostic for the **reconstruction draws**: how many nodes of the refined
+mesh [`_fine_mesh`](@ref) actually carry the conditional posterior.
 
-Reuses [`normalized_ess`](@ref) on the shifted integrand -- the same Kish
+Reuses [`normalized_ess`](@ref) on the shifted fine integrand -- the same Kish
 effective-sample-size construction used for the importance weights -- rescaled by the node
-count so the result reads as a node count rather than a fraction. A conditional posterior
-spanning only a handful of nodes reports a small value here even though the assembled log
-evidence looks finite and plausible; this should be comfortably above about **30**.
+count so the result reads as a node count rather than a fraction. This should be
+comfortably above about **30**. It gates `rand`/`quantile` alone: [`log_normalizer`](@ref)
+is spectrally accurate on the coarse grid far below that threshold, so a passing value
+here is *not* what makes the marginal likelihood right, and a failing one means the
+reconstructed draws -- not the chain -- are lattice-quantized.
 """
 function effective_nodes(c::AmplitudeConditional)
-    log_y = _log_integrand(c)
-    return normalized_ess(exp.(log_y .- maximum(log_y))) * length(c.grid)
+    _, fine_shifted = _fine_mesh(c)
+    return normalized_ess(fine_shifted) * length(c.grid)
 end
 
 Base.minimum(c::AmplitudeConditional) = minimum(c.prior)
@@ -252,29 +327,21 @@ end
 """
     Distributions.quantile(c::AmplitudeConditional, q) -> Real
 
-Inverse CDF by linear-in-CDF inversion of the cumulative trapezoid of the same integrand
-[`log_normalizer`](@ref) integrates, so draws follow precisely the density that was
-marginalized -- a piecewise-*constant* approximation of it, which agrees with `logpdf` at
-node resolution and differs sub-cell. Returns ``\\varphi`` clipped to
-`[grid[1], grid[end]]`.
+Inverse CDF of the conditional by two-pass inversion, so draws follow precisely the
+density that was marginalized -- a piecewise-*constant* approximation of it.
+
+The prior-span grid resolves the *integral* spectrally but a *location* only to the cell
+size, so the CDF is first bracketed coarsely on `c.grid` and then rebuilt on the refined
+mesh from [`_fine_mesh`](@ref), where the actual inversion happens. Normalizing by
+`cdf[end]` makes the unknown normalizer cancel out of the draw, which is why the mesh may
+differ from the one [`log_normalizer`](@ref) integrated. Returns ``\varphi`` clipped to
+the refined mesh.
 """
 function Distributions.quantile(c::AmplitudeConditional, q::Real)
-    log_y = _log_integrand(c)
-    shifted = exp.(log_y .- maximum(log_y))
-    cdf = _cumulative_trapezoid(shifted, c.grid)
+    fine, fine_shifted = _fine_mesh(c)
+    cdf = _cumulative_trapezoid(fine_shifted, fine)
     cdf ./= cdf[end]
-
-    n = length(c.grid)
-    # `count(<(q), cdf)` is the number of nodes strictly below `q`; clamping to
-    # `[1, n-1]` picks the bracketing cell `[i, i+1]` even for q = 0 or q = 1.
-    i = clamp(count(<(q), cdf), 1, n - 1)
-    cdf_lo, cdf_hi = cdf[i], cdf[i + 1]
-    grid_lo, grid_hi = c.grid[i], c.grid[i + 1]
-
-    # Deep in the tails `shifted` underflows to 0, so the CDF has long flat plateaus.
-    # Guard the division: those draws land at `grid_lo` instead of a NaN from 0/0.
-    fraction = cdf_hi > cdf_lo ? (q - cdf_lo) / (cdf_hi - cdf_lo) : zero(q)
-    return grid_lo + fraction * (grid_hi - grid_lo)
+    return _quantile_from_cdf(cdf, fine, q)
 end
 
 """

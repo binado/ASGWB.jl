@@ -143,9 +143,11 @@ Everything here is *live*: the prior distribution and the two scalings are objec
 derived numbers, so nothing can go stale against the config it came from. The one array,
 `grid`, is a quadrature scheme rather than a tabulation of the density.
 
-The same values must reach both the model and `reconstruct_amplitude` -- a mismatch is
-silent, because the sufficient statistics stay finite and plausible whatever conditional
-you pair them with -- so they are built once, here.
+The prior, fiducial, and scalings must reach both the model and `reconstruct_amplitude`
+unchanged -- a mismatch is silent, because the sufficient statistics stay finite and
+plausible whatever conditional you pair them with. The `grid` is only quadrature accuracy
+(the reconstruction re-meshes from it internally), but building everything once here keeps
+it that way by construction.
 """
 function _amplitude_marginalization(cfg::MCMCConfig, prior::NamedTuple, fiducials)
     name = cfg.amplitude_parameter

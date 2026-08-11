@@ -21,7 +21,9 @@ sample_only = ["H0"]
 # variable at all, though it does end up in the saved posterior group.
 likelihood = "default"
 # amplitude_parameter = "H0"      # "H0" or "R₀"
-amplitude_num_nodes = 1024        # quadrature nodes for the marginalization integral
+amplitude_num_nodes = 1024        # nodes on the prior-span grid: sizes the (spectrally
+                                  # accurate) marginalization integral and both passes of
+                                  # the reconstruction's two-pass refinement mesh
 amplitude_prior_span_sigma = 10.0 # grid half-width in prior standard deviations
 
 seed = 42

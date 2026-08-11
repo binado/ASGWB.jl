@@ -87,10 +87,10 @@ end
     xs = quantile.(Ref(c), qs)
 
     @test issorted(xs)
-    # Draws are clipped to the grid -- slightly tighter than the declared support, and
-    # deliberately so (see the module docstring).
+    # Draws are clipped to the refined mesh -- tighter than the prior-span grid, which is
+    # itself slightly tighter than the declared support. Deliberate (module docstring).
     @test all(first(c.grid) .<= xs .<= last(c.grid))
-    @test quantile(c, 0.0) == first(c.grid)
+    @test quantile(c, 0.0) <= xs[2]
 
     # The empirical CDF of a large sample must match the analytic density's.
     rng = Xoshiro(20260811)
@@ -117,9 +117,10 @@ end
 end
 
 @testset "effective_nodes flags an unresolved grid" begin
-    # Same conditional, two grids. The default 1024-node grid resolves it comfortably;
-    # a 16-node grid over the same range does not, even though `log_normalizer` returns a
-    # perfectly finite, plausible-looking number in both cases.
+    # Same conditional, two grids. The default 1024-node grid resolves it comfortably
+    # after refinement; a 16-node grid does not -- the fine mesh inherits the node count,
+    # so a coarse mesh that is merely 16 nodes wide stays unresolved -- even though
+    # `log_normalizer` returns a perfectly finite, plausible-looking number in both cases.
     well_resolved = _conditional(1.05, 30.0)
     @test effective_nodes(well_resolved) > 30
 
@@ -127,8 +128,34 @@ end
     @test effective_nodes(coarse) < 30
     @test isfinite(log_normalizer(coarse))
 
-    # And a conditional far too sharp for any reasonable grid.
+    # And a conditional far too sharp for any reasonable node budget: ρ = 1e5 puts the
+    # whole posterior inside a fraction of one coarse cell, so even the padded, refined
+    # bracket spans ~3 coarse cells worth of nodes at default resolution.
     @test effective_nodes(_conditional(1.0, 1.0e5)) < 30
+end
+
+@testset "two-pass refinement resolves the production ρ = 400 conditional" begin
+    # The case from QUADRATURE_NODES.md: on a prior-wide 1024-node inversion this
+    # conditional inflated the 68% width by +9.3%, erred on the 5th percentile by 23% of
+    # a coarse cell, and rated effective_nodes = 5.1 -- while log Z was already at machine
+    # precision. The two-pass mesh must close all three at the same node budget.
+    prior = Uniform(20.0, 140.0)
+    fiducial = 67.66
+    c = AmplitudeConditional(1.002, 400.0; amplitude_fn = inv, prior, fiducial)
+    reference = AmplitudeConditional(
+        1.002, 400.0; amplitude_fn = inv, prior, fiducial, num_nodes = 1_000_001)
+
+    h = step(c.grid)
+    for q in (0.05, 0.25, 0.5, 0.75, 0.95)
+        @test abs(quantile(c, q) - quantile(reference, q)) < 0.01h
+    end
+
+    width(conditional) = quantile(conditional, 0.84) - quantile(conditional, 0.16)
+    @test width(c) ≈ width(reference) rtol = 1.0e-3
+
+    # The diagnostic now reads the refined mesh, so it clears the threshold on the same
+    # prior-span grid that used to report 5.1.
+    @test effective_nodes(c) > 30
 end
 
 @testset "reconstruct_amplitude" begin

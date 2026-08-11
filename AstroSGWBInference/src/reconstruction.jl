@@ -18,20 +18,24 @@ For every element of the (broadcast-compatible) inputs -- production passes the
   amplitude, so no number that would be mistaken for the real merger rate is ever written
   at an unmarginalized ``\\varphi``;
 - `quadrature_effective_nodes` -- [`effective_nodes`](@ref) per draw, the grid-adequacy
-  diagnostic. Values below about 30 mean the conditional posterior is not resolved and the
-  marginalization the chain already did was wrong; warn on the minimum.
+  diagnostic measured on the refined mesh the draws come from. Values below about 30 mean
+  the conditional posterior is not resolved and the reconstructed draws are
+  lattice-quantized; warn on the minimum. The marginalization the chain already did is far
+  more forgiving -- see the module docstring in `amplitude.jl`.
 
 There is no forward physics here -- no catalog, no `(nfreq, nsamples)` contraction -- so
 the cost is O(length(grid)) per draw and this runs against a saved chain alone.
 
 !!! warning "The conditional must be the one the chain integrated"
 
-    `prior`, `grid`, `fiducial`, and `amplitude_fn` must be **exactly** those
-    `astrosgwb_amplitude_marginalized_turing_model` was given. Reconstruction is only
-    exact against the density the chain's `@addlogprob!` actually integrated; a silently
-    different one yields a wrong marginalized posterior with **no visible symptom**,
-    because the sufficient statistics stay finite and plausible whatever conditional you
-    pair them with.
+    `prior`, `fiducial`, and `amplitude_fn` must be **exactly** those
+    `astrosgwb_amplitude_marginalized_turing_model` was given: they define the density the
+    chain's `@addlogprob!` actually integrated. The `grid` is only quadrature accuracy --
+    `quantile` refines a localized mesh from it and normalizes by `cdf[end]`, so any grid
+    covering the prior support with enough nodes reconstructs the same draws. A silently
+    different *definition* yields a wrong marginalized posterior with **no visible
+    symptom**, because the sufficient statistics stay finite and plausible whatever
+    conditional you pair them with.
 
 `rng` should be seeded distinctly from the sampler -- these are fresh random draws, not a
 deterministic function of the chain.
