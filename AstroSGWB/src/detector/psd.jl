@@ -69,6 +69,6 @@ function (p::PowerSpectralDensity)(frequencies::AbstractVector{<:Real})
 end
 
 function (p::PowerSpectralDensity)(f::Real)
-    v = p([Float64(f)])
+    v = p([f])
     return v[1]
 end
