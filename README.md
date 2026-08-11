@@ -52,7 +52,7 @@ julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
    `luminosity_distance`; pass it through directly.
 4. Keep the catalog polarization power, restructured samples, and fiducial hyperparameters as explicit values; these are passed directly to forward-model and inference helpers.
 5. Prepare the built-in model with `prepare_bns_madau_dickinson_model(...)`, or assemble
-   a caller-owned callable implementing `weights_fn(Λ, samples) -> (rate, log_weights)`.
+   a caller-owned callable implementing `merger_rate_and_log_weights_fn(Λ, samples) -> (rate, log_weights)`.
    The prior declares every hyperparameter name. Compute the detector network's
    effective PSD separately with `effective_psd(frequencies, detectors)`.
 6. Synthesize `observed` at the fiducials with `AstroSGWBInference.forward_model(model, polarization_power, samples, fiducials).spectral_density` when there is no external spectrum to fit, so the modified-propagation factors `Ξ(z)` are applied consistently; construct the Turing model directly with `AstroSGWBInference.astrosgwb_importance_turing_model(model, polarization_power, samples, prior, observed, frequencies, effective_psd, observation_time, average_mode, track)` — the prior declares all hyperparameter names, and fixing one is conditioning, e.g. `model | (; R₀ = fiducials.R₀)` — sample with Turing NUTS, and save chains to netCDF via `InferenceObjects.convert_to_inference_data(chain)` + `InferenceObjects.to_netcdf`.

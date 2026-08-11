@@ -12,15 +12,15 @@ using Turing: DynamicPPL
 end
 
 """
-    astrosgwb_importance_turing_model(weights_fn, polarization_power, samples, prior,
-                                      observed, frequencies, effective_psd, observation_time,
-                                      average_mode, track) -> DynamicPPL.Model
+    astrosgwb_importance_turing_model(merger_rate_and_log_weights_fn, polarization_power,
+                                      samples, prior, observed, frequencies, effective_psd,
+                                      observation_time, average_mode, track) -> DynamicPPL.Model
 
-The Turing model scoring `weights_fn(Λ, samples) -> (rate, log_weights)` against
-`observed` (see the `AstroSGWBInference` module docstring for the model contract). There
-is no convenience constructor: callers with no external spectrum to fit synthesize
+The Turing model scoring `merger_rate_and_log_weights_fn(Λ, samples) -> (rate, log_weights)`
+against `observed` (see the `AstroSGWBInference` module docstring for the model contract).
+There is no convenience constructor: callers with no external spectrum to fit synthesize
 `observed` at the fiducial point themselves,
-`forward_model(weights_fn, polarization_power, samples, fiducials; average_mode).spectral_density`.
+`forward_model(merger_rate_and_log_weights_fn, polarization_power, samples, fiducials; average_mode).spectral_density`.
 
 **One `average_mode` must reach both sides.** The same value builds the data and scores
 it; splitting them makes the synthesized `observed` and the model disagree by a constant
@@ -34,7 +34,8 @@ derived in the model body via [`AstroSGWB.gaussian_bin_scale`](@ref) from `effec
 `frequencies`, and `observation_time`, so the likelihood σ and the `track = true` SNR
 always share one noise convention.
 
-`prior` declares **every** hyperparameter `weights_fn` reads, sampled or not; `keys(prior)`
+`prior` declares **every** hyperparameter `merger_rate_and_log_weights_fn` reads, sampled
+or not; `keys(prior)`
 controls the Turing variable creation order. Fixing a hyperparameter is Turing
 conditioning at the call site, `model | (; R₀ = fiducials.R₀)`: the pinned value enters
 as an observation, its prior density folds into the joint as a sampling-irrelevant
@@ -53,7 +54,7 @@ through DynamicPPL is what the tests exercise, and positional arguments stay vis
 through `transform_args` untouched.
 """
 @model function astrosgwb_importance_turing_model(
-        weights_fn,
+        merger_rate_and_log_weights_fn,
         polarization_power::AbstractMatrix{<:Real},
         samples::NamedTuple,
         prior::NamedTuple,
@@ -68,7 +69,8 @@ through `transform_args` untouched.
     # and scoring (`Turing.logjoint(model, θ)`) address the submodel's variables by the
     # same bare symbols the caller already uses.
     Λ ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
-    forward = forward_model(weights_fn, polarization_power, samples, Λ; average_mode)
+    forward = forward_model(merger_rate_and_log_weights_fn, polarization_power, samples,
+        Λ; average_mode)
     Sh = forward.spectral_density
 
     # Derived from the same `effective_psd`, `frequencies`, and `observation_time` the

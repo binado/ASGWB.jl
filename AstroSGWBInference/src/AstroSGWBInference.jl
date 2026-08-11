@@ -8,7 +8,7 @@ astrophysical stochastic gravitational-wave background inference.
 
 Everything model-specific reaches this package through **one documented callable**:
 
-    weights_fn(Λ, samples) -> (rate, log_weights)
+    merger_rate_and_log_weights_fn(Λ, samples) -> (rate, log_weights)
 
 - `Λ` is a flat `NamedTuple` of live hyperparameters.
 - `samples` is the caller's per-event proposal sample collection.
@@ -19,8 +19,8 @@ There is no abstract type to subtype and no generic function to add methods to. 
 model is a **functor** -- a struct carrying its caches with a `(m::M)(Λ, samples)` method,
 which keeps full dispatch and type parameters -- and an ad-hoc model is a plain closure:
 
-    weights_fn = (Λ, samples) -> (1e-7 * Λ.rate_scale,
-                                  fill(Λ.weight_shift, length(samples.redshift)))
+    merger_rate_and_log_weights_fn = (Λ, samples) -> (1e-7 * Λ.rate_scale,
+                                                      fill(Λ.weight_shift, length(samples.redshift)))
 
 Hyperparameter *names* are declared by the prior, not by the model: `keys(prior)`
 determines the full hyperparameter set and the Turing variable creation order. Fixing a

@@ -44,7 +44,7 @@ function prepared(samples = SAMPLES; C = LambdaCDM, P = ModifiedPropagation,
 end
 
 @testset "the prepared model is the contract callable" begin
-    # S1: the whole model contract is `weights_fn(Λ, samples) -> (rate, log_weights)`.
+    # S1: the whole model contract is `merger_rate_and_log_weights_fn(Λ, samples) -> (rate, log_weights)`.
     # No abstract supertype, no generic function to add methods to -- so this package
     # imports nothing from `AstroSGWBInference` and a plain closure would serve equally.
     model = prepared()

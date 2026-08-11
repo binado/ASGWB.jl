@@ -1,10 +1,12 @@
 """
-    forward_model(weights_fn, polarization_power, samples, Λ; average_mode=AnalyticInclination())
+    forward_model(merger_rate_and_log_weights_fn, polarization_power, samples, Λ;
+                  average_mode=AnalyticInclination())
         -> (; rate, weights, spectral_density)
 
 Evaluate the forward model at hyperparameters `Λ`: call the model contract
-`weights_fn(Λ, samples) -> (rate, log_weights)`, exponentiate the weights, and contract
-the raw `(nfreq, nsamples)` polarization-power matrix into the strain spectral density `Sₕ`.
+`merger_rate_and_log_weights_fn(Λ, samples) -> (rate, log_weights)`, exponentiate the
+weights, and contract the raw `(nfreq, nsamples)` polarization-power matrix into the
+strain spectral density `Sₕ`.
 
 This is the **only** implementation of the forward pass. The `@model` body and the
 synthesis of `observed` from the fiducial point both go through it, so the two cannot
@@ -21,10 +23,10 @@ built under, or the synthesized data and the model that scores it disagree by a 
 factor; callers pass a single value to both this call and the Turing model.
 """
 function forward_model(
-        weights_fn, polarization_power, samples, Λ;
+        merger_rate_and_log_weights_fn, polarization_power, samples, Λ;
         average_mode::AbstractAverageMode = AnalyticInclination()
 )
-    rate, log_weights = weights_fn(Λ, samples)
+    rate, log_weights = merger_rate_and_log_weights_fn(Λ, samples)
     weights = exp.(log_weights)
     return (; rate, weights,
         spectral_density = AstroSGWB.spectral_density(
