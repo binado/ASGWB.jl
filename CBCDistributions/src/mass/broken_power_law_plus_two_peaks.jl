@@ -2,8 +2,6 @@ using Distributions
 using QuadGK
 using Random
 
-export DefaultBBHPrimaryMass, DefaultBBHMassPair, planck_taper
-
 const DEFAULT_BBH_M_HIGH = 300.0
 const _SQRT_EPS_FLOAT64 = sqrt(eps(Float64))
 const _PLANCK_Q_GAUSS_16 = QuadGK.gauss(Float64, 16)
@@ -59,7 +57,7 @@ end
 Base.minimum(d::BrokenPowerLaw) = d.low
 Base.maximum(d::BrokenPowerLaw) = d.high
 Base.eltype(::Type{<:BrokenPowerLaw{T}}) where {T} = T
-Base.eltype(d::BrokenPowerLaw) = typeof(d.low)
+Base.eltype(d::BrokenPowerLaw) = eltype(typeof(d))
 
 function Distributions.insupport(d::BrokenPowerLaw, value::Real)
     return d.low <= value < d.high
@@ -71,65 +69,11 @@ function Distributions.logpdf(d::BrokenPowerLaw, value::Real)
     return -α * log(value / d.m_break) - d.log_norm
 end
 
-Distributions.pdf(d::BrokenPowerLaw, value::Real) = exp(logpdf(d, value))
-
 function Random.rand(rng::AbstractRNG, d::BrokenPowerLaw)
     if rand(rng) <= d.low_weight
         return _rand_scaled_power(rng, d.low, d.m_break, -d.α1)
     end
     return _rand_scaled_power(rng, d.m_break, d.high, -d.α2)
-end
-
-"""
-    planck_taper(m, low, δ)
-
-Planck taper used by the DEFAULT BBH mass model. It is zero at or below `low`, rises as
-`1 / (1 + exp(1/t - 1/(1 - t)))` with `t = (m - low)/δ` over `(low, low + δ)`, and is one
-at or above `low + δ`. `δ == 0` is treated as a hard step to one at `low`.
-"""
-function planck_taper(m::Real, low::Real, δ::Real)
-    δ >= 0 || throw(ArgumentError("δ must be non-negative"))
-    T = promote_type(typeof(m), typeof(low), typeof(δ))
-    δ == 0 && return m < low ? zero(T) : one(T)
-    m <= low && return zero(T)
-    m >= low + δ && return one(T)
-    return _planck_unit_taper((m - low) / δ)
-end
-
-@inline function _planck_unit_exponent(t::Real)
-    return inv(t) - inv(one(t) - t)
-end
-
-@inline function _planck_unit_taper(t::Real)
-    T = typeof(t)
-    t <= 0 && return zero(T)
-    t >= 1 && return one(T)
-    a = _planck_unit_exponent(t)
-    if a > 0
-        ea = exp(-a)
-        return ea / (one(ea) + ea)
-    end
-    return inv(one(a) + exp(a))
-end
-
-@inline function _log_planck_unit_taper(t::Real)
-    T = typeof(t)
-    t <= 0 && return T(-Inf)
-    t >= 1 && return zero(T)
-    a = _planck_unit_exponent(t)
-    if a > 0
-        return -a - log1p(exp(-a))
-    end
-    return -log1p(exp(a))
-end
-
-@inline function _log_planck_taper(m::Real, low::Real, δ::Real)
-    δ >= 0 || throw(ArgumentError("δ must be non-negative"))
-    T = promote_type(typeof(m), typeof(low), typeof(δ))
-    δ == 0 && return m < low ? T(-Inf) : zero(T)
-    m <= low && return T(-Inf)
-    m >= low + δ && return zero(T)
-    return _log_planck_unit_taper((m - low) / δ)
 end
 
 struct DefaultBBHPrimaryMass{T <: Real, B, G, N <: Real} <:
@@ -217,7 +161,7 @@ end
 Base.minimum(d::DefaultBBHPrimaryMass) = d.m1_low
 Base.maximum(d::DefaultBBHPrimaryMass) = d.m_high
 Base.eltype(::Type{<:DefaultBBHPrimaryMass{T}}) where {T} = T
-Base.eltype(d::DefaultBBHPrimaryMass) = typeof(d.m1_low)
+Base.eltype(d::DefaultBBHPrimaryMass) = eltype(typeof(d))
 
 function Distributions.insupport(d::DefaultBBHPrimaryMass, value::Real)
     return d.m1_low <= value < d.m_high
@@ -285,8 +229,6 @@ function Distributions.logpdf(d::DefaultBBHPrimaryMass, value::Real)
     return logp - d.log_taper_norm
 end
 
-Distributions.pdf(d::DefaultBBHPrimaryMass, value::Real) = exp(logpdf(d, value))
-
 struct DefaultBBHMassPair{P <: DefaultBBHPrimaryMass, T <: Real} <:
        SourceMassPairDistribution
     primary::P
@@ -332,7 +274,7 @@ end
 Base.length(::DefaultBBHMassPair) = 2
 Base.size(::DefaultBBHMassPair) = (2,)
 Base.eltype(::Type{<:DefaultBBHMassPair{P, T}}) where {P, T} = promote_type(eltype(P), T)
-Base.eltype(d::DefaultBBHMassPair) = promote_type(eltype(d.primary), typeof(d.βq))
+Base.eltype(d::DefaultBBHMassPair) = eltype(typeof(d))
 
 function Distributions.insupport(d::DefaultBBHMassPair, value::Tuple{<:Real, <:Real})
     m1, m2 = value
@@ -404,13 +346,6 @@ end
 
 function Distributions._logpdf(d::DefaultBBHMassPair, x::AbstractVector{<:Real})
     return logpdf(d, (x[1], x[2]))
-end
-
-function Distributions.pdf(d::DefaultBBHMassPair, value::Tuple{<:Real, <:Real})
-    exp(logpdf(d, value))
-end
-function Distributions.pdf(d::DefaultBBHMassPair, value::AbstractVector{<:Real})
-    exp(logpdf(d, value))
 end
 
 function _rand_scaled_power(rng::AbstractRNG, low::Real, high::Real, exponent::Real)
