@@ -10,6 +10,8 @@ export DefaultBBHPrimaryMass, DefaultBBHMassPair, planck_taper
 export JULIAN_YEAR_SEC, year_to_second, second_to_year
 
 include("utils.jl")
+include("base/truncated_power_law.jl")
+include("base/broken_power_law.jl")
 include("mass/uniform.jl")
 include("mass/broken_power_law_plus_two_peaks.jl")
 include("spins/aligned.jl")

@@ -3,120 +3,7 @@ using QuadGK
 using Random
 
 const DEFAULT_BBH_M_HIGH = 300.0
-const _SQRT_EPS_FLOAT64 = sqrt(eps(Float64))
 const _PLANCK_Q_GAUSS_16 = QuadGK.gauss(Float64, 16)
-
-@inline function _power_integral(low::Real, high::Real, exponent::Real)
-    high > low || return zero(promote_type(typeof(low), typeof(high), typeof(exponent)))
-    T = promote_type(typeof(low), typeof(high), typeof(exponent))
-    a = exponent + one(T)
-    if abs(a) <= _SQRT_EPS_FLOAT64
-        return log(high / low)
-    end
-    return (high^a - low^a) / a
-end
-
-@inline function _broken_power_integral(
-        α::Real,
-        low::Real,
-        high::Real,
-        m_break::Real
-)
-    high > low ||
-        return zero(promote_type(typeof(α), typeof(low), typeof(high), typeof(m_break)))
-    T = promote_type(typeof(α), typeof(low), typeof(high), typeof(m_break))
-    a = one(T) - α
-    if abs(a) <= _SQRT_EPS_FLOAT64
-        return m_break * log(high / low)
-    end
-    return m_break * ((high / m_break)^a - (low / m_break)^a) / a
-end
-
-struct TruncatedPowerLaw{T <: Real} <: ContinuousUnivariateDistribution
-    α::T         # power-law slope (density ∝ (m / pivot)^(-α))
-    pivot::T     # shared pivot for scale continuity
-    low::T
-    high::T
-    log_norm::T  # log of the pivot-scaled normalizer
-end
-
-function TruncatedPowerLaw(α::Real, pivot::Real, low::Real, high::Real)
-    T = promote_type(Float64, typeof(α), typeof(pivot), typeof(low), typeof(high))
-    α = T(α);
-    pivot = T(pivot);
-    low = T(low);
-    high = T(high)
-    0 < low < high || throw(ArgumentError("bounds must satisfy 0 < low < high"))
-    z = _broken_power_integral(α, low, high, pivot)
-    z > 0 || throw(ArgumentError("truncated power-law normalizer must be positive"))
-    return TruncatedPowerLaw{T}(α, pivot, low, high, log(z))
-end
-
-Base.minimum(d::TruncatedPowerLaw) = d.low
-Base.maximum(d::TruncatedPowerLaw) = d.high
-Base.eltype(::Type{<:TruncatedPowerLaw{T}}) where {T} = T
-Base.eltype(d::TruncatedPowerLaw) = eltype(typeof(d))
-
-function Distributions.insupport(d::TruncatedPowerLaw, value::Real)
-    return d.low <= value < d.high
-end
-
-function Distributions.logpdf(d::TruncatedPowerLaw, value::Real)
-    insupport(d, value) || return -Inf
-    return -d.α * log(value / d.pivot) - d.log_norm
-end
-
-normalizer(d::TruncatedPowerLaw) = exp(d.log_norm)
-
-function Random.rand(rng::AbstractRNG, d::TruncatedPowerLaw)
-    return _rand_scaled_power(rng, d.low, d.high, -d.α)
-end
-
-struct BrokenPowerLaw{T <: Real, P1 <: TruncatedPowerLaw, P2 <: TruncatedPowerLaw} <:
-       ContinuousUnivariateDistribution
-    low_weight::T  # z1 / (z1 + z2): P(a draw lands below the break)
-    log_norm::T    # log(z1 + z2)
-    lower::P1      # truncated power law on [low, m_break]
-    upper::P2      # truncated power law on [m_break, high]
-end
-
-function BrokenPowerLaw(α1::Real, α2::Real, m_break::Real, low::Real, high::Real)
-    T = promote_type(
-        Float64, typeof(α1), typeof(α2), typeof(m_break), typeof(low), typeof(high))
-    0 < low < m_break < high ||
-        throw(ArgumentError("broken power-law bounds must satisfy 0 < low < m_break < high"))
-    lower = TruncatedPowerLaw(T(α1), T(m_break), T(low), T(m_break))
-    upper = TruncatedPowerLaw(T(α2), T(m_break), T(m_break), T(high))
-    z1 = normalizer(lower)
-    z2 = normalizer(upper)
-    z = z1 + z2
-    z > 0 || throw(ArgumentError("broken power-law normalizer must be positive"))
-    return BrokenPowerLaw{T, typeof(lower), typeof(upper)}(z1 / z, log(z), lower, upper)
-end
-
-Base.minimum(d::BrokenPowerLaw) = d.lower.low
-Base.maximum(d::BrokenPowerLaw) = d.upper.high
-Base.eltype(::Type{<:BrokenPowerLaw{T}}) where {T} = T
-Base.eltype(d::BrokenPowerLaw) = eltype(typeof(d))
-
-function Distributions.insupport(d::BrokenPowerLaw, value::Real)
-    return d.lower.low <= value < d.upper.high
-end
-
-function Distributions.logpdf(d::BrokenPowerLaw, value::Real)
-    insupport(d, value) || return -Inf
-    if value < d.lower.high
-        return -d.lower.α * log(value / d.lower.pivot) - d.log_norm
-    end
-    return -d.upper.α * log(value / d.upper.pivot) - d.log_norm
-end
-
-function Random.rand(rng::AbstractRNG, d::BrokenPowerLaw)
-    if rand(rng) <= d.low_weight
-        return rand(rng, d.lower)
-    end
-    return rand(rng, d.upper)
-end
 
 struct DefaultBBHPrimaryMass{T <: Real, B, G, N <: Real} <:
        ContinuousUnivariateDistribution
@@ -388,15 +275,6 @@ end
 
 function Distributions._logpdf(d::DefaultBBHMassPair, x::AbstractVector{<:Real})
     return logpdf(d, (x[1], x[2]))
-end
-
-function _rand_scaled_power(rng::AbstractRNG, low::Real, high::Real, exponent::Real)
-    u = rand(rng)
-    a = exponent + 1
-    if abs(a) <= _SQRT_EPS_FLOAT64
-        return low * exp(u * log(high / low))
-    end
-    return (low^a + u * (high^a - low^a))^(1 / a)
 end
 
 function _rand_primary_proposal(rng::AbstractRNG, d::DefaultBBHPrimaryMass)
