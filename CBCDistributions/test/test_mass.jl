@@ -133,14 +133,13 @@ end
     broken = d.broken
     peak1 = d.peak1
     peak2 = d.peak2
-    z1 = CBCDistributions._broken_power_integral(
-        broken.α1, d.m1_low, broken.m_break, broken.m_break)
-    z2 = CBCDistributions._broken_power_integral(
-        broken.α2, broken.m_break, d.m_high, broken.m_break)
+    z1 = CBCDistributions.normalizer(broken.lower)
+    z2 = CBCDistributions.normalizer(broken.upper)
     z = z1 + z2
     g1 = peak1
     g2 = peak2
-    broken_pdf(m) = (m / broken.m_break)^(-(m < broken.m_break ? broken.α1 : broken.α2)) / z
+    m_break = broken.lower.pivot
+    broken_pdf(m) = (m / m_break)^(-(m < m_break ? broken.lower.α : broken.upper.α)) / z
 
     for m in (6.0, 15.0, 35.0, 75.0, 119.0)
         expected = d.λ0 * broken_pdf(m) + d.λ1 * pdf(g1, m) + d.λ2 * pdf(g2, m)
