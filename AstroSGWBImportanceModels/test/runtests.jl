@@ -230,8 +230,8 @@ end
     observed = forward_model(
         model, polarization_power, SAMPLES, FIDUCIALS).spectral_density
     unconditioned = astrosgwb_importance_turing_model(
-        false, AnalyticInclination(), model, polarization_power, SAMPLES, frequencies,
-        eff_psd, observation_time, prior, observed)
+        model, polarization_power, SAMPLES, prior, observed, frequencies,
+        eff_psd, observation_time, AnalyticInclination(), false)
     turing_model = unconditioned | (; R₀ = FIDUCIALS.R₀)
 
     Λ_sampled = Base.structdiff(FIDUCIALS, (; R₀ = nothing,))

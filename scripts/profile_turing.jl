@@ -303,16 +303,16 @@ function _run(;
 
     # Turing / DynamicPPL path
     turing_model = astrosgwb_importance_turing_model(
-        false,
-        resolved_average_mode,
         model,
         polarization_power,
         samples,
+        full_prior,
+        observed,
         frequencies,
         eff_psd,
         observation_time,
-        full_prior,
-        observed
+        resolved_average_mode,
+        false
     ) | (; R₀ = local_merger_rate)
     lf, z0_turing = _build_turing_logdensity(turing_model)
     ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)

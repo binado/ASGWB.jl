@@ -12,9 +12,9 @@ using Turing: DynamicPPL
 end
 
 """
-    astrosgwb_importance_turing_model(track, average_mode, weights_fn, polarization_power,
-                                      samples, frequencies, effective_psd, observation_time,
-                                      prior, observed) -> DynamicPPL.Model
+    astrosgwb_importance_turing_model(weights_fn, polarization_power, samples, prior,
+                                      observed, frequencies, effective_psd, observation_time,
+                                      average_mode, track) -> DynamicPPL.Model
 
 The Turing model scoring `weights_fn(Λ, samples) -> (rate, log_weights)` against
 `observed` (see the `AstroSGWBInference` module docstring for the model contract). There
@@ -53,16 +53,16 @@ through DynamicPPL is what the tests exercise, and positional arguments stay vis
 through `transform_args` untouched.
 """
 @model function astrosgwb_importance_turing_model(
-        track::Bool,
-        average_mode::AbstractAverageMode,
         weights_fn,
         polarization_power::AbstractMatrix{<:Real},
         samples::NamedTuple,
+        prior::NamedTuple,
+        observed::AbstractVector{<:Real},
         frequencies::AbstractVector{<:Real},
         effective_psd::AbstractVector{<:Real},
         observation_time::Real,
-        prior::NamedTuple,
-        observed::AbstractVector{<:Real}
+        average_mode::AbstractAverageMode,
+        track::Bool
 )
     # `false`: no varname prefixing, so caller-side conditioning (`model | (; R₀ = …)`)
     # and scoring (`Turing.logjoint(model, θ)`) address the submodel's variables by the

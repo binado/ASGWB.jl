@@ -279,16 +279,16 @@ begin
         model, polarization_power, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density
     turing_model = astrosgwb_importance_turing_model(
-        false,
-        resolved_average_mode,
         model,
         polarization_power,
         samples,
+        hyperprior,
+        observed,
         frequencies,
         eff_psd,
         observation_time,
-        hyperprior,
-        observed
+        resolved_average_mode,
+        false
     ) | fixed
     nuts = Turing.NUTS(
         sampler.nadapts,

@@ -22,8 +22,8 @@ function _inline_model(problem; track = false,
             problem.model, problem.polarization_power, problem.samples, problem.fiducials;
             average_mode = average_mode).spectral_density)
     model = astrosgwb_importance_turing_model(
-        track, average_mode, problem.model, problem.polarization_power, problem.samples,
-        problem.frequencies, effective_psd, problem.observation_time, prior, observed)
+        problem.model, problem.polarization_power, problem.samples, prior, observed,
+        problem.frequencies, effective_psd, problem.observation_time, average_mode, track)
     return model | fixed
 end
 

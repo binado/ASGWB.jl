@@ -177,8 +177,8 @@ begin
                     NamedTuple{sample_only_tup}(hyperprior)
     fixed = Base.structdiff(fiducials, sampled_prior)
     model = astrosgwb_importance_turing_model(
-        false, resolved_average_mode, prepared_model, polarization_power, samples,
-        frequencies, eff_psd, observation_time_yr, hyperprior, observed) | fixed
+        prepared_model, polarization_power, samples, hyperprior, observed,
+        frequencies, eff_psd, observation_time_yr, resolved_average_mode, false) | fixed
     lf = DynamicPPL.LogDensityFunction(model)
 
     free_order = keys(sampled_prior)

@@ -207,16 +207,16 @@ function run_mcmc(config_file::String)
         model, polarization_power, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density
     turing_model = astrosgwb_importance_turing_model(
-        true,
-        resolved_average_mode,
         model,
         polarization_power,
         samples,
+        HYPERPRIOR,
+        observed,
         frequencies,
         eff_psd,
         cfg.observation_time,
-        HYPERPRIOR,
-        observed
+        resolved_average_mode,
+        true
     ) | fixed
     nuts = Turing.NUTS(
         cfg.sampler.nadapts,
