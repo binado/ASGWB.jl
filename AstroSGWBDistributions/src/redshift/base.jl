@@ -131,13 +131,6 @@ function redshift_log_prob(prior::RedshiftPrior, value::Real)
     return _normalized_log_density(pdf_at_value, norm, tiny)
 end
 
-@inline function _redshift_logpdf(prior::RedshiftPrior, z::Real)
-    x_lo = first(prior.x)
-    x_hi = last(prior.x)
-    (z < x_lo || z > x_hi) && return -Inf
-    return redshift_log_prob(prior, z)
-end
-
 """
     redshift_logpdf_eltype(prior::RedshiftPrior) -> Type
 
