@@ -97,7 +97,7 @@ just run-mcmc config/mcmc/my_run.toml
 julia --project=scripts/run -t auto scripts/run_mcmc.jl config/mcmc/my_run.toml
 ```
 
-`sampler.num_chains` defaults to `0`, which uses `Base.Threads.nthreads()`. If set explicitly, it must equal the thread count passed to `-t` (or `SLURM_CPUS_PER_TASK` on a cluster). The runner currently supports `ad_backend = "ForwardDiff"` only. Chains are written as netCDF under `output_dir` (default `chains/`); generated filenames include the config basename so array outputs can be traced back to their input TOML.
+`sampler.num_chains` defaults to `0`, which uses `Base.Threads.nthreads()`. If set explicitly, it must equal the thread count passed to `-t` (or `SLURM_CPUS_PER_TASK` on a cluster). The runner supports `ad_backend = "ForwardDiff"` (default) and `"Enzyme"` (reverse-mode with runtime activity). Chains are written as netCDF under `output_dir` (default `chains/`); generated filenames include the config basename so array outputs can be traced back to their input TOML.
 
 **Submit on SLURM** from the repository root (pre-instantiate on the login node with `just setup-run`; the batch scripts do not run `Pkg.instantiate()` on compute nodes):
 

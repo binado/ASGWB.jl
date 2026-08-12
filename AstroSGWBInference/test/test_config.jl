@@ -135,6 +135,10 @@ end
     bad_version["version"] = 2
     @test_throws ArgumentError MCMCConfig(bad_version)
 
+    enzyme_backend = example_dict()
+    enzyme_backend["sampler"]["ad_backend"] = "Enzyme"
+    @test MCMCConfig(enzyme_backend).sampler.ad_backend == "Enzyme"
+
     bad_backend = example_dict()
     bad_backend["sampler"]["ad_backend"] = "Zygote"
     @test_throws ArgumentError MCMCConfig(bad_backend)

@@ -52,9 +52,12 @@ begin
     function resolve_adtype(name::AbstractString)
         if name == "ForwardDiff"
             return ADTypes.AutoForwardDiff()
+        elseif name == "Enzyme"
+            return ADTypes.AutoEnzyme(;
+                mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
         else
             throw(ArgumentError(
-                "this notebook supports only ad_backend = \"ForwardDiff\"; got $(repr(name))",
+                "unsupported ad_backend $(repr(name)); supported: \"ForwardDiff\", \"Enzyme\"",
             ))
         end
     end
@@ -97,7 +100,7 @@ begin
         nsamples = 3000,
         nadapts = 3000,
         target_acceptance = 0.9,
-        ad_backend = "ForwardDiff",
+        ad_backend = "ForwardDiff",  # or "Enzyme"
         nchains = 0
     )
 
@@ -507,6 +510,7 @@ begin
     using Turing
     using AdvancedHMC
     using ADTypes
+    using Enzyme
     using Random
     using Logging
     using FlexiChains

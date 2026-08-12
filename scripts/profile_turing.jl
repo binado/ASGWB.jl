@@ -4,7 +4,7 @@
 # Run from the repository root, for example:
 #   julia --project=scripts/run scripts/profile_turing.jl --config-file=config/profile_turing.toml
 #
-# Optional: --seconds=2.0 --profile-samples=500 --alloc --profile-out=profile.dat
+# Optional: --seconds=2.0 --profile-samples=500 --alloc --profile-out=profile.dat --ad-backend=ForwardDiff
 #
 # The catalog is a mandatory real `catalog.h5`, loaded with `load_catalog` exactly
 # as the production notebooks do. Test fixtures are deliberately *not* supported:
@@ -37,8 +37,10 @@ using AstroSGWB:
                  ModifiedPropagation,
                  LambdaCDM,
                  Detector
+using ADTypes: AutoForwardDiff, AutoEnzyme
 using BenchmarkTools
 using DelimitedFiles
+using Enzyme
 using LogDensityProblems
 using LogDensityProblemsAD
 using Printf
@@ -125,6 +127,15 @@ function _priors_from_toml(priors_tbl::Dict)
         κ = Uniform(_uniform_bounds(priors_tbl, "kappa")...),
         zpeak = Uniform(_uniform_bounds(priors_tbl, "z_peak")...)
     )
+end
+
+function _resolve_adtype(name::AbstractString)
+    name == "ForwardDiff" && return AutoForwardDiff()
+    name == "Enzyme" &&
+        return AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
+    throw(ArgumentError(
+        "unsupported ad_backend $(repr(name)); supported: \"ForwardDiff\", \"Enzyme\"",
+    ))
 end
 
 function _theta0_from_toml(init_tbl::Dict, order::Tuple{Vararg{Symbol}})
@@ -242,7 +253,8 @@ function _run(;
         seconds::Float64,
         profile_samples::Int,
         do_alloc::Bool,
-        profile_out::Union{Nothing, String}
+        profile_out::Union{Nothing, String},
+        ad_backend::AbstractString
 )
     t0 = time()
 
@@ -313,7 +325,8 @@ function _run(;
         resolved_average_mode
     ) | (; R₀ = local_merger_rate)
     lf, z0_turing = _build_turing_logdensity(turing_model)
-    ad_lf = LogDensityProblemsAD.ADgradient(:ForwardDiff, lf)
+    adtype = _resolve_adtype(ad_backend)
+    ad_lf = LogDensityProblemsAD.ADgradient(adtype, lf)
 
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
@@ -401,7 +414,7 @@ function _run(;
 
     @info "=== gradient ==="
     t_grad_turing = results["gradient"]["turing"]
-    _print_trial_row("turing (ForwardDiff)", t_grad_turing)
+    _print_trial_row("turing ($ad_backend)", t_grad_turing)
 
     # AD cost multiplier via BenchmarkTools.ratio
     r_turing = ratio(median(t_grad_turing), median(t_primal_turing))
@@ -416,7 +429,7 @@ function _run(;
     # ------------------------------------------------------------------
     # Sampling profile on the gradient
     # ------------------------------------------------------------------
-    @info "sampling-profile: running $profile_samples Turing ForwardDiff gradient evals under Profile.@profile"
+    @info "sampling-profile: running $profile_samples Turing $ad_backend gradient evals under Profile.@profile"
     Profile.clear()
     # 100µs sampling delay: one gradient eval is ~100µs, so the default 1ms
     # delay misses almost every sample. Pair with n=10^7 so we never run out
@@ -541,13 +554,16 @@ Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation pr
 - `--alloc`: also run an allocation profile via `Profile.Allocs`.
 
 - `--profile-out=<path>`: write raw `Profile.retrieve()` snapshot via `Serialization`.
+
+- `--ad-backend=<name>`: `"ForwardDiff"` (default) or `"Enzyme"`.
 """
 function profile_turing(;
         config_file::String,
         seconds::Float64 = 2.0,
         profile_samples::Int = 500,
         alloc::Bool = false,
-        profile_out::String = ""
+        profile_out::String = "",
+        ad_backend::String = "ForwardDiff"
 )
     @info "loading config" path = config_file
     cfg = TOML.parsefile(config_file)
@@ -584,7 +600,8 @@ function profile_turing(;
         seconds,
         profile_samples,
         do_alloc = alloc,
-        profile_out = isempty(profile_out) ? nothing : profile_out
+        profile_out = isempty(profile_out) ? nothing : profile_out,
+        ad_backend
     )
 end
 
@@ -599,6 +616,7 @@ function _parse_args(args::Vector{String})
     profile_samples = 500
     alloc = false
     profile_out = ""
+    ad_backend = "ForwardDiff"
 
     i = 1
     while i <= length(args)
@@ -628,6 +646,11 @@ function _parse_args(args::Vector{String})
         elseif startswith(arg, "--profile-out=")
             profile_out = arg[(lastindex("--profile-out=") + 1):end]
             i += 1
+        elseif arg == "--ad-backend"
+            ad_backend, i = _pop_value!(args, i, arg)
+        elseif startswith(arg, "--ad-backend=")
+            ad_backend = arg[(lastindex("--ad-backend=") + 1):end]
+            i += 1
         else
             throw(ArgumentError("unknown argument: $arg"))
         end
@@ -639,7 +662,8 @@ function _parse_args(args::Vector{String})
         seconds,
         profile_samples,
         alloc,
-        profile_out
+        profile_out,
+        ad_backend
     )
 end
 

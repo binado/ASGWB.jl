@@ -8,8 +8,8 @@ export MCMCConfig, SamplerConfig, load_config, save_config, posterior_params,
 """Current config schema version. Bump on any breaking layout change."""
 const SCHEMA_VERSION = 3
 
-"""AD backends the notebook knows how to resolve (mirrors `resolve_adtype`)."""
-const SUPPORTED_AD_BACKENDS = ("ForwardDiff",)
+"""AD backends the notebook and runner know how to resolve (mirrors `resolve_adtype`)."""
+const SUPPORTED_AD_BACKENDS = ("ForwardDiff", "Enzyme")
 
 """Likelihoods `scripts/run_mcmc.jl` knows how to build."""
 const SUPPORTED_LIKELIHOODS = ("default", "amplitude_marginalized")

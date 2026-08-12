@@ -3,10 +3,15 @@ using AstroSGWB
 using AstroSGWBImportanceModels
 using AstroSGWBInference
 using AstroSGWBCosmology
+using ADTypes: AutoForwardDiff, AutoEnzyme
 using DataInterpolations: LinearInterpolation
 using Distributions: Uniform
+using Enzyme
 using ForwardDiff
+using LogDensityProblems
+using LogDensityProblemsAD
 using Turing
+using Turing.DynamicPPL
 
 # S7: `R₀` (Gpc⁻³ yr⁻¹) is a live hyperparameter read as `Λ.R₀`, not a frozen struct
 # field. It sits in both points at the same value the old `local_merger_rate` keyword
@@ -244,6 +249,54 @@ end
           Set(keys(FIDUCIALS))
 end
 
+@testset "Enzyme gradient matches ForwardDiff on BNS Turing model" begin
+    model = prepared()
+    polarization_power = Float64[1.0 1.5; 2.0 2.5]
+    frequencies = [20.0, 40.0]
+    observation_time = 1.0
+    prior = (
+        H0 = Uniform(20.0, 140.0),
+        Ωm = Uniform(0.05, 0.95),
+        Ξ₀ = Uniform(0.5, 5.0),
+        Ξₙ = Uniform(0.0, 3.0),
+        γ = Uniform(0.5, 10.0),
+        κ = Uniform(0.05, 10.0),
+        zpeak = Uniform(0.05, 10.0),
+        R₀ = Uniform(10.0, 1000.0)
+    )
+    observed = forward_model(
+        model, polarization_power, SAMPLES, FIDUCIALS).spectral_density
+    # Scale the noise to the signal so the likelihood term is not numerically zero.
+    σ_target = 0.05 * maximum(observed)
+    eff_psd = fill(
+        σ_target * sqrt(2 * year_to_second(observation_time) *
+             frequency_bin_width(frequencies)),
+        length(frequencies))
+    unconditioned = astrosgwb_importance_turing_model(
+        model, polarization_power, SAMPLES, bns_hyperprior(prior), observed, frequencies,
+        eff_psd, observation_time, AnalyticInclination())
+    turing_model = unconditioned |
+                   Base.structdiff(FIDUCIALS, (; H0 = FIDUCIALS.H0, Ωm = FIDUCIALS.Ωm))
+
+    vi = DynamicPPL.VarInfo(turing_model)
+    vi_linked = DynamicPPL.link(vi, turing_model)
+    lf = DynamicPPL.LogDensityFunction(
+        turing_model, DynamicPPL.getlogjoint_internal, vi_linked)
+    z = convert(Vector{Float64}, vi_linked[:])
+
+    ℓ_fd,
+    g_fd = LogDensityProblems.logdensity_and_gradient(
+        LogDensityProblemsAD.ADgradient(AutoForwardDiff(), lf), z)
+    ℓ_ez,
+    g_ez = LogDensityProblems.logdensity_and_gradient(
+        LogDensityProblemsAD.ADgradient(
+            AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse)), lf),
+        z)
+
+    @test ℓ_ez≈ℓ_fd rtol=1.0e-5 atol=1.0e-6
+    @test collect(g_ez)≈collect(g_fd) rtol=1.0e-5 atol=1.0e-6
+end
+
 # --------------------------------------------------------------------------
 # Amplitude scalings
 # --------------------------------------------------------------------------
@@ -347,7 +400,8 @@ end
         length(frequencies))
 
     general = astrosgwb_importance_turing_model(
-        model, polarization_power, SAMPLES, bns_hyperprior(full_prior), observed, frequencies, eff_psd,
+        model, polarization_power, SAMPLES, bns_hyperprior(full_prior),
+        observed, frequencies, eff_psd,
         observation_time, AnalyticInclination()) | fixed
     # The marginalized model's prior omits `R₀` entirely -- it is pinned inside the model,
     # not conditioned at the call site, which is the one place the two models' plumbing

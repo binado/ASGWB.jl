@@ -43,7 +43,8 @@ using InferenceObjects: InferenceObjects
 # `to_netcdf` lives in InferenceObjects' NCDatasets extension, which only
 # activates when NCDatasets is loaded; it's an explicit dep of this project.
 using NCDatasets: NCDatasets
-using ADTypes: AutoForwardDiff
+using ADTypes: AutoForwardDiff, AutoEnzyme
+using Enzyme
 using AdvancedHMC: DenseEuclideanMetric
 using Distributions: Uniform
 using FlexiChains: VNChain
@@ -102,7 +103,11 @@ end
 
 function _resolve_adtype(name::AbstractString)
     name == "ForwardDiff" && return AutoForwardDiff()
-    throw(ArgumentError("unsupported ad_backend $(repr(name)) (use \"ForwardDiff\")"))
+    name == "Enzyme" &&
+        return AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
+    throw(ArgumentError(
+        "unsupported ad_backend $(repr(name)); supported: \"ForwardDiff\", \"Enzyme\"",
+    ))
 end
 
 """

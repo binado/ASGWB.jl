@@ -36,7 +36,7 @@ output_prefix = "chains"
 nsamples = 3000
 nadapts = 3000
 target_acceptance = 0.9
-ad_backend = "ForwardDiff"
+ad_backend = "ForwardDiff"  # or "Enzyme" (reverse-mode, runtime activity)
 nchains = 0                 # 0 -> use Base.Threads.nthreads(); if set, must match nthreads()
 
 # Fiducial point (also the importance-sampling reference). Keys are the canonical
