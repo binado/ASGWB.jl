@@ -5,8 +5,8 @@ using Random: Xoshiro
 using AstroSGWBInference: AmplitudeConditional, quadrature_grid, log_normalizer,
                           effective_nodes, reconstruct_amplitude
 
-# Independent of the package's own `_trapezoid`, so the tests below check the quadrature
-# rather than restating it.
+# Independent of Trapezoid.trapz, so the tests below check the quadrature rather than
+# restating it.
 function _reference_trapezoid(f, x)
     y = f.(x)
     return sum(0.5 .* (y[1:(end - 1)] .+ y[2:end]) .* diff(collect(x)))

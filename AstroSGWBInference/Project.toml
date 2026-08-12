@@ -8,6 +8,7 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+Trapezoid = "54ea0a13-c7c2-4df0-924a-d4e052cc338d"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 # `InferenceObjects` is a `scripts/run` dependency, not an inference one: only the
@@ -29,10 +30,12 @@ test = ["Test", "FlexiChains", "InferenceObjects"]
 
 [sources]
 AstroSGWB = {path = "../AstroSGWB"}
+Trapezoid = {path = "../Trapezoid"}
 
 [compat]
 Distributions = "0.25.123"
 FlexiChains = "0.6"
 InferenceObjects = "0.4"
+Trapezoid = "0.1.0"
 Turing = "0.45"
 julia = "1.12"

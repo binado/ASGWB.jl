@@ -12,6 +12,7 @@ using AstroSGWB:
 using Distributions: Distributions, MvNormal
 using LinearAlgebra: Diagonal
 using Random: Random
+using Trapezoid: trapz, cumtrapz
 using Turing
 
 include("forward.jl")

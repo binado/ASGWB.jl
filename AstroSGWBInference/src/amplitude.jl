@@ -182,33 +182,6 @@ upstream, so it does not register.
 _log_integrand(c::AmplitudeConditional) = _log_density.(c, c.grid)
 
 """
-    _trapezoid(y, x) -> Real
-
-Trapezoid quadrature of `y` against abscissa `x`.
-"""
-function _trapezoid(y::AbstractVector, x::AbstractVector)
-    total = zero(eltype(y)) * zero(eltype(x))
-    @inbounds for i in firstindex(y):(lastindex(y) - 1)
-        total += 0.5 * (y[i] + y[i + 1]) * (x[i + 1] - x[i])
-    end
-    return total
-end
-
-"""
-    _cumulative_trapezoid(y, x) -> Vector
-
-Cumulative trapezoid integral of `y` against `x`, starting at 0 and the same length as `y`.
-"""
-function _cumulative_trapezoid(y::AbstractVector, x::AbstractVector)
-    out = similar(y, typeof(zero(eltype(y)) * zero(eltype(x))), length(y))
-    out[begin] = 0
-    @inbounds for i in firstindex(y):(lastindex(y) - 1)
-        out[i + 1] = out[i] + 0.5 * (y[i] + y[i + 1]) * (x[i + 1] - x[i])
-    end
-    return out
-end
-
-"""
 Tail mass fraction cut from each side when [`_fine_mesh`](@ref) localizes the refinement
 mesh for `quantile`/`rand`/`effective_nodes`. `1e-6` is ≈ 4.75σ for a Gaussian bump; the
 one-cell padding on top absorbs the coarse pass's only job, locating the peak.
@@ -257,7 +230,7 @@ dense re-mesh:
 function _fine_mesh(c::AmplitudeConditional)
     log_y = _log_integrand(c)
     shifted = exp.(log_y .- maximum(log_y))
-    cdf = _cumulative_trapezoid(shifted, c.grid)
+    cdf = cumtrapz(c.grid, shifted)
     cdf ./= cdf[end]
 
     n = length(c.grid)
@@ -284,7 +257,7 @@ the MLE amplitude: the factor *is* the normalizing constant of the conditional t
 function log_normalizer(c::AmplitudeConditional)
     log_y = _log_integrand(c)
     log_y_max = maximum(log_y)
-    return log_y_max + log(_trapezoid(exp.(log_y .- log_y_max), c.grid))
+    return log_y_max + log(trapz(c.grid, exp.(log_y .- log_y_max)))
 end
 
 """
@@ -339,7 +312,7 @@ the refined mesh.
 """
 function Distributions.quantile(c::AmplitudeConditional, q::Real)
     fine, fine_shifted = _fine_mesh(c)
-    cdf = _cumulative_trapezoid(fine_shifted, fine)
+    cdf = cumtrapz(fine, fine_shifted)
     cdf ./= cdf[end]
     return _quantile_from_cdf(cdf, fine, q)
 end
