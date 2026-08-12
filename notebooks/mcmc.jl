@@ -27,7 +27,7 @@ Inference requires an importance adapter, parametrized by a vector ``\Lambda``, 
 characterizes the distribution of the intrinsic parameters ``p(\theta | \Lambda)``.
 
 The canonical adapter is `BNSMadauDickinsonImportanceModel{C, P}` from
-`AstroSGWBImportanceModels`. The entire inference contract is that the prepared model is
+`GWBackgroundImportanceModels`. The entire inference contract is that the prepared model is
 **callable**:
 
 - **`model(Λ, samples) -> (rate, log_weights)`** — inlines the redshift log-ratio, importance weights, and rate normalization. For this BNS population the Λ-independent mass/spin/tidal priors cancel exactly, so only the redshift + distance/propagation terms survive.
@@ -72,7 +72,7 @@ begin
     # Likelihood: `"default"` samples every name in `sample_only`;
     # `"amplitude_marginalized"` integrates `amplitude_parameter` out of the Gaussian
     # likelihood and reconstructs it in post-processing. The marginalized parameter must
-    # be one of `AstroSGWBImportanceModels.AMPLITUDE_PARAMETERS` (`:H0` or `:R₀`) and must
+    # be one of `GWBackgroundImportanceModels.AMPLITUDE_PARAMETERS` (`:H0` or `:R₀`) and must
     # *not* be in `sample_only` -- it gets no latent variable at all, though it does end
     # up in the saved posterior.
     likelihood = "default"
@@ -332,7 +332,7 @@ begin
         model, polarization_power, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density
     unconditioned = if amplitude === nothing
-        astrosgwb_importance_turing_model(
+        gwbackground_importance_turing_model(
             model,
             polarization_power,
             samples,
@@ -344,7 +344,7 @@ begin
             resolved_average_mode
         )
     else
-        astrosgwb_amplitude_marginalized_turing_model(
+        gwbackground_amplitude_marginalized_turing_model(
             model,
             polarization_power,
             samples,
@@ -478,8 +478,8 @@ begin
     import Pkg
     Pkg.activate(@__DIR__)
     Pkg.instantiate()
-    using AstroSGWB
-    using AstroSGWB:
+    using GWBackground
+    using GWBackground:
                      Detector,
                      effective_psd,
                      load_catalog,
@@ -491,16 +491,16 @@ begin
                      spectral_density,
                      year_to_second,
                      Ωgw
-    using AstroSGWBImportanceModels:
+    using GWBackgroundImportanceModels:
                                      prepare_bns_madau_dickinson_model,
                                      bns_amplitude_scalings,
                                      bns_hyperprior,
                                      bns_hyperprior_amplitude_marginalized
-    using AstroSGWBInference: astrosgwb_importance_turing_model,
-                              astrosgwb_amplitude_marginalized_turing_model,
+    using GWBackgroundInference: gwbackground_importance_turing_model,
+                              gwbackground_amplitude_marginalized_turing_model,
                               forward_model, quadrature_grid, reconstruct_amplitude,
                               rename_posterior_for_netcdf, merge_into_posterior
-    using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
+    using GWBackgroundInference: MCMCConfig, SamplerConfig, save_config
     using Distributions: Uniform
     using InferenceObjects: InferenceObjects
     # `to_netcdf` lives in InferenceObjects' NCDatasets extension, which only

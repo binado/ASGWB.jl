@@ -1,19 +1,19 @@
-# Headless, config-driven NUTS runner for the AstroSGWB importance-sampling model.
+# Headless, config-driven NUTS runner for the GWBackground importance-sampling model.
 #
 # This mirrors the sampling cells of notebooks/mcmc.jl but takes run-specific
 # settings (catalog, detectors, fiducials, sampler, etc.) from a TOML config,
-# parsed and validated via AstroSGWBInference.MCMCConfig. Hyperprior bounds, the
+# parsed and validated via GWBackgroundInference.MCMCConfig. Hyperprior bounds, the
 # cosmology family, and the population model are fixed here, matching the notebook.
 #
 # Run from the repository root, for example:
 #   julia --project=scripts/run -t auto scripts/run_mcmc.jl config/mcmc/example.toml
 
-module AstroSGWBRunMCMC
+module GWBackgroundRunMCMC
 
 const _REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
 
-using AstroSGWB
-using AstroSGWB:
+using GWBackground
+using GWBackground:
                  load_catalog,
                  average_mode,
                  AnalyticInclination,
@@ -22,14 +22,14 @@ using AstroSGWB:
                  ModifiedPropagation,
                  LambdaCDM,
                  Detector
-using AstroSGWBImportanceModels:
+using GWBackgroundImportanceModels:
                                  prepare_bns_madau_dickinson_model,
                                  bns_amplitude_scalings,
                                  bns_hyperprior,
                                  bns_hyperprior_amplitude_marginalized
-using AstroSGWBInference:
-                          astrosgwb_importance_turing_model,
-                          astrosgwb_amplitude_marginalized_turing_model,
+using GWBackgroundInference:
+                          gwbackground_importance_turing_model,
+                          gwbackground_amplitude_marginalized_turing_model,
                           forward_model,
                           quadrature_grid,
                           reconstruct_amplitude,
@@ -60,7 +60,7 @@ const C = LambdaCDM
 const P = ModifiedPropagation
 
 # Inclination-averaging convention of the catalog. `nothing` derives it from the
-# catalog's own `inclination` column via `AstroSGWB.average_mode`: an all-zero
+# catalog's own `inclination` column via `GWBackground.average_mode`: an all-zero
 # column means face-on waveforms and the analytic 2/5 average, anything else
 # means the catalog already averages over ι. Set this to `AnalyticInclination()`
 # or `CatalogInclination()` to override the derived value.
@@ -281,7 +281,7 @@ function run_mcmc(config_file::String)
         model, polarization_power, samples, fiducials;
         average_mode = resolved_average_mode).spectral_density
     unconditioned = if amplitude === nothing
-        astrosgwb_importance_turing_model(
+        gwbackground_importance_turing_model(
             model,
             polarization_power,
             samples,
@@ -293,7 +293,7 @@ function run_mcmc(config_file::String)
             resolved_average_mode
         )
     else
-        astrosgwb_amplitude_marginalized_turing_model(
+        gwbackground_amplitude_marginalized_turing_model(
             model,
             polarization_power,
             samples,
@@ -377,10 +377,10 @@ function run_mcmc(config_file::String)
     return output_nc
 end
 
-end # module AstroSGWBRunMCMC
+end # module GWBackgroundRunMCMC
 
 function (@main)(args::Vector{String})
     length(args) == 1 || throw(ArgumentError("usage: run_mcmc.jl <config.toml>"))
-    AstroSGWBRunMCMC.run_mcmc(args[1])
+    GWBackgroundRunMCMC.run_mcmc(args[1])
     return 0
 end

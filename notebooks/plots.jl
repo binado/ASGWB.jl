@@ -31,7 +31,7 @@ begin
     using Turing
     using FlexiChains
     using FlexiChains: Extra, FlexiChain
-    using AstroSGWB
+    using GWBackground
 end
 
 # %%
@@ -51,7 +51,7 @@ const FIDUCIALS = (;
 # ## Loading chains
 
 # %%
-filepath = get(ENV, "AstroSGWB_CHAIN_FILE", "chains/chains-H0-seed13-20260508-183716-slim-flexi.jld2")
+filepath = get(ENV, "GWBackground_CHAIN_FILE", "chains/chains-H0-seed13-20260508-183716-slim-flexi.jld2")
 
 chain_path = (realpath ∘ joinpath)(@__DIR__, "..", filepath)
 

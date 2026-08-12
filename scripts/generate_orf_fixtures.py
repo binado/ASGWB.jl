@@ -8,17 +8,17 @@
 """Generate GWFast ORF reference fixtures for Julia tests.
 
 Copied from the Python ``asgwb`` package (``scripts/generate_orf_fixtures.py``);
-output paths target this repository's ``AstroSGWB/test/fixtures/``.
+output paths target this repository's ``GWBackground/test/fixtures/``.
 
-Run from the AstroSGWB.jl repo root::
+Run from the GWBackground.jl repo root::
 
     uv run --script scripts/generate_orf_fixtures.py
 
 Writes:
 
-- ``AstroSGWB/test/fixtures/orf_gwfast_reference.npz`` — arrays ``frequencies``,
+- ``GWBackground/test/fixtures/orf_gwfast_reference.npz`` — arrays ``frequencies``,
   ``H1_L1``, ``H1_V1``, ``L1_V1`` (50-point 20–2048 Hz geomspace grid).
-- ``AstroSGWB/test/fixtures/orf_gwfast_reference_et_triangle.npz`` — ``frequencies``,
+- ``GWBackground/test/fixtures/orf_gwfast_reference_et_triangle.npz`` — ``frequencies``,
   ``sum_upper_pairs`` (same grid; optional for future ET tests).
 """
 
@@ -40,8 +40,8 @@ DETECTOR_NAME_MAP = {
 FREQUENCIES = np.geomspace(20, 2048, 50)
 ET_ARM_LENGTH_KM = 10.0
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
-HLV_OUT_PATH = _ROOT / "AstroSGWB" / "test" / "fixtures" / "orf_gwfast_reference.npz"
-ET_OUT_PATH = _ROOT / "AstroSGWB" / "test" / "fixtures" / "orf_gwfast_reference_et_triangle.npz"
+HLV_OUT_PATH = _ROOT / "GWBackground" / "test" / "fixtures" / "orf_gwfast_reference.npz"
+ET_OUT_PATH = _ROOT / "GWBackground" / "test" / "fixtures" / "orf_gwfast_reference_et_triangle.npz"
 _ETS_KEY_RE = re.compile(r"^ETS_(\d)-ETS_(\d)$")
 
 

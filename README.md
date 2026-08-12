@@ -1,6 +1,6 @@
-# AstroSGWB.jl
+# GWBackground.jl
 
-Julia workspace for modeling and inferring the **astrophysical stochastic gravitational-wave background** (AstroSGWB): detector networks and responses, spectral density calculation, and MCMC with Turing / AdvancedHMC.
+Julia workspace for modeling and inferring the **astrophysical stochastic gravitational-wave background** (GWBackground): detector networks and responses, spectral density calculation, and MCMC with Turing / AdvancedHMC.
 
 ## Workspace layout
 
@@ -9,11 +9,11 @@ The root repository is organized as a monorepo comprised of different small pack
 | Path | Role |
 |------|------|
 | [`Trapezoid/`](Trapezoid/) | Shared trapezoidal integration (`trapz` / `cumtrapz`) |
-| [`AstroSGWB/`](AstroSGWB/) | Core library: redshift and spectral-density evaluation, detector PSDs/ORFs, catalog I/O (re-exports cosmology helpers) |
-| [`AstroSGWBInference/`](AstroSGWBInference/) | Inference layer on top of `AstroSGWB`: Turing model construction, log-posterior helpers, chain I/O |
-| [`AstroSGWBImportanceModels/`](AstroSGWBImportanceModels/) | Canonical concrete importance adapters, including the BNS Madau–Dickinson model used by production workflows |
-| [`AstroSGWBDistributions/`](AstroSGWBDistributions/) | Shared population-distribution building blocks and the optional `PopulationModel` contract |
-| [`AstroSGWBCosmology/`](AstroSGWBCosmology/) | Cosmology and GW-propagation models, distances, and reusable interpolation caches |
+| [`GWBackground/`](GWBackground/) | Core library: redshift and spectral-density evaluation, detector PSDs/ORFs, catalog I/O (re-exports cosmology helpers) |
+| [`GWBackgroundInference/`](GWBackgroundInference/) | Inference layer on top of `GWBackground`: Turing model construction, log-posterior helpers, chain I/O |
+| [`GWBackgroundImportanceModels/`](GWBackgroundImportanceModels/) | Canonical concrete importance adapters, including the BNS Madau–Dickinson model used by production workflows |
+| [`GWDistributions/`](GWDistributions/) | Shared population-distribution building blocks and the optional `PopulationModel` contract |
+| [`BackgroundCosmology/`](BackgroundCosmology/) | Cosmology and GW-propagation models, distances, and reusable interpolation caches |
 | [`notebooks/`](notebooks/) | **Canonical MCMC workflows** (Pluto / Jupytext): model configuration, `load_catalog`, NUTS sampling, diagnostics. |
 | [`config/`](config/) | TOML for developer scripts and headless MCMC runs (e.g. [`config/mcmc/example.toml`](config/mcmc/example.toml)). |
 | [`scripts/`](scripts/) | Developer utilities (profiling, chain tools, benchmarks) and [`scripts/run_mcmc.jl`](scripts/run_mcmc.jl) for config-driven cluster runs. |
@@ -24,11 +24,11 @@ The root repository is organized as a monorepo comprised of different small pack
 Clone the repository and instantiate the workspace from the repo root:
 
 ```bash
-cd AstroSGWB.jl
+cd GWBackground.jl
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
-That resolves all workspace members, including `AstroSGWBImportanceModels`, and their
+That resolves all workspace members, including `GWBackgroundImportanceModels`, and their
 shared manifest.
 
 Run tests:
@@ -36,18 +36,18 @@ Run tests:
 ```bash
 just test
 # or
-julia --project=AstroSGWB -e 'using Pkg; Pkg.test()'
-julia --project=AstroSGWBInference -e 'using Pkg; Pkg.test()'
-julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
+julia --project=GWBackground -e 'using Pkg; Pkg.test()'
+julia --project=GWBackgroundInference -e 'using Pkg; Pkg.test()'
+julia --project=GWBackgroundImportanceModels -e 'using Pkg; Pkg.test()'
 ```
 
 ## MCMC inference
 
 ### Data and model assembly
 
-1. Provide a waveform **catalog** HDF5 file (`catalog.h5`) at the repo root or set `catalog_path` in the notebook. Catalogs store per-sample intrinsic parameters and a `(nfreq, nsamples)` polarization-power matrix `|h₊|² + |h×|²` (before fiducial `(D_L/D_gw)²` scaling). Use [`AstroSGWB.load_catalog`](AstroSGWB/src/catalog/io.jl) / [`AstroSGWB.save_catalog`](AstroSGWB/src/catalog/io.jl).
+1. Provide a waveform **catalog** HDF5 file (`catalog.h5`) at the repo root or set `catalog_path` in the notebook. Catalogs store per-sample intrinsic parameters and a `(nfreq, nsamples)` polarization-power matrix `|h₊|² + |h×|²` (before fiducial `(D_L/D_gw)²` scaling). Use [`GWBackground.load_catalog`](GWBackground/src/catalog/io.jl) / [`GWBackground.save_catalog`](GWBackground/src/catalog/io.jl).
 2. Select an importance adapter. The built-in BNS Madau–Dickinson path is
-   `AstroSGWBImportanceModels.BNSMadauDickinsonImportanceModel`; custom caller-owned
+   `GWBackgroundImportanceModels.BNSMadauDickinsonImportanceModel`; custom caller-owned
    adapters remain supported through the same callable inference contract.
 3. The catalog's `samples` NamedTuple already carries both `redshift` and
    `luminosity_distance`; pass it through directly.
@@ -56,7 +56,7 @@ julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
    a caller-owned callable implementing `merger_rate_and_log_weights_fn(Λ, samples) -> (rate, log_weights)`.
    The prior declares every hyperparameter name. Compute the detector network's
    effective PSD separately with `effective_psd(frequencies, detectors)`.
-6. Synthesize `observed` at the fiducials with `AstroSGWBInference.forward_model(model, polarization_power, samples, fiducials).spectral_density` when there is no external spectrum to fit, so the modified-propagation factors `Ξ(z)` are applied consistently; construct the Turing model directly with `AstroSGWBInference.astrosgwb_importance_turing_model(model, polarization_power, samples, prior, observed, frequencies, effective_psd, observation_time, average_mode, track)` — the prior declares all hyperparameter names, and fixing one is conditioning, e.g. `model | (; R₀ = fiducials.R₀)` — sample with Turing NUTS, and save chains to netCDF via `AstroSGWBInference.rename_posterior_for_netcdf(chain)` + `InferenceObjects.convert_to_inference_data` + `InferenceObjects.to_netcdf`.
+6. Synthesize `observed` at the fiducials with `GWBackgroundInference.forward_model(model, polarization_power, samples, fiducials).spectral_density` when there is no external spectrum to fit, so the modified-propagation factors `Ξ(z)` are applied consistently; construct the Turing model directly with `GWBackgroundInference.gwbackground_importance_turing_model(model, polarization_power, samples, prior, observed, frequencies, effective_psd, observation_time, average_mode, track)` — the prior declares all hyperparameter names, and fixing one is conditioning, e.g. `model | (; R₀ = fiducials.R₀)` — sample with Turing NUTS, and save chains to netCDF via `GWBackgroundInference.rename_posterior_for_netcdf(chain)` + `InferenceObjects.convert_to_inference_data` + `InferenceObjects.to_netcdf`.
 
 Waveform generation is not part of the Julia packages; see [scripts/generate_waveforms.py](./scripts/generate_waveforms.py) for a standalone Python accumulator (legacy layout).
 
@@ -125,12 +125,12 @@ The array launcher submits all `*.toml` files directly under the config director
 To profile a NUTS gradient evaluation without running a full notebook:
 
 ```bash
-julia --project=AstroSGWBInference scripts/profile_turing.jl --config-file=config/profile_turing.toml
+julia --project=GWBackgroundInference scripts/profile_turing.jl --config-file=config/profile_turing.toml
 ```
 
 ## Notebooks
 
-Notebooks live under [`notebooks/`](notebooks/) as Pluto (`.jl` with Pluto cell markers) or **Jupytext** “percent” Julia scripts. They activate the `notebooks/` project (`Pkg.activate(@__DIR__)`) and pull in `AstroSGWB` / `AstroSGWBInference` via path dependencies.
+Notebooks live under [`notebooks/`](notebooks/) as Pluto (`.jl` with Pluto cell markers) or **Jupytext** “percent” Julia scripts. They activate the `notebooks/` project (`Pkg.activate(@__DIR__)`) and pull in `GWBackground` / `GWBackgroundInference` via path dependencies.
 
 | Notebook | Purpose |
 |----------|---------|
@@ -148,7 +148,7 @@ For Jupyter, register a kernel (once) from the `notebooks/` directory:
 
 ```bash
 cd notebooks
-julia --project=. -e 'using IJulia; IJulia.installkernel("AstroSGWB notebooks"; "--project=$(abspath("."))")'
+julia --project=. -e 'using IJulia; IJulia.installkernel("GWBackground notebooks"; "--project=$(abspath("."))")'
 ```
 
 Then open the `.jl` files in Jupyter Lab, VS Code, or Cursor with the Julia/IJulia extension (Jupytext notebooks).
@@ -160,7 +160,7 @@ just sync-notebook
 # jupytext 'notebooks/*.ipynb' --to jl:percent
 ```
 
-Notebook outputs and shared plotting helpers use [`notebooks/src/NotebookSupport.jl`](notebooks/src/NotebookSupport.jl); figures default under `output-test-figures/` unless `AstroSGWB_FIGURES_DIR` is set.
+Notebook outputs and shared plotting helpers use [`notebooks/src/NotebookSupport.jl`](notebooks/src/NotebookSupport.jl); figures default under `output-test-figures/` unless `GWBackground_FIGURES_DIR` is set.
 
 ## Further reading
 

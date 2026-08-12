@@ -1,0 +1,23 @@
+name = "BackgroundCosmology"
+uuid = "2d447719-857e-46c1-9a42-11db63d1a3c6"
+version = "0.1.0"
+authors = ["binado <bernardopveronese@gmail.com>"]
+
+[deps]
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+Trapezoid = "54ea0a13-c7c2-4df0-924a-d4e052cc338d"
+
+[sources]
+Trapezoid = {path = "../Trapezoid"}
+
+[compat]
+QuadGK = "2.11.3"
+Trapezoid = "0.1.0"
+julia = "1.12"
+
+[extras]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "ForwardDiff"]

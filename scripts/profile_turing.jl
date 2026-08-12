@@ -1,4 +1,4 @@
-# Profile the AstroSGWB Turing log-density to find the bottleneck
+# Profile the GWBackground Turing log-density to find the bottleneck
 # inside a NUTS gradient evaluation.
 #
 # Run from the repository root, for example:
@@ -12,17 +12,17 @@
 # redshift-prior build dominate, which is wildly unrepresentative of production
 # runs (~10⁴ samples, ~10² bins) and produces misleading bottleneck rankings.
 #
-# This script is *measurement only*: it does not edit any AstroSGWB/src/ files.
+# This script is *measurement only*: it does not edit any GWBackground/src/ files.
 
-module AstroSGWBProfileCLI
+module GWBackgroundProfileCLI
 
 using Distributions: logpdf, Uniform
-using AstroSGWB
-using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
-using AstroSGWBImportanceModels:
+using GWBackground
+using GWBackgroundInference: gwbackground_importance_turing_model, forward_model
+using GWBackgroundImportanceModels:
                                  prepare_bns_madau_dickinson_model,
                                  bns_hyperprior
-using AstroSGWB:
+using GWBackground:
                  spectral_density,
                  MadauDickinsonSourceFrame,
                  RedshiftInterpolatedDistribution,
@@ -313,7 +313,7 @@ function _run(;
     # ------------------------------------------------------------------
 
     # Turing / DynamicPPL path
-    turing_model = astrosgwb_importance_turing_model(
+    turing_model = gwbackground_importance_turing_model(
         model,
         polarization_power,
         samples,
@@ -539,7 +539,7 @@ function _run(;
 end
 
 """
-Profile the AstroSGWB Turing log-density to localize the NUTS bottleneck.
+Profile the GWBackground Turing log-density to localize the NUTS bottleneck.
 
 Uses BenchmarkTools for timing and `Profile` (stdlib) for sampling/allocation profiles.
 
@@ -678,8 +678,8 @@ function command_main(args::Vector{String} = ARGS)::Cint
     end
 end
 
-end # module AstroSGWBProfileCLI
+end # module GWBackgroundProfileCLI
 
 if abspath(PROGRAM_FILE) == abspath(@__FILE__)
-    exit(Base.invokelatest(AstroSGWBProfileCLI.command_main))
+    exit(Base.invokelatest(GWBackgroundProfileCLI.command_main))
 end

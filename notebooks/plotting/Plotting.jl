@@ -23,7 +23,7 @@ const MAKIE_CSS_PX_PER_INCH = 96
 const MAKIE_DEFAULT_PT_PER_UNIT = 0.75
 
 function default_figures_dir()
-    return joinpath(@__DIR__, "..", "..", get(ENV, "AstroSGWB_FIGURES_DIR", "output-test-figures"))
+    return joinpath(@__DIR__, "..", "..", get(ENV, "GWBackground_FIGURES_DIR", "output-test-figures"))
 end
 
 function _makie_save_kwargs(dpi::Int)

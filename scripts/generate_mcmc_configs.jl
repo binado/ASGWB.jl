@@ -6,7 +6,7 @@
 
 module GenerateMCMCConfigsCLI
 
-using AstroSGWBInference: MCMCConfig, SamplerConfig, save_config
+using GWBackgroundInference: MCMCConfig, SamplerConfig, save_config
 
 const REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
 const DEFAULT_OUTPUT_DIR = "config/mcmc/sweep"

@@ -30,8 +30,8 @@ begin
     import Pkg
     Pkg.activate(@__DIR__)
     Pkg.instantiate()
-    using AstroSGWB
-    using AstroSGWB:
+    using GWBackground
+    using GWBackground:
                      Detector,
                      effective_psd,
                      load_catalog,
@@ -40,8 +40,8 @@ begin
                      CatalogInclination,
                      W0CDM,
                      ModifiedPropagation
-    using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
-    using AstroSGWBImportanceModels:
+    using GWBackgroundInference: gwbackground_importance_turing_model, forward_model
+    using GWBackgroundImportanceModels:
                                      prepare_bns_madau_dickinson_model
     using Distributions: Uniform
     using Turing
@@ -176,7 +176,7 @@ begin
                     Base.structdiff(hyperprior, (; R₀ = hyperprior.R₀)) :
                     NamedTuple{sample_only_tup}(hyperprior)
     fixed = Base.structdiff(fiducials, sampled_prior)
-    model = astrosgwb_importance_turing_model(
+    model = gwbackground_importance_turing_model(
         prepared_model, polarization_power, samples, hyperprior, observed,
         frequencies, eff_psd, observation_time_yr, resolved_average_mode, false) | fixed
     lf = DynamicPPL.LogDensityFunction(model)

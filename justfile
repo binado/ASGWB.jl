@@ -3,11 +3,11 @@ fmt:
 
 test:
     julia --project=Trapezoid -e 'using Pkg; Pkg.test()'
-    julia --project=AstroSGWBCosmology -e 'using Pkg; Pkg.test()'
-    julia --project=AstroSGWB -e 'using Pkg; Pkg.test()'
-    julia --project=AstroSGWBInference -e 'using Pkg; Pkg.test()'
-    julia --project=AstroSGWBImportanceModels -e 'using Pkg; Pkg.test()'
-    julia --project=AstroSGWBDistributions -e 'using Pkg; Pkg.test()'
+    julia --project=BackgroundCosmology -e 'using Pkg; Pkg.test()'
+    julia --project=GWBackground -e 'using Pkg; Pkg.test()'
+    julia --project=GWBackgroundInference -e 'using Pkg; Pkg.test()'
+    julia --project=GWBackgroundImportanceModels -e 'using Pkg; Pkg.test()'
+    julia --project=GWDistributions -e 'using Pkg; Pkg.test()'
 
 pluto threads='"auto"':
     julia -e 'using Pluto; Pluto.run(threads={{threads}})'
@@ -26,7 +26,7 @@ submit-mcmc config="config/mcmc/example.toml":
 submit-mcmc-array config_dir="config/mcmc/sweep" max_parallel="8":
     scripts/submit_mcmc_array.sh {{config_dir}} {{max_parallel}}
 
-resolve package="AstroSGWB":
+resolve package="GWBackground":
     julia --project={{package}} -e 'using Pkg; Pkg.resolve()'
 
 repl project=".":

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Copy tabulated PSD files from the Python `asgwb` tree (repo directory is often
-# `asgbw` on disk). Override with AstroSGWB_PY_REPO.
+# `asgbw` on disk). Override with GWBackground_PY_REPO.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="${AstroSGWB_PY_REPO:-${HOME}/work/research/phd/asgbw}/src/asgwb/detector/noise_curves"
-DST="${ROOT}/AstroSGWB/assets/detector/noise_curves"
+SRC="${GWBackground_PY_REPO:-${HOME}/work/research/phd/asgbw}/src/asgwb/detector/noise_curves"
+DST="${ROOT}/GWBackground/assets/detector/noise_curves"
 if [[ ! -d "${SRC}" ]]; then
   echo "Noise curve directory not found: ${SRC}" >&2
-  echo "Set AstroSGWB_PY_REPO to your asgwb/asgbw checkout root." >&2
+  echo "Set GWBackground_PY_REPO to your asgwb/asgbw checkout root." >&2
   exit 1
 fi
 mkdir -p "${DST}"

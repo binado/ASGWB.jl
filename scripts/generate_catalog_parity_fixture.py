@@ -2,20 +2,20 @@
 
 Writes a small ``waveform_catalog`` v1 file together with the polarization power
 that the Python ``astrogwb`` package derives from it. The Julia test in
-``AstroSGWB/test/test_io.jl`` loads the same ``.h5`` with ``load_catalog`` and
+``GWBackground/test/test_io.jl`` loads the same ``.h5`` with ``load_catalog`` and
 asserts its ``polarization_power`` array matches the ``.npz`` reference -- i.e.
 that both languages reduce one catalog file to the same numbers.
 
 This imports ``astrogwb`` deliberately: inlining the reduction here would only
 test this script against itself. Run it with the ``astrogwb`` checkout's
-interpreter, from the AstroSGWB.jl repo root::
+interpreter, from the GWBackground.jl repo root::
 
     ../astrogwb/.venv/bin/python3 scripts/generate_catalog_parity_fixture.py
 
 Writes (both are gitignored, and the Julia test skips when they are absent):
 
-- ``AstroSGWB/test/fixtures/catalog_parity_reference.h5`` -- the catalog itself.
-- ``AstroSGWB/test/fixtures/catalog_parity_reference.npz`` -- arrays
+- ``GWBackground/test/fixtures/catalog_parity_reference.h5`` -- the catalog itself.
+- ``GWBackground/test/fixtures/catalog_parity_reference.npz`` -- arrays
   ``polarization_power`` (``(nfreq, nsamples)``) and ``frequencies``.
 """
 
@@ -27,7 +27,7 @@ import numpy as np
 import pluscross
 from astrogwb.waveform.polarization_power import polarization_power as compute_polarization_power
 
-FIXTURE_DIR = pathlib.Path(__file__).resolve().parents[1] / "AstroSGWB" / "test" / "fixtures"
+FIXTURE_DIR = pathlib.Path(__file__).resolve().parents[1] / "GWBackground" / "test" / "fixtures"
 
 NSAMPLES = 8
 NFREQ = 16

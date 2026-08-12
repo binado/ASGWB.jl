@@ -1,26 +1,26 @@
 [workspace]
-projects = ["Trapezoid", "AstroSGWBCosmology", "AstroSGWB", "AstroSGWBInference", "AstroSGWBImportanceModels", "AstroSGWBDistributions", "notebooks"]
+projects = ["Trapezoid", "BackgroundCosmology", "GWBackground", "GWBackgroundInference", "GWBackgroundImportanceModels", "GWDistributions", "notebooks"]
 
 [deps]
-AstroSGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
-AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
-AstroSGWBImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
-AstroSGWBDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
-AstroSGWBCosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
+GWBackground = "6a24b920-6d62-45b7-87dc-84df6f794d62"
+GWBackgroundInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+GWBackgroundImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
+GWDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
+BackgroundCosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
 Trapezoid = "54ea0a13-c7c2-4df0-924a-d4e052cc338d"
 
 [extras]
-AstroSGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
-AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
-AstroSGWBImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
-AstroSGWBDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
-AstroSGWBCosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
+GWBackground = "6a24b920-6d62-45b7-87dc-84df6f794d62"
+GWBackgroundInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+GWBackgroundImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
+GWDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
+BackgroundCosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
 Trapezoid = "54ea0a13-c7c2-4df0-924a-d4e052cc338d"
 
 [sources]
-AstroSGWB = {path = "AstroSGWB"}
-AstroSGWBInference = {path = "AstroSGWBInference"}
-AstroSGWBImportanceModels = {path = "AstroSGWBImportanceModels"}
-AstroSGWBDistributions = {path = "AstroSGWBDistributions"}
-AstroSGWBCosmology = {path = "AstroSGWBCosmology"}
+GWBackground = {path = "GWBackground"}
+GWBackgroundInference = {path = "GWBackgroundInference"}
+GWBackgroundImportanceModels = {path = "GWBackgroundImportanceModels"}
+GWDistributions = {path = "GWDistributions"}
+BackgroundCosmology = {path = "BackgroundCosmology"}
 Trapezoid = {path = "Trapezoid"}

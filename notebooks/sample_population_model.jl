@@ -9,7 +9,7 @@ begin
     import Pkg
     Pkg.activate(@__DIR__)
     Pkg.instantiate()
-    using AstroSGWB:
+    using GWBackground:
                      DEFAULT_Z_GRID,
                      LambdaCDM,
                      cosmology,
@@ -19,8 +19,8 @@ begin
                      RedshiftInterpolatedDistribution,
                      distance_and_volume_grid,
                      luminosity_distance
-    using AstroSGWBCosmology: AbstractCosmology
-    using AstroSGWBDistributions: DefaultBBHMassPair
+    using BackgroundCosmology: AbstractCosmology
+    using GWDistributions: DefaultBBHMassPair
     using Distributions: Uniform, product_distribution, ProductNamedTupleDistribution
     using DataFrames
     using CSV

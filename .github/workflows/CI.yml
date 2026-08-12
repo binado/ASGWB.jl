@@ -37,17 +37,17 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v3
-      # Skip julia-buildpkg: AstroSGWBInference/deps/build.jl runs PackageCompiler
+      # Skip julia-buildpkg: GWBackgroundInference/deps/build.jl runs PackageCompiler
       # create_app (intended for `just build`, not CI). Pkg.test() is enough here.
       - uses: julia-actions/julia-runtest@v1
         with:
-          project: AstroSGWB
+          project: GWBackground
           coverage: false
       - uses: julia-actions/julia-runtest@v1
         with:
-          project: AstroSGWBInference
+          project: GWBackgroundInference
           coverage: false
       - uses: julia-actions/julia-runtest@v1
         with:
-          project: AstroSGWBImportanceModels
+          project: GWBackgroundImportanceModels
           coverage: false

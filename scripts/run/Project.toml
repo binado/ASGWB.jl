@@ -1,8 +1,8 @@
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
-AstroSGWB = "6a24b920-6d62-45b7-87dc-84df6f794d62"
-AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
-AstroSGWBImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
+GWBackground = "6a24b920-6d62-45b7-87dc-84df6f794d62"
+GWBackgroundInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
+GWBackgroundImportanceModels = "a94c092a-ff88-49c3-8bc8-0cc06a025c9e"
 AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
@@ -25,13 +25,13 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [sources]
-AstroSGWB = {path = "../../AstroSGWB"}
-AstroSGWBInference = {path = "../../AstroSGWBInference"}
-AstroSGWBImportanceModels = {path = "../../AstroSGWBImportanceModels"}
+GWBackground = {path = "../../GWBackground"}
+GWBackgroundInference = {path = "../../GWBackgroundInference"}
+GWBackgroundImportanceModels = {path = "../../GWBackgroundImportanceModels"}
 
 [compat]
 ADTypes = "1"
-AstroSGWBImportanceModels = "0.1.0"
+GWBackgroundImportanceModels = "0.1.0"
 Distributions = "0.25.123"
 Enzyme = "0.13"
 FlexiChains = "0.6"
