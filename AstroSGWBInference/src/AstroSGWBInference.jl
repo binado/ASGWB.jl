@@ -22,12 +22,13 @@ which keeps full dispatch and type parameters -- and an ad-hoc model is a plain 
     merger_rate_and_log_weights_fn = (Λ, samples) -> (1e-7 * Λ.rate_scale,
                                                       fill(Λ.weight_shift, length(samples.redshift)))
 
-Hyperparameter *names* are declared by the prior, not by the model: `keys(prior)`
-determines the full hyperparameter set and the Turing variable creation order. Fixing a
-hyperparameter is Turing conditioning — `model | (; R₀ = fiducials.R₀)` — so the chain
-carries exactly the sampled variables by construction. A name the callable needs but the
-prior omits surfaces as a `KeyError` on `Λ.name` at the first evaluation, before the
-sampler burns wall clock.
+Hyperparameter *names* are declared by a caller-owned prior `@model` (`prior_model`), not
+by the SGWB likelihood model: its `~` sites determine the full hyperparameter set and the
+Turing variable creation order. The prior model is embedded with
+`to_submodel(prior_model, false)`. Fixing a hyperparameter is Turing conditioning —
+`model | (; R₀ = fiducials.R₀)` — so the chain carries exactly the sampled variables by
+construction. A name the callable needs but `prior_model` omits surfaces as a `KeyError`
+on `Λ.name` at the first evaluation, before the sampler burns wall clock.
 
 [`forward_model`](@ref) is the single implementation of the forward pass, shared by the
 `@model` body ([`astrosgwb_importance_turing_model`](@ref)) and the caller-side synthesis

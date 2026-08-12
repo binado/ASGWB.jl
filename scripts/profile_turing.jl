@@ -20,7 +20,8 @@ using Distributions: logpdf, Uniform
 using AstroSGWB
 using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
 using AstroSGWBImportanceModels:
-                                 prepare_bns_madau_dickinson_model
+                                 prepare_bns_madau_dickinson_model,
+                                 bns_hyperprior
 using AstroSGWB:
                  spectral_density,
                  MadauDickinsonSourceFrame,
@@ -304,7 +305,7 @@ function _run(;
         model,
         polarization_power,
         samples,
-        full_prior,
+        bns_hyperprior(full_prior),
         observed,
         frequencies,
         eff_psd,

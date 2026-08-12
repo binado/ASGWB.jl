@@ -1,7 +1,7 @@
 # Example MCMC run config for scripts/run_mcmc.jl.
 # Copy this file per experiment; the runner never edits notebooks/mcmc.jl.
 # Cosmology family and importance adapter are fixed in the script
-# (W0CDM + ModifiedPropagation + BNSMadauDickinsonImportanceModel).
+# (LambdaCDM + ModifiedPropagation + BNSMadauDickinsonImportanceModel).
 
 version = 3
 
@@ -44,7 +44,6 @@ nchains = 0                 # 0 -> use Base.Threads.nthreads(); if set, must mat
 [fiducials]
 H0 = 67.66
 "Ωm" = 0.3096
-w0 = -1.0
 "Ξ₀" = 1.0
 "Ξₙ" = 1.91
 "γ" = 2.7

@@ -6,6 +6,7 @@ version = "0.1.0"
 AstroSGWBDistributions = "04d2795f-0c6c-4919-9dae-19f280fe5e84"
 AstroSGWBCosmology = "2d447719-857e-46c1-9a42-11db63d1a3c6"
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
+Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [sources]
 AstroSGWB = {path = "../AstroSGWB"}
@@ -17,6 +18,7 @@ AstroSGWBCosmology = {path = "../AstroSGWBCosmology"}
 AstroSGWBDistributions = "0.1.0"
 AstroSGWBCosmology = "0.1.0"
 DataInterpolations = "8.10.0"
+Turing = "0.45"
 julia = "1.12"
 
 [extras]
@@ -25,7 +27,6 @@ AstroSGWBInference = "17b6d0b6-80a1-4842-aa05-e7535ef3d247"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [targets]
-test = ["AstroSGWB", "AstroSGWBInference", "Distributions", "ForwardDiff", "Test", "Turing"]
+test = ["AstroSGWB", "AstroSGWBInference", "Distributions", "ForwardDiff", "Test"]

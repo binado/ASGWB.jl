@@ -20,11 +20,13 @@ using AstroSGWB:
                  CatalogInclination,
                  effective_psd,
                  ModifiedPropagation,
-                 W0CDM,
+                 LambdaCDM,
                  Detector
 using AstroSGWBImportanceModels:
                                  prepare_bns_madau_dickinson_model,
-                                 bns_amplitude_scalings
+                                 bns_amplitude_scalings,
+                                 bns_hyperprior,
+                                 bns_hyperprior_amplitude_marginalized
 using AstroSGWBInference:
                           astrosgwb_importance_turing_model,
                           astrosgwb_amplitude_marginalized_turing_model,
@@ -52,8 +54,8 @@ using LinearAlgebra: BLAS
 using Dates: now, format
 
 # Fixed model selection (see notebooks/mcmc.jl): background cosmology `C` and GW
-# propagation `P` are now orthogonal axes.
-const C = W0CDM
+# propagation `P` are orthogonal axes.
+const C = LambdaCDM
 const P = ModifiedPropagation
 
 # Inclination-averaging convention of the catalog. `nothing` derives it from the
@@ -75,13 +77,12 @@ const AVERAGE_MODE = nothing
 const MINIMUM_FREQUENCY = 2.0
 const MAXIMUM_FREQUENCY = 4096.0
 
-# Hard-coded hyperprior bounds (matching notebooks/mcmc.jl). The prior declares every
-# hyperparameter name, sampled or pinned; the `R₀` entry is the nominal distribution its
-# conditioning (`model | (; R₀ = …)`) pins against.
+# Hard-coded hyperprior bounds (matching notebooks/mcmc.jl). The NamedTuple holds
+# distributions; `bns_hyperprior` declares the Turing `~` layout. The `R₀` entry is the
+# nominal distribution its conditioning (`model | (; R₀ = …)`) pins against.
 const HYPERPRIOR = (
     H0 = Uniform(20.0, 140.0),
     Ωm = Uniform(0.05, 0.95),
-    w0 = Uniform(-3, 1),
     Ξ₀ = Uniform(0.5, 5.0),
     Ξₙ = Uniform(0.3, 3.0),
     γ = Uniform(0.5, 10.0),
@@ -134,6 +135,12 @@ function _restrict_prior(prior::NamedTuple, sample_only)
         ))
     end
     return NamedTuple{names}(prior)
+end
+
+"""Keep only keys that the production prior model declares (drop e.g. leftover `w0`)."""
+function _only_hyperprior_keys(nt::NamedTuple)
+    names = Tuple(n for n in keys(nt) if haskey(HYPERPRIOR, n))
+    return NamedTuple{names}(nt)
 end
 
 """
@@ -213,11 +220,15 @@ function run_mcmc(config_file::String)
                 _amplitude_marginalization(cfg, HYPERPRIOR, fiducials) : nothing
     if amplitude === nothing
         model_prior = HYPERPRIOR
-        fixed = Base.structdiff(fiducials, prior)
+        prior_model = bns_hyperprior(model_prior)
+        fixed = _only_hyperprior_keys(Base.structdiff(fiducials, prior))
     else
         prior = Base.structdiff(prior, amplitude.fiducial)
         model_prior = Base.structdiff(HYPERPRIOR, amplitude.fiducial)
-        fixed = Base.structdiff(Base.structdiff(fiducials, prior), amplitude.fiducial)
+        prior_model = bns_hyperprior_amplitude_marginalized(
+            model_prior, Val(amplitude.name))
+        fixed = _only_hyperprior_keys(
+            Base.structdiff(Base.structdiff(fiducials, prior), amplitude.fiducial))
         @info "amplitude marginalization" parameter=amplitude.name fiducial=only(amplitude.fiducial) prior=amplitude.prior num_nodes=length(amplitude.grid) grid=extrema(amplitude.grid)
     end
 
@@ -269,7 +280,7 @@ function run_mcmc(config_file::String)
             model,
             polarization_power,
             samples,
-            model_prior,
+            prior_model,
             observed,
             frequencies,
             eff_psd,
@@ -281,7 +292,7 @@ function run_mcmc(config_file::String)
             model,
             polarization_power,
             samples,
-            model_prior,
+            prior_model,
             observed,
             frequencies,
             eff_psd,

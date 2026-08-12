@@ -32,7 +32,8 @@ The canonical adapter is `BNSMadauDickinsonImportanceModel{C, P}` from
 
 - **`model(Λ, samples) -> (rate, log_weights)`** — inlines the redshift log-ratio, importance weights, and rate normalization. For this BNS population the Λ-independent mass/spin/tidal priors cancel exactly, so only the redshift + distance/propagation terms survive.
 
-Hyperparameter *names* are declared by the hyperprior below, not by the model: a name the
+Hyperparameter *names* are declared by `bns_hyperprior` / `bns_hyperprior_amplitude_marginalized`
+(and the hyperprior distributions below): a name the
 model reads but the prior omits throws a `KeyError` on `Λ.name` at the first evaluation.
 """
 
@@ -103,7 +104,6 @@ begin
     cosmology_parameters = (;
         H0 = 67.66,
         Ωm = 0.3096,
-        w0 = -1,
         Ξ₀ = 1.0,
         Ξₙ = 1.91
     )
@@ -118,13 +118,11 @@ begin
         R₀ = local_merger_rate
     )
 
-    # Edit hyperprior bounds here (order: cosmology, then population). The prior declares
-    # every name, sampled or pinned; the `R₀` entry is the nominal distribution its
-    # conditioning pins against.
+    # Edit hyperprior bounds here (order: cosmology, then population). Distributions live
+    # here; `bns_hyperprior` / `bns_hyperprior_amplitude_marginalized` declare the `~` layout.
     hyperprior_dists = (
         H0 = Uniform(20.0, 140.0),
         Ωm = Uniform(0.05, 0.95),
-        w0 = Uniform(-3, 1),
         Ξ₀ = Uniform(0.5, 5.0),
         Ξₙ = Uniform(0.3, 3.0),
         γ = Uniform(0.5, 10.0),
@@ -136,7 +134,7 @@ begin
 
     # Defining cosmology and propagation. Background expansion `C` and GW propagation `P`
     # are orthogonal axes (use `GR` for standard propagation).
-    C = W0CDM
+    C = LambdaCDM
     P = ModifiedPropagation
 
     nchains = sampler.nchains > 0 ? sampler.nchains : num_threads
@@ -305,7 +303,7 @@ begin
     adtype = resolve_adtype(sampler.ad_backend)
 
     @info "starting NUTS" nadapts=sampler.nadapts nsamples=sampler.nsamples target_acceptance=sampler.target_acceptance ad_backend=sampler.ad_backend sample_only=sample_only_tup
-    # S3: the prior declares every hyperparameter name; fixing one is conditioning
+    # S3: the prior model declares every hyperparameter name; fixing one is conditioning
     # (`model | fixed`), so the chain carries exactly the sampled variables by
     # construction. `R₀` is pinned at its fiducial unless named in `sample_only`.
     sampled_prior = sample_only_tup === nothing ?
@@ -318,6 +316,9 @@ begin
     end
     model_prior = amplitude === nothing ? hyperprior :
                   Base.structdiff(hyperprior, amplitude.fiducial)
+    prior_model = amplitude === nothing ?
+                  bns_hyperprior(model_prior) :
+                  bns_hyperprior_amplitude_marginalized(model_prior, Val(amplitude.name))
     fixed = Base.structdiff(fiducials, sampled_prior)
     if amplitude !== nothing
         fixed = Base.structdiff(fixed, amplitude.fiducial)
@@ -332,7 +333,7 @@ begin
             model,
             polarization_power,
             samples,
-            model_prior,
+            prior_model,
             observed,
             frequencies,
             eff_psd,
@@ -344,7 +345,7 @@ begin
             model,
             polarization_power,
             samples,
-            model_prior,
+            prior_model,
             observed,
             frequencies,
             eff_psd,
@@ -483,14 +484,16 @@ begin
                      average_mode,
                      AnalyticInclination,
                      CatalogInclination,
-                     W0CDM,
+                     LambdaCDM,
                      ModifiedPropagation,
                      spectral_density,
                      year_to_second,
                      Ωgw
     using AstroSGWBImportanceModels:
                                      prepare_bns_madau_dickinson_model,
-                                     bns_amplitude_scalings
+                                     bns_amplitude_scalings,
+                                     bns_hyperprior,
+                                     bns_hyperprior_amplitude_marginalized
     using AstroSGWBInference: astrosgwb_importance_turing_model,
                               astrosgwb_amplitude_marginalized_turing_model,
                               forward_model, quadrature_grid, reconstruct_amplitude,

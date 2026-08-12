@@ -24,12 +24,13 @@ const DERIVED_PARAMS = (:total_merger_rate, :importance_relative_ess)
 function _inline_model(problem;
         average_mode = AnalyticInclination(),
         prior = problem.prior, fixed = NamedTuple(),
+        prior_model = toy_prior_model(prior),
         effective_psd = problem.effective_psd,
         observed = forward_model(
             problem.model, problem.polarization_power, problem.samples, problem.fiducials;
             average_mode = average_mode).spectral_density)
     model = astrosgwb_importance_turing_model(
-        problem.model, problem.polarization_power, problem.samples, prior, observed,
+        problem.model, problem.polarization_power, problem.samples, prior_model, observed,
         problem.frequencies, effective_psd, problem.observation_time, average_mode)
     return model | fixed
 end
@@ -217,6 +218,7 @@ const AMPLITUDE_DERIVED = (:template_merger_rate, :amplitude_mle, :template_opti
 function _marginalized_model(problem;
         average_mode = AnalyticInclination(),
         prior = (; weight_shift = problem.prior.weight_shift),
+        prior_model = toy_prior_model_shape_only(prior),
         effective_psd = _signal_scale_psd(problem),
         amplitude_prior = problem.prior.rate_scale,
         amplitude_fiducial = (; rate_scale = problem.fiducials.rate_scale),
@@ -226,7 +228,7 @@ function _marginalized_model(problem;
             problem.model, problem.polarization_power, problem.samples, problem.fiducials;
             average_mode = average_mode).spectral_density)
     return astrosgwb_amplitude_marginalized_turing_model(
-        problem.model, problem.polarization_power, problem.samples, prior, observed,
+        problem.model, problem.polarization_power, problem.samples, prior_model, observed,
         problem.frequencies, effective_psd, problem.observation_time, average_mode,
         amplitude_fiducial, amplitude_fn, amplitude_prior, grid)
 end
@@ -245,7 +247,8 @@ end
         problem.fiducials).spectral_density
 
     general = astrosgwb_importance_turing_model(
-        problem.model, problem.polarization_power, problem.samples, problem.prior,
+        problem.model, problem.polarization_power, problem.samples,
+        toy_prior_model(problem.prior),
         observed, problem.frequencies, eff_psd, problem.observation_time,
         AnalyticInclination())
     marginalized = _marginalized_model(
@@ -306,7 +309,7 @@ end
     @test 0.5 < recorded[@varname(amplitude_mle)] < 2.0
 
     # Sampling and marginalizing the same parameter is silent double-counting.
-    both = _marginalized_model(problem; prior = problem.prior)
+    both = _marginalized_model(problem; prior_model = toy_prior_model(problem.prior))
     @test_throws ArgumentError VarInfo(both)
 end
 

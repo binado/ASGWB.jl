@@ -229,7 +229,7 @@ end
     observed = forward_model(
         model, polarization_power, SAMPLES, FIDUCIALS).spectral_density
     unconditioned = astrosgwb_importance_turing_model(
-        model, polarization_power, SAMPLES, prior, observed, frequencies,
+        model, polarization_power, SAMPLES, bns_hyperprior(prior), observed, frequencies,
         eff_psd, observation_time, AnalyticInclination())
     turing_model = unconditioned | (; R₀ = FIDUCIALS.R₀)
 
@@ -347,13 +347,15 @@ end
         length(frequencies))
 
     general = astrosgwb_importance_turing_model(
-        model, polarization_power, SAMPLES, full_prior, observed, frequencies, eff_psd,
+        model, polarization_power, SAMPLES, bns_hyperprior(full_prior), observed, frequencies, eff_psd,
         observation_time, AnalyticInclination()) | fixed
     # The marginalized model's prior omits `R₀` entirely -- it is pinned inside the model,
     # not conditioned at the call site, which is the one place the two models' plumbing
     # genuinely differs.
     marginalized = astrosgwb_amplitude_marginalized_turing_model(
-        model, polarization_power, SAMPLES, Base.structdiff(full_prior, (; R₀ = nothing)),
+        model, polarization_power, SAMPLES,
+        bns_hyperprior_amplitude_marginalized(
+            Base.structdiff(full_prior, (; R₀ = nothing)), Val(:R₀)),
         observed, frequencies, eff_psd, observation_time, AnalyticInclination(),
         (; R₀ = FIDUCIALS.R₀), bns_amplitude_scalings(:R₀).amplitude_fn,
         amplitude_prior, grid) | fixed

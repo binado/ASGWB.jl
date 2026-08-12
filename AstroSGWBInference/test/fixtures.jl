@@ -1,4 +1,5 @@
 using Distributions: Uniform
+using Turing
 
 # S1: the model contract is a callable, so an ad-hoc model is three lines of arithmetic --
 # no struct, no method definitions on foreign generics, no import.
@@ -18,6 +19,17 @@ const LOCAL_PRIOR = (
 const LOCAL_FREQUENCIES = [20.0, 40.0]
 const LOCAL_EFFECTIVE_PSD = [1.0, 1.0]
 const LOCAL_OBSERVATION_TIME = 1.0
+
+@model function toy_prior_model(prior)
+    rate_scale ~ prior.rate_scale
+    weight_shift ~ prior.weight_shift
+    return (; rate_scale, weight_shift)
+end
+
+@model function toy_prior_model_shape_only(prior)
+    weight_shift ~ prior.weight_shift
+    return (; weight_shift)
+end
 
 function local_problem_context()
     return (;

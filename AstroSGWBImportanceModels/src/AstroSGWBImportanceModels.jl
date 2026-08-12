@@ -24,6 +24,7 @@ using AstroSGWBCosmology:
                           gw_em_distance_ratio,
                           propagation
 using DataInterpolations: LinearInterpolation
+using Turing
 
 export BNSMadauDickinsonImportanceModel,
        prepare_bns_madau_dickinson_model,
@@ -32,7 +33,9 @@ export BNSMadauDickinsonImportanceModel,
        amplitude_R₀,
        merger_rate_amplitude_H0,
        merger_rate_amplitude_R₀,
-       bns_amplitude_scalings
+       bns_amplitude_scalings,
+       bns_hyperprior,
+       bns_hyperprior_amplitude_marginalized
 
 include("models/bns_madau_dickinson.jl")
 

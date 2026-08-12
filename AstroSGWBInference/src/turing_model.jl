@@ -3,17 +3,19 @@ using LinearAlgebra: Diagonal
 using Turing
 using Turing: DynamicPPL
 
-@model function sample_hyperparameters(order::Tuple{Vararg{Symbol}}, dists)
-    values = map(order) do sym
-        x ~ DynamicPPL.NamedDist(dists[sym], sym)
-        x
-    end
-    return NamedTuple{order}(Tuple(values))
+"""
+    _prior_model_symbols(prior_model) -> Set{Symbol}
+
+Top-level VarInfo symbols declared by a caller-owned prior `@model`. Used to reject
+double-counting an amplitude-marginalized parameter.
+"""
+function _prior_model_symbols(prior_model)
+    return Set(DynamicPPL.getsym(vn) for vn in keys(DynamicPPL.VarInfo(prior_model)))
 end
 
 """
     astrosgwb_importance_turing_model(merger_rate_and_log_weights_fn, polarization_power,
-                                      samples, prior, observed, frequencies, effective_psd,
+                                      samples, prior_model, observed, frequencies, effective_psd,
                                       observation_time, average_mode) -> DynamicPPL.Model
 
 The Turing model scoring `merger_rate_and_log_weights_fn(Λ, samples) -> (rate, log_weights)`
@@ -33,16 +35,16 @@ and `observation_time` the duration in years (Julian year); the per-bin Gaussian
 derived in the model body via [`AstroSGWB.gaussian_bin_scale`](@ref) from `effective_psd`,
 `frequencies`, and `observation_time`.
 
-`prior` declares **every** hyperparameter `merger_rate_and_log_weights_fn` reads, sampled
-or not; `keys(prior)`
-controls the Turing variable creation order. Fixing a hyperparameter is Turing
-conditioning at the call site, `model | (; R₀ = fiducials.R₀)`: the pinned value enters
-as an observation, its prior density folds into the joint as a sampling-irrelevant
-constant, and the chain contains exactly the unconditioned variables **by construction** --
-no helpers, no subset validation. A pinned value outside its prior support scores `-Inf`
-at the first evaluation, so a misconfigured pin fails loudly before the sampler burns wall
-clock. A name the callable needs but `prior` omits surfaces as a `KeyError` on `Λ.name` at
-the same point.
+`prior_model` is a caller-owned Turing `@model` whose `~` sites declare every hyperparameter
+`merger_rate_and_log_weights_fn` reads (sampled or not). It is embedded with
+`to_submodel(prior_model, false)` so conditioning and scoring use bare symbols. Fixing a
+hyperparameter is Turing conditioning at the call site, `model | (; R₀ = fiducials.R₀)`:
+the pinned value enters as an observation, its prior density folds into the joint as a
+sampling-irrelevant constant, and the chain contains exactly the unconditioned variables
+**by construction** -- no helpers, no subset validation. A pinned value outside its prior
+support scores `-Inf` at the first evaluation, so a misconfigured pin fails loudly before
+the sampler burns wall clock. A name the callable needs but `prior_model` omits surfaces as a
+`KeyError` on `Λ.name` at the same point.
 
 Two derived quantities are recorded on every saved draw as `:=` sites, so they reach the
 chain (and the netCDF `posterior` group) rather than being computed and thrown away:
@@ -61,7 +63,7 @@ introspecting a built model. Singleton instances (not `Type`s) pass through
         merger_rate_and_log_weights_fn,
         polarization_power::AbstractMatrix{<:Real},
         samples::NamedTuple,
-        prior::NamedTuple,
+        prior_model,
         observed::AbstractVector{<:Real},
         frequencies::AbstractVector{<:Real},
         effective_psd::AbstractVector{<:Real},
@@ -69,9 +71,9 @@ introspecting a built model. Singleton instances (not `Type`s) pass through
         average_mode::AbstractAverageMode
 )
     # `false`: no varname prefixing, so caller-side conditioning (`model | (; R₀ = …)`)
-    # and scoring (`Turing.logjoint(model, θ)`) address the submodel's variables by the
+    # and scoring (`Turing.logjoint(model, θ)`) address the prior model's variables by the
     # same bare symbols the caller already uses.
-    Λ ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
+    Λ ~ to_submodel(prior_model, false)
     forward = forward_model(merger_rate_and_log_weights_fn, polarization_power, samples,
         Λ; average_mode)
     Sh = forward.spectral_density
@@ -95,7 +97,7 @@ end
 
 """
     astrosgwb_amplitude_marginalized_turing_model(merger_rate_and_log_weights_fn,
-                                                  polarization_power, samples, prior,
+                                                  polarization_power, samples, prior_model,
                                                   observed, frequencies, effective_psd,
                                                   observation_time, average_mode,
                                                   amplitude_fiducial, amplitude_fn,
@@ -119,7 +121,7 @@ BNS adapter these come from `AstroSGWBImportanceModels.bns_amplitude_scalings`.
 Unlike every other fixed hyperparameter, the amplitude parameter is pinned **inside the
 model** (`merge(Λ, amplitude_fiducial)`), not by conditioning at the call site — the model
 needs the template spectrum at the fiducial to define the amplitude ratio at all. It must
-therefore *not* also appear in `prior`, which would be silent double-counting; that is an
+therefore *not* also appear in `prior_model`, which would be silent double-counting; that is an
 `ArgumentError` at the first evaluation.
 
 Recorded as `:=` sites: `template_merger_rate`, `amplitude_mle`, `template_optimal_snr`,
@@ -149,7 +151,7 @@ small by `2T`.
         merger_rate_and_log_weights_fn,
         polarization_power::AbstractMatrix{<:Real},
         samples::NamedTuple,
-        prior::NamedTuple,
+        prior_model,
         observed::AbstractVector{<:Real},
         frequencies::AbstractVector{<:Real},
         effective_psd::AbstractVector{<:Real},
@@ -162,12 +164,13 @@ small by `2T`.
 )
     # Sampling and marginalizing the same parameter double-counts it with no visible
     # symptom, so it is rejected on the first evaluation rather than silently tolerated.
-    haskey(prior, first(keys(amplitude_fiducial))) && throw(ArgumentError(
-        "$(repr(first(keys(amplitude_fiducial)))) is marginalized analytically and " *
-        "cannot also be sampled; remove it from `prior`",
+    amp_name = first(keys(amplitude_fiducial))
+    amp_name in _prior_model_symbols(prior_model) && throw(ArgumentError(
+        "$(repr(amp_name)) is marginalized analytically and " *
+        "cannot also be sampled; remove it from `prior_model`",
     ))
 
-    Λ ~ to_submodel(sample_hyperparameters(keys(prior), prior), false)
+    Λ ~ to_submodel(prior_model, false)
     # The amplitude parameter is pinned here, inside the model: what the callable returns
     # is the *template* m(θ), and the marginalized amplitude is the ratio to it.
     Λ_template = merge(Λ, amplitude_fiducial)

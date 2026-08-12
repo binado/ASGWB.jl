@@ -243,3 +243,57 @@ function (model::BNSMadauDickinsonImportanceModel{C, P})(
     rate = t.norm
     return (rate, log_weights)
 end
+
+# --------------------------------------------------------------------------
+# Turing prior models (explicit `~` sites for Enzyme-friendly AD)
+# --------------------------------------------------------------------------
+
+"""
+    bns_hyperprior(prior) -> DynamicPPL.Model
+
+Caller-owned prior `@model` for the BNS Madau–Dickinson hyperparameter set:
+`H0`, `Ωm`, `Ξ₀`, `Ξₙ`, `γ`, `κ`, `zpeak`, `R₀`. Pass the result as `prior_model` to
+`AstroSGWBInference.astrosgwb_importance_turing_model`. Bounds live in `prior`; this
+model only declares the sampling layout.
+"""
+@model function bns_hyperprior(prior)
+    H0 ~ prior.H0
+    Ωm ~ prior.Ωm
+    Ξ₀ ~ prior.Ξ₀
+    Ξₙ ~ prior.Ξₙ
+    γ ~ prior.γ
+    κ ~ prior.κ
+    zpeak ~ prior.zpeak
+    R₀ ~ prior.R₀
+    return (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak, R₀)
+end
+
+"""
+    bns_hyperprior_amplitude_marginalized(prior, ::Val{:H0})
+    bns_hyperprior_amplitude_marginalized(prior, ::Val{:R₀})
+
+Same layout as [`bns_hyperprior`](@ref) with the marginalized amplitude parameter's `~`
+site omitted. Use with
+`AstroSGWBInference.astrosgwb_amplitude_marginalized_turing_model`.
+"""
+@model function bns_hyperprior_amplitude_marginalized(prior, ::Val{:H0})
+    Ωm ~ prior.Ωm
+    Ξ₀ ~ prior.Ξ₀
+    Ξₙ ~ prior.Ξₙ
+    γ ~ prior.γ
+    κ ~ prior.κ
+    zpeak ~ prior.zpeak
+    R₀ ~ prior.R₀
+    return (; Ωm, Ξ₀, Ξₙ, γ, κ, zpeak, R₀)
+end
+
+@model function bns_hyperprior_amplitude_marginalized(prior, ::Val{:R₀})
+    H0 ~ prior.H0
+    Ωm ~ prior.Ωm
+    Ξ₀ ~ prior.Ξ₀
+    Ξₙ ~ prior.Ξₙ
+    γ ~ prior.γ
+    κ ~ prior.κ
+    zpeak ~ prior.zpeak
+    return (; H0, Ωm, Ξ₀, Ξₙ, γ, κ, zpeak)
+end
