@@ -57,8 +57,7 @@ include("spectral_density.jl")
 include("snr.jl")
 
 # Types
-export RedshiftPrior,
-       redshift
+export redshift
 
 # Catalog I/O
 export SGWBCatalog,
@@ -107,14 +106,12 @@ export E,
 # Redshift & population
 export madau_dickinson_source_frame_distribution,
        detector_frame_merger_rate_density,
-       build_redshift_prior,
        redshift_prior,
        MadauDickinsonSourceFrame,
        source_frame_distribution,
        DEFAULT_Z_GRID,
-       redshift_integral,
-       expected_number_of_events,
-       merger_rate_per_sec
+       Interpolated1DDistribution,
+       normalizer
 
 # Priors
 export OrderedUniformSourceMassPair,

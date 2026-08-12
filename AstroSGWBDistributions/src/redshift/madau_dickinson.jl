@@ -4,8 +4,12 @@ export madau_dickinson_source_frame_distribution,
 """
     madau_dickinson_source_frame_distribution(z; γ, κ, zpeak) -> Real
 
-Source-frame merger-rate density at redshift `z` under the Madau–Dickinson model.
-The denominator exponent is `γ + κ` (so `κ` is the increment beyond `γ`).
+Source-frame merger-rate **shape** at redshift `z` under the Madau–Dickinson model
+(normalized so the density is 1 at `z = 0`). The denominator exponent is `γ + κ`
+(so `κ` is the increment beyond `γ`).
+
+Absolute amplitude (`R₀` and unit conversions) lives on
+[`MadauDickinsonSourceFrame`](@ref) / [`source_frame_distribution`](@ref).
 """
 function madau_dickinson_source_frame_distribution(
         z::Real;
@@ -24,30 +28,38 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    MadauDickinsonSourceFrame(; γ, κ, zpeak)
+    MadauDickinsonSourceFrame(; γ, κ, zpeak, R₀)
 
-Parameterized Madau–Dickinson (2014) source-frame merger-rate model.
+Parameterized Madau–Dickinson (2014) source-frame merger-rate model, including the local
+merger rate `R₀` (Gpc⁻³ yr⁻¹).
 """
-struct MadauDickinsonSourceFrame{Tγ <: Real, Tκ <: Real, Tzpeak <: Real}
+struct MadauDickinsonSourceFrame{
+    Tγ <: Real, Tκ <: Real, Tzpeak <: Real, TR₀ <: Real
+}
     γ::Tγ
     κ::Tκ
     zpeak::Tzpeak
+    R₀::TR₀
 end
 
-function MadauDickinsonSourceFrame(; γ::Real, κ::Real, zpeak::Real)
-    γ′, κ′, zpeak′ = promote(γ, κ, zpeak)
-    return MadauDickinsonSourceFrame(γ′, κ′, zpeak′)
+function MadauDickinsonSourceFrame(; γ::Real, κ::Real, zpeak::Real, R₀::Real)
+    γ′, κ′, zpeak′, R₀′ = promote(γ, κ, zpeak, R₀)
+    return MadauDickinsonSourceFrame(γ′, κ′, zpeak′, R₀′)
 end
 
 """
     source_frame_distribution(model::MadauDickinsonSourceFrame, z) -> Real
 
-Source-frame merger-rate density at redshift `z` under the Madau–Dickinson model.
-The denominator exponent is `γ + κ`.
+Source-frame merger-rate density at redshift `z`, including the local rate and the
+Gpc³→Mpc³ / yr→sec conversions so that the detector-frame
+[`normalizer`](@ref) is events/sec:
+
+`(1e-9 · R₀ / JULIAN_YEAR_SEC) · ψ_shape(z)`.
 """
 function source_frame_distribution(model::MadauDickinsonSourceFrame, z::Real)
-    return madau_dickinson_source_frame_distribution(
+    shape = madau_dickinson_source_frame_distribution(
         z; γ = model.γ, κ = model.κ, zpeak = model.zpeak)
+    return (1.0e-9 * model.R₀ / JULIAN_YEAR_SEC) * shape
 end
 
 """
@@ -64,5 +76,5 @@ function redshift_prior(
         z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
 )
     sfn = z -> source_frame_distribution(model, z)
-    return RedshiftInterpolatedDistribution(build_redshift_prior(sfn, cosmo, z_grid))
+    return RedshiftInterpolatedDistribution(sfn, cosmo, z_grid)
 end

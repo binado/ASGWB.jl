@@ -79,7 +79,9 @@ begin
             Λ::NamedTuple;
             z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
     )
-        z_d = redshift_prior(MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak), cosmo; z_grid)
+        z_d = redshift_prior(
+            MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀),
+            cosmo; z_grid)
         spin = AlignedSpinChiSimple(a_max = Λ.a_max)
         return product_distribution((
             mass = OrderedUniformSourceMassPair(low = Λ.m_low, high = Λ.m_high),
@@ -96,7 +98,9 @@ begin
             Λ::NamedTuple;
             z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
     )
-        z_d = redshift_prior(MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak), cosmo; z_grid)
+        z_d = redshift_prior(
+            MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀),
+            cosmo; z_grid)
         spin = AlignedSpinChiSimple(a_max = Λ.a_max)
         return product_distribution((
             mass = DefaultBBHMassPair(;
@@ -135,6 +139,7 @@ begin
             γ = 2.7,
             κ = 3.0,
             zpeak = 2.0,
+            R₀ = 161.0,
             m_low = 1.1,
             m_high = 2.5,
             a_max = 0.99,
@@ -149,6 +154,7 @@ begin
             γ = 2.7,
             κ = 3.0,
             zpeak = 2.0,
+            R₀ = 161.0,
             α1 = 1.5,
             α2 = 5.4,
             m_break = 37.5,

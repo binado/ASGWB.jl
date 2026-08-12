@@ -13,9 +13,11 @@ module AstroSGWBImportanceModels
 
 using AstroSGWBDistributions:
                               DEFAULT_Z_GRID,
+                              Interpolated1DDistribution,
                               MadauDickinsonSourceFrame,
+                              RedshiftInterpolatedDistribution,
                               detector_frame_merger_rate_density,
-                              merger_rate_per_sec,
+                              normalizer,
                               source_frame_distribution
 using AstroSGWBCosmology:
                           AbstractCosmology,
@@ -23,8 +25,7 @@ using AstroSGWBCosmology:
                           cosmology,
                           distance_and_volume_grid,
                           gw_em_distance_ratio,
-                          propagation,
-                          trapz
+                          propagation
 using DataInterpolations: LinearInterpolation
 
 export BNSMadauDickinsonImportanceModel,

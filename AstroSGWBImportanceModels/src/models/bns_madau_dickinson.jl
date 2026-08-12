@@ -15,7 +15,8 @@ const AMPLITUDE_PARAMETERS = (:H0, :R₀)
 # merger rate and the importance-weighted polarization-power contraction (the mean energy
 # flux) -- so the full scaling is `f = g_R · g_F`.
 #
-# `R₀` enters only through `merger_rate_per_sec(∫, Λ.R₀)` (linear, and absent from
+# `R₀` enters only through the source-frame amplitude baked into
+# `MadauDickinsonSourceFrame` / `normalizer(redshift_dist)` (linear, and absent from
 # `log_weights`), so `g_R = φ`, `g_F = 1`, `f = φ`.
 #
 # `H0` enters the rate through `dV_c/dz ∝ H0⁻³` and the weights through
@@ -170,7 +171,8 @@ end
     _bns_grid_terms(C, Λ, zg, z) -> (; log_p, d_l, norm)
 
 Single source of truth for the detector-frame redshift log-density at the proposal
-samples, the interpolated EM luminosity distances, and the redshift normalizer.
+samples, the interpolated EM luminosity distances, and the redshift normalizer
+(events/sec).
 
 `prepare_bns_madau_dickinson_model` calls it with `Float64` fiducials and the model's own
 call operator calls it with the live (possibly `ForwardDiff.Dual`) `Λ`. Sharing one code
@@ -185,10 +187,15 @@ function _bns_grid_terms(
         z::AbstractVector{<:Real}
 ) where {C <: AbstractCosmology}
     g = distance_and_volume_grid(cosmology(C, Λ), zg)
-    source_model = MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+    source_model = MadauDickinsonSourceFrame(
+        γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀)
     sfd = source_frame_distribution.(Ref(source_model), zg)
     dN_dz = detector_frame_merger_rate_density.(zg, g.differential_comoving_volume, sfd)
-    norm = trapz(zg, dN_dz)
+    # Wrap an already-built density so we reuse this cosmology grid for `d_L` below;
+    # the cosmology-aware `RedshiftInterpolatedDistribution(sfn, cosmo, zg)` constructor
+    # would recompute `distance_and_volume_grid`.
+    redshift_dist = RedshiftInterpolatedDistribution(Interpolated1DDistribution(zg, dN_dz))
+    Z = normalizer(redshift_dist)
     p = _linear_interpolate(dN_dz, zg, z)
     # No underflow floor, matching astrogwb's `logpdf = log(pdf) - log(integral)`. The
     # density is strictly positive for every z > 0 under a Madau–Dickinson rate, and
@@ -196,9 +203,9 @@ function _bns_grid_terms(
     # way to reach `log(0)` is a sample at exactly z = 0 — where the volume element
     # vanishes and `-Inf` is the honest answer. astrogwb lands on the same value there
     # via `jnp.interp(..., left=0.0)`.
-    log_p = @. log(p) - log(norm)
+    log_p = @. log(p) - log(Z)
     d_l = _linear_interpolate(g.luminosity_distance, zg, z)
-    return (; log_p, d_l, norm)
+    return (; log_p, d_l, norm = Z)
 end
 
 function _linear_interpolate(
@@ -235,6 +242,6 @@ function (model::BNSMadauDickinsonImportanceModel{C, P})(
                      2 * (log(samples.luminosity_distance) - log(t.d_l) - log(Ξ_θ) +
                       model.log_Ξ_fid)
 
-    rate = merger_rate_per_sec(t.norm, Λ.R₀)
+    rate = t.norm
     return (rate, log_weights)
 end

@@ -22,15 +22,16 @@ using AstroSGWBInference: astrosgwb_importance_turing_model, forward_model
 using AstroSGWBImportanceModels:
                                  prepare_bns_madau_dickinson_model
 using AstroSGWB:
-                 merger_rate_per_sec,
                  spectral_density,
                  MadauDickinsonSourceFrame,
+                 Interpolated1DDistribution,
+                 RedshiftInterpolatedDistribution,
+                 normalizer,
                  redshift,
                  cosmology,
                  luminosity_distance,
                  distance_and_volume_grid,
                  detector_frame_merger_rate_density,
-                 trapz,
                  source_frame_distribution,
                  load_catalog,
                  average_mode,
@@ -319,15 +320,16 @@ function _run(;
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
     c0 = cosmology(C, h)
-    # Mirrors what the importance model's hot path now does: one cosmology pass on the
-    # grid, then a trapezoid normalizer without constructing a sampling distribution.
+    # Mirrors the importance-model hot path: one cosmology pass, wrap density as
+    # RedshiftInterpolatedDistribution so normalizer is events/sec.
     grid0 = distance_and_volume_grid(c0, model.z_grid)
     source_model0 = MadauDickinsonSourceFrame(
-        γ = h.γ, κ = h.κ, zpeak = h.zpeak)
+        γ = h.γ, κ = h.κ, zpeak = h.zpeak, R₀ = h.R₀)
     sfd0 = source_frame_distribution.(Ref(source_model0), model.z_grid)
     dN_dz0 = detector_frame_merger_rate_density.(
         model.z_grid, grid0.differential_comoving_volume, sfd0)
-    norm0 = trapz(model.z_grid, dN_dz0)
+    redshift_dist0 = RedshiftInterpolatedDistribution(
+        Interpolated1DDistribution(model.z_grid, dN_dz0))
     rate0, log_weights0 = model(h, samples)
     weights0 = exp.(log_weights0)
     z_samples = redshift(samples)
@@ -375,7 +377,7 @@ function _run(;
     # The fused joint replaces the separate weight/rate atomics: it returns
     # (rate, log_weights) in one cosmology-specific pass.
     suite["stage"]["rate_and_log_weights"] = @benchmarkable $model($h, $samples)
-    suite["stage"]["rate"] = @benchmarkable merger_rate_per_sec($norm0, $(h.R₀))
+    suite["stage"]["rate"] = @benchmarkable normalizer($redshift_dist0)
     suite["stage"]["spectral"] = @benchmarkable spectral_density(
         $polarization_power,
         $rate0;

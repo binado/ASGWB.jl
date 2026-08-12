@@ -18,29 +18,46 @@ end
         @test madau_dickinson_source_frame_distribution(z; γ, κ, zpeak) ≈
               _madau_dickinson_with_denom_exp(z, γ, denom_exp, zpeak)
     end
-    model = MadauDickinsonSourceFrame(; γ, κ, zpeak)
+    R₀ = 161.0
+    model = MadauDickinsonSourceFrame(; γ, κ, zpeak, R₀)
+    amp = 1.0e-9 * R₀ / JULIAN_YEAR_SEC
     @test source_frame_distribution(model, 1.0) ≈
-          madau_dickinson_source_frame_distribution(1.0; γ, κ, zpeak)
+          amp * madau_dickinson_source_frame_distribution(1.0; γ, κ, zpeak)
 end
 
 @testset "redshift prior from cosmology grid" begin
-    Λ = (γ = 2.7, κ = 3.0, zpeak = 2.5)
+    Λ = (γ = 2.7, κ = 3.0, zpeak = 2.5, R₀ = 161.0)
     cosmo = LambdaCDM(67.0, 0.315)
     z_grid = collect(LinRange(0.0, 2.0, 101))
     source_model = MadauDickinsonSourceFrame(
-        γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+        γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀)
     source_frame_fn = z -> source_frame_distribution(source_model, z)
 
-    prior = build_redshift_prior(source_frame_fn, cosmo, z_grid)
+    # Cosmology-aware constructor
+    distribution = RedshiftInterpolatedDistribution(source_frame_fn, cosmo, z_grid)
     grid = distance_and_volume_grid(cosmo, z_grid)
     expected = detector_frame_merger_rate_density.(
         z_grid,
         grid.differential_comoving_volume,
         source_frame_fn.(z_grid)
     )
-    @test prior.x == z_grid
-    @test prior.y ≈ expected
-    @test redshift_integral(prior) === trapz(prior.x, prior.y)
+    @test distribution.dist.x == z_grid
+    @test distribution.dist.y ≈ expected
+    @test normalizer(distribution) === trapz(distribution.dist.x, distribution.dist.y)
+
+    # Shape-only integral × amplitude recovers the same normalizer
+    shape_y = detector_frame_merger_rate_density.(
+        z_grid,
+        grid.differential_comoving_volume,
+        madau_dickinson_source_frame_distribution.(
+            z_grid; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+    )
+    @test normalizer(distribution) ≈
+          (1.0e-9 * Λ.R₀ / JULIAN_YEAR_SEC) * trapz(z_grid, shape_y)
+
+    # Wrap-inner constructor
+    wrapped = RedshiftInterpolatedDistribution(Interpolated1DDistribution(z_grid, expected))
+    @test normalizer(wrapped) ≈ normalizer(distribution)
 
     distribution = redshift_prior(source_model, cosmo; z_grid)
     @test minimum(distribution) == first(z_grid)
@@ -54,13 +71,13 @@ end
 end
 
 @testset "redshift prior preserves AD" begin
-    Λ = (γ = 2.7, κ = 3.0, zpeak = 2.5)
+    Λ = (γ = 2.7, κ = 3.0, zpeak = 2.5, R₀ = 161.0)
     z_grid = collect(LinRange(0.0, 2.0, 101))
     f = Ωm -> begin
         source_model = MadauDickinsonSourceFrame(
-            γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+            γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀)
         distribution = redshift_prior(source_model, LambdaCDM(67.0, Ωm); z_grid)
-        redshift_integral(distribution.prior)
+        normalizer(distribution)
     end
     derivative = ForwardDiff.derivative(f, 0.315)
     @test isfinite(derivative)
