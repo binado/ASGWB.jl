@@ -558,7 +558,7 @@ function profile_turing(;
 
     raw_catalog = _require(cfg, "catalog_path")::String
     catalog_path = _resolve_catalog_path(raw_catalog, settings_dir)
-    detectors = [Detector(n) for n in _require_string_array(cfg, "detectors")]
+    detectors = Detector.(_require_string_array(cfg, "detectors"))
     seed = get(cfg, "seed", nothing)
     observed_csv = get(cfg, "observed_spectral_density_csv", nothing)
     if observed_csv !== nothing

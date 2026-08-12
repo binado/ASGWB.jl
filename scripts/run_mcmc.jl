@@ -181,7 +181,7 @@ function run_mcmc(config_file::String)
     cfg = load_config(config_file)
 
     catalog_path = _resolve_catalog_path(cfg.catalog_path, _REPO_ROOT)
-    detectors = [Detector(n) for n in cfg.detectors]
+    detectors = Detector.(cfg.detectors)
     output_dir = joinpath(_REPO_ROOT, cfg.output_dir)
     output_prefix = cfg.output_prefix
 

@@ -63,7 +63,8 @@ chain = load_chain(chain_path)
 # `importance_relative_ess`, and the amplitude statistics under a marginalized run), which
 # have no fiducial value to plot a truth line against. Restrict to the hyperparameters
 # `FIDUCIALS` actually declares.
-chain_params = [p for p in FlexiChains.parameters(chain) if haskey(FIDUCIALS, Symbol(p))]
+chain_params = filter(
+    p -> haskey(FIDUCIALS, Symbol(p)), FlexiChains.parameters(chain))
 
 # %% [markdown]
 # ## Data

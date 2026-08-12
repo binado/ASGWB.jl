@@ -22,8 +22,8 @@ function _read_psd_table(path::AbstractString)
         end
     end
     isempty(rows) && throw(ArgumentError("no numeric rows in PSD file $(repr(path))"))
-    f = [r[1] for r in rows]
-    v = [r[2] for r in rows]
+    f = first.(rows)
+    v = last.(rows)
     return f, v
 end
 

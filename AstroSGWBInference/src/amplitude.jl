@@ -179,7 +179,7 @@ end
 typically 1024 nodes of scalar arithmetic against an `(nfreq, nsamples)` contraction
 upstream, so it does not register.
 """
-_log_integrand(c::AmplitudeConditional) = [_log_density(c, φ) for φ in c.grid]
+_log_integrand(c::AmplitudeConditional) = _log_density.(c, c.grid)
 
 """
     _trapezoid(y, x) -> Real
@@ -267,7 +267,7 @@ function _fine_mesh(c::AmplitudeConditional)
     hi = c.grid[min(i_hi + 2, n)]
 
     fine = range(lo, hi; length = n)
-    fine_log_y = [_log_density(c, φ) for φ in fine]
+    fine_log_y = _log_density.(c, fine)
     return fine, exp.(fine_log_y .- maximum(fine_log_y))
 end
 

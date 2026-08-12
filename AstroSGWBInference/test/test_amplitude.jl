@@ -109,7 +109,7 @@ end
     # almost the whole grid, so the tabulated CDF is flat there. Unguarded, the
     # linear-in-CDF inversion divides 0/0 and every such draw is NaN.
     sharp = _conditional(1.0, 1.0e5)
-    draws = [rand(Xoshiro(seed), sharp) for seed in 1:500]
+    draws = rand.(Xoshiro.(1:500), Ref(sharp))
     @test all(isfinite, draws)
     @test all(first(sharp.grid) .<= draws .<= last(sharp.grid))
     # Anti-vacuity: the plateau really is there.

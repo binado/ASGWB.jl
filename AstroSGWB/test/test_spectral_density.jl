@@ -57,8 +57,8 @@ end
         expected = 0.4 .* rate .* ((polarization_power * w) ./ nsamples)
         got = spectral_density(polarization_power, rate; weights = w)
         @test ForwardDiff.value.(got) ≈ ForwardDiff.value.(expected)
-        @test [ForwardDiff.partials(x)[1] for x in got] ≈
-              [ForwardDiff.partials(x)[1] for x in expected]
+        @test getindex.(ForwardDiff.partials.(got), 1) ≈
+              getindex.(ForwardDiff.partials.(expected), 1)
     end
 
     @testset "dual weighted contraction handles dual rate and multiple lanes" begin
@@ -73,8 +73,8 @@ end
         got = spectral_density(polarization_power, rate_dual; weights = w)
         @test ForwardDiff.value.(got) ≈ ForwardDiff.value.(expected)
         for lane in 1:2
-            @test [ForwardDiff.partials(x)[lane] for x in got] ≈
-                  [ForwardDiff.partials(x)[lane] for x in expected]
+            @test getindex.(ForwardDiff.partials.(got), lane) ≈
+                  getindex.(ForwardDiff.partials.(expected), lane)
         end
     end
 end
