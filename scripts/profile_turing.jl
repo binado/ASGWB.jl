@@ -30,7 +30,6 @@ using AstroSGWB:
                  cosmology,
                  luminosity_distance,
                  distance_and_volume_grid,
-                 source_frame_distribution,
                  load_catalog,
                  average_mode,
                  effective_psd,
@@ -324,9 +323,7 @@ function _run(;
     source_model0 = MadauDickinsonSourceFrame(
         γ = h.γ, κ = h.κ, zpeak = h.zpeak, R₀ = h.R₀)
     redshift_dist0 = RedshiftInterpolatedDistribution(
-        z -> source_frame_distribution(source_model0, z),
-        grid0.differential_comoving_volume,
-        model.z_grid)
+        source_model0, grid0.differential_comoving_volume, model.z_grid)
     rate0, log_weights0 = model(h, samples)
     weights0 = exp.(log_weights0)
     z_samples = redshift(samples)

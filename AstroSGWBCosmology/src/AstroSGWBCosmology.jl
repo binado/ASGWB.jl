@@ -1,5 +1,7 @@
 module AstroSGWBCosmology
 
+using Trapezoid: trapz, cumtrapz
+
 export AbstractCosmology, LambdaCDM, W0CDM, W0WaCDM,
        AbstractPropagation, GR, ModifiedPropagation,
        E, dark_energy_eos, de_density_ratio,
@@ -13,7 +15,6 @@ export AbstractCosmology, LambdaCDM, W0CDM, W0WaCDM,
        gw_em_distance_ratio,
        apply_gw_distance_correction, apply_gw_distance_correction!
 
-include("cumulative_integral.jl")
 include("conversion.jl")
 include("model.jl")
 include("distance.jl")

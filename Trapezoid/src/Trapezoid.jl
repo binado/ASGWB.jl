@@ -1,3 +1,7 @@
+module Trapezoid
+
+export trapz, cumtrapz
+
 """
     cumtrapz(x, y) -> AbstractVector
 
@@ -36,3 +40,5 @@ function trapz(x::AbstractVector{<:Real}, y::AbstractVector)
     end
     return acc
 end
+
+end # module

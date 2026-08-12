@@ -192,10 +192,7 @@ function _bns_grid_terms(
     # One cosmology pass: reuse `g` for `d_L` below; the volume-array constructor
     # does not recompute `distance_and_volume_grid`.
     redshift_dist = RedshiftInterpolatedDistribution(
-        z -> source_frame_distribution(source_model, z),
-        g.differential_comoving_volume,
-        zg
-    )
+        source_model, g.differential_comoving_volume, zg)
     Z = normalizer(redshift_dist)
     p = _linear_interpolate(redshift_dist.dist.y, zg, z)
     # No underflow floor, matching astrogwb's `logpdf = log(pdf) - log(integral)`. The

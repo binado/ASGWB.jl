@@ -105,7 +105,6 @@ export E,
 
 # Redshift & population
 export madau_dickinson_source_frame_distribution,
-       redshift_prior,
        MadauDickinsonSourceFrame,
        source_frame_distribution,
        DEFAULT_Z_GRID,
@@ -115,6 +114,7 @@ export madau_dickinson_source_frame_distribution,
 # Priors
 export OrderedUniformSourceMassPair,
        AlignedSpinChiSimple,
+       AbstractSourceFrame,
        RedshiftInterpolatedDistribution
 
 # Spectral density

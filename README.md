@@ -8,6 +8,7 @@ The root repository is organized as a monorepo comprised of different small pack
 
 | Path | Role |
 |------|------|
+| [`Trapezoid/`](Trapezoid/) | Shared trapezoidal integration (`trapz` / `cumtrapz`) |
 | [`AstroSGWB/`](AstroSGWB/) | Core library: redshift and spectral-density evaluation, detector PSDs/ORFs, catalog I/O (re-exports cosmology helpers) |
 | [`AstroSGWBInference/`](AstroSGWBInference/) | Inference layer on top of `AstroSGWB`: Turing model construction, log-posterior helpers, chain I/O |
 | [`AstroSGWBImportanceModels/`](AstroSGWBImportanceModels/) | Canonical concrete importance adapters, including the BNS Madau–Dickinson model used by production workflows |

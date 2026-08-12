@@ -1,6 +1,7 @@
 using ForwardDiff
 using Random
 using Distributions: insupport, logpdf
+using Trapezoid: trapz
 
 function _madau_dickinson_with_denom_exp(z, γ, denom_exp, zpeak)
     one_plus_z = 1 + z
@@ -31,14 +32,13 @@ end
     z_grid = collect(LinRange(0.0, 2.0, 101))
     source_model = MadauDickinsonSourceFrame(
         γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀)
-    source_frame_fn = z -> source_frame_distribution(source_model, z)
 
-    # Volume-array constructor (cosmology-decoupled)
+    # Volume-array constructor (cosmology-decoupled, typed source frame)
     grid = distance_and_volume_grid(cosmo, z_grid)
     distribution = RedshiftInterpolatedDistribution(
-        source_frame_fn, grid.differential_comoving_volume, z_grid)
+        source_model, grid.differential_comoving_volume, z_grid)
     expected = @. 4π * grid.differential_comoving_volume *
-                  source_frame_fn(z_grid) / (1 + z_grid)
+                  source_frame_distribution(source_model, z_grid) / (1 + z_grid)
     @test distribution.dist.x == z_grid
     @test distribution.dist.y ≈ expected
     @test normalizer(distribution) === trapz(distribution.dist.x, distribution.dist.y)
@@ -54,7 +54,6 @@ end
     wrapped = RedshiftInterpolatedDistribution(Interpolated1DDistribution(z_grid, expected))
     @test normalizer(wrapped) ≈ normalizer(distribution)
 
-    distribution = redshift_prior(source_model, cosmo; z_grid)
     @test minimum(distribution) == first(z_grid)
     @test maximum(distribution) == last(z_grid)
     @test isfinite(logpdf(distribution, 0.5))
@@ -71,7 +70,9 @@ end
     f = Ωm -> begin
         source_model = MadauDickinsonSourceFrame(
             γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀)
-        distribution = redshift_prior(source_model, LambdaCDM(67.0, Ωm); z_grid)
+        grid = distance_and_volume_grid(LambdaCDM(67.0, Ωm), z_grid)
+        distribution = RedshiftInterpolatedDistribution(
+            source_model, grid.differential_comoving_volume, z_grid)
         normalizer(distribution)
     end
     derivative = ForwardDiff.derivative(f, 0.315)

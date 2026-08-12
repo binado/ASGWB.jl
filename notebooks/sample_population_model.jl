@@ -16,7 +16,8 @@ begin
                      OrderedUniformSourceMassPair,
                      AlignedSpinChiSimple,
                      MadauDickinsonSourceFrame,
-                     redshift_prior,
+                     RedshiftInterpolatedDistribution,
+                     distance_and_volume_grid,
                      luminosity_distance
     using AstroSGWBCosmology: AbstractCosmology
     using AstroSGWBDistributions: DefaultBBHMassPair
@@ -79,9 +80,11 @@ begin
             Λ::NamedTuple;
             z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
     )
-        z_d = redshift_prior(
+        grid = distance_and_volume_grid(cosmo, z_grid)
+        z_d = RedshiftInterpolatedDistribution(
             MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀),
-            cosmo; z_grid)
+            grid.differential_comoving_volume,
+            z_grid)
         spin = AlignedSpinChiSimple(a_max = Λ.a_max)
         return product_distribution((
             mass = OrderedUniformSourceMassPair(low = Λ.m_low, high = Λ.m_high),
@@ -98,9 +101,11 @@ begin
             Λ::NamedTuple;
             z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
     )
-        z_d = redshift_prior(
+        grid = distance_and_volume_grid(cosmo, z_grid)
+        z_d = RedshiftInterpolatedDistribution(
             MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀),
-            cosmo; z_grid)
+            grid.differential_comoving_volume,
+            z_grid)
         spin = AlignedSpinChiSimple(a_max = Λ.a_max)
         return product_distribution((
             mass = DefaultBBHMassPair(;

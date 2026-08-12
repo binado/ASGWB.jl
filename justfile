@@ -2,6 +2,7 @@ fmt:
     julia -e 'using JuliaFormatter; format(".")'
 
 test:
+    julia --project=Trapezoid -e 'using Pkg; Pkg.test()'
     julia --project=AstroSGWBCosmology -e 'using Pkg; Pkg.test()'
     julia --project=AstroSGWB -e 'using Pkg; Pkg.test()'
     julia --project=AstroSGWBInference -e 'using Pkg; Pkg.test()'

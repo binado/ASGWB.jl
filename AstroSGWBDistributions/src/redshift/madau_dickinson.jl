@@ -1,5 +1,5 @@
 export madau_dickinson_source_frame_distribution,
-       MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior
+       MadauDickinsonSourceFrame
 
 """
     madau_dickinson_source_frame_distribution(z; γ, κ, zpeak) -> Real
@@ -24,7 +24,7 @@ function madau_dickinson_source_frame_distribution(
 end
 
 # ---------------------------------------------------------------------------
-# Redshift prior seam: dispatch on source-frame model type
+# Source-frame model: Madau–Dickinson
 # ---------------------------------------------------------------------------
 
 """
@@ -35,7 +35,7 @@ merger rate `R₀` (Gpc⁻³ yr⁻¹).
 """
 struct MadauDickinsonSourceFrame{
     Tγ <: Real, Tκ <: Real, Tzpeak <: Real, TR₀ <: Real
-}
+} <: AbstractSourceFrame
     γ::Tγ
     κ::Tκ
     zpeak::Tzpeak
@@ -60,26 +60,4 @@ function source_frame_distribution(model::MadauDickinsonSourceFrame, z::Real)
     shape = madau_dickinson_source_frame_distribution(
         z; γ = model.γ, κ = model.κ, zpeak = model.zpeak)
     return (1.0e-9 * model.R₀ / JULIAN_YEAR_SEC) * shape
-end
-
-"""
-    redshift_prior(model, cosmology; z_grid) -> RedshiftInterpolatedDistribution
-
-Build the detector-frame redshift distribution on `z_grid` (default
-[`DEFAULT_Z_GRID`](@ref)). Fetches the differential comoving volume from the cosmology
-via [`distance_and_volume_grid`](@ref), then forwards to the volume-array
-[`RedshiftInterpolatedDistribution`](@ref) constructor.
-"""
-function redshift_prior(
-        model::MadauDickinsonSourceFrame,
-        cosmo::AbstractCosmology,
-        ;
-        z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
-)
-    grid = distance_and_volume_grid(cosmo, z_grid)
-    return RedshiftInterpolatedDistribution(
-        z -> source_frame_distribution(model, z),
-        grid.differential_comoving_volume,
-        z_grid
-    )
 end

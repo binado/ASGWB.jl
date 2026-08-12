@@ -1,12 +1,11 @@
 module AstroSGWBDistributions
 
 using DataInterpolations: LinearInterpolation
-import AstroSGWBCosmology
-import AstroSGWBCosmology: AbstractCosmology,
-                           cumtrapz, distance_and_volume_grid, trapz
+using Trapezoid: trapz, cumtrapz
 
-export MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior, DEFAULT_Z_GRID
-export Interpolated1DDistribution, normalizer, RedshiftInterpolatedDistribution
+export MadauDickinsonSourceFrame, source_frame_distribution, DEFAULT_Z_GRID
+export AbstractSourceFrame, Interpolated1DDistribution, normalizer,
+       RedshiftInterpolatedDistribution
 export DefaultBBHPrimaryMass, DefaultBBHMassPair, planck_taper
 export JULIAN_YEAR_SEC, year_to_second, second_to_year
 

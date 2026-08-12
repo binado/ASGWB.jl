@@ -15,8 +15,7 @@ using AstroSGWBDistributions:
                               DEFAULT_Z_GRID,
                               MadauDickinsonSourceFrame,
                               RedshiftInterpolatedDistribution,
-                              normalizer,
-                              source_frame_distribution
+                              normalizer
 using AstroSGWBCosmology:
                           AbstractCosmology,
                           AbstractPropagation,
