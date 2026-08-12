@@ -103,7 +103,6 @@ two must be applied together.
 struct BNSMadauDickinsonImportanceModel{
     C <: AbstractCosmology, P <: AbstractPropagation}
     z_grid::Vector{Float64}
-    z_samples::Vector{Float64}
     proposal_log_pdf::Vector{Float64}
     log_Ξ_fid::Vector{Float64}
 end
@@ -148,9 +147,8 @@ function prepare_bns_madau_dickinson_model(
     all(zg[1] .<= z .<= zg[end]) || throw(ArgumentError(
         "proposal redshifts must lie inside the integration grid " *
         "[$(zg[1]), $(zg[end])]; got extrema $(extrema(z))"))
-    z_samples = collect(Float64, z)
 
-    proposal_log_pdf = _bns_grid_terms(C, fiducials, zg, z_samples).log_p::Vector{Float64}
+    proposal_log_pdf = _bns_grid_terms(C, fiducials, zg, z).log_p::Vector{Float64}
 
     # `Float64[...]` is load-bearing: a `Vector{Dual}` field here would poison the
     # ForwardDiff fast path in `AstroSGWB.spectral_density`, which dispatches on
@@ -165,16 +163,11 @@ function prepare_bns_madau_dickinson_model(
         @info _NON_GR_FIDUCIAL_NOTICE Ξ_fid=extrema(exp, log_Ξ_fid)
     end
 
-    return BNSMadauDickinsonImportanceModel{C, P}(
-        zg,
-        z_samples,
-        proposal_log_pdf,
-        log_Ξ_fid
-    )
+    return BNSMadauDickinsonImportanceModel{C, P}(zg, proposal_log_pdf, log_Ξ_fid)
 end
 
 """
-    _bns_grid_terms(C, Λ, zg, z_samples) -> (; log_p, d_l, norm)
+    _bns_grid_terms(C, Λ, zg, z) -> (; log_p, d_l, norm)
 
 Single source of truth for the detector-frame redshift log-density at the proposal
 samples, the interpolated EM luminosity distances, and the redshift normalizer.
@@ -189,14 +182,14 @@ function _bns_grid_terms(
         ::Type{C},
         Λ::NamedTuple,
         zg::AbstractVector{<:Real},
-        z_samples::AbstractVector{<:Real}
+        z::AbstractVector{<:Real}
 ) where {C <: AbstractCosmology}
     g = distance_and_volume_grid(cosmology(C, Λ), zg)
     source_model = MadauDickinsonSourceFrame(γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
     sfd = source_frame_distribution.(Ref(source_model), zg)
     dN_dz = detector_frame_merger_rate_density.(zg, g.differential_comoving_volume, sfd)
     norm = trapz(zg, dN_dz)
-    p = _linear_interpolate(dN_dz, zg, z_samples)
+    p = _linear_interpolate(dN_dz, zg, z)
     # No underflow floor, matching astrogwb's `logpdf = log(pdf) - log(integral)`. The
     # density is strictly positive for every z > 0 under a Madau–Dickinson rate, and
     # `prepare_bns_madau_dickinson_model` rejects samples outside the grid, so the only
@@ -204,7 +197,7 @@ function _bns_grid_terms(
     # vanishes and `-Inf` is the honest answer. astrogwb lands on the same value there
     # via `jnp.interp(..., left=0.0)`.
     log_p = @. log(p) - log(norm)
-    d_l = _linear_interpolate(g.luminosity_distance, zg, z_samples)
+    d_l = _linear_interpolate(g.luminosity_distance, zg, z)
     return (; log_p, d_l, norm)
 end
 
@@ -235,8 +228,9 @@ function (model::BNSMadauDickinsonImportanceModel{C, P})(
         "model was prepared for $(length(model.proposal_log_pdf)) samples but got " *
         "$(length(samples.redshift))"))
 
-    t = _bns_grid_terms(C, Λ, model.z_grid, model.z_samples)
-    Ξ_θ = gw_em_distance_ratio.(samples.redshift, Ref(propagation(P, Λ)))
+    z = samples.redshift
+    t = _bns_grid_terms(C, Λ, model.z_grid, z)
+    Ξ_θ = gw_em_distance_ratio.(z, Ref(propagation(P, Λ)))
     log_weights = @. t.log_p - model.proposal_log_pdf +
                      2 * (log(samples.luminosity_distance) - log(t.d_l) - log(Ξ_θ) +
                       model.log_Ξ_fid)

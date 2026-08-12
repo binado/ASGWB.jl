@@ -58,7 +58,6 @@ end
     model = prepared()
     @test model isa BNSMadauDickinsonImportanceModel{LambdaCDM, ModifiedPropagation}
     @test model.z_grid isa Vector{Float64}
-    @test model.z_samples == SAMPLES.redshift
     @test model.proposal_log_pdf isa Vector{Float64}
     @test length(model.z_grid) == length(DEFAULT_Z_GRID)
     @test length(model.proposal_log_pdf) == length(SAMPLES.redshift)
@@ -94,7 +93,7 @@ end
     # Λ == fiducials the target density is bit-identical to the cached proposal density.
     # If these ever diverge, every posterior silently acquires a per-sample offset.
     @test AstroSGWBImportanceModels._bns_grid_terms(
-        LambdaCDM, FIDUCIALS, model.z_grid, model.z_samples).log_p ==
+        LambdaCDM, FIDUCIALS, model.z_grid, SAMPLES.redshift).log_p ==
           model.proposal_log_pdf
 
     # The full weight expression vanishes when `d_L_fid` is built through the *same* grid
@@ -104,7 +103,7 @@ end
         distance_and_volume_grid(cosmology(LambdaCDM, FIDUCIALS),
             model.z_grid).luminosity_distance,
         model.z_grid
-    )(model.z_samples)
+    )(z)
     grid_samples = (redshift = z, luminosity_distance = d_l_grid)
     _, w = model(FIDUCIALS, grid_samples)
     @test maximum(abs, w) < 1e-14
