@@ -50,7 +50,7 @@ Julia code, config, and tests onto ASCII names **on netCDF write only**, so the 
 package produces carry the same variable names as the Python `astrogwb` stack's. Applying
 it is [`rename_posterior_for_netcdf`](@ref), which — together with
 [`merge_into_posterior`](@ref) — lives in a package extension and requires
-`InferenceObjects` to be loaded.
+`FlexiChains` to be loaded. Callers then `convert_to_inference_data` + `to_netcdf`.
 """
 module AstroSGWBInference
 
@@ -93,28 +93,29 @@ using .Config: MCMCConfig, SamplerConfig, load_config, save_config, posterior_pa
                NETCDF_PARAMETER_NAMES
 
 """
-    rename_posterior_for_netcdf(idata::InferenceData) -> InferenceData
+    rename_posterior_for_netcdf(chain::FlexiChain) -> FlexiChain
 
-Rename the `posterior` group's variables through [`NETCDF_PARAMETER_NAMES`](@ref),
-immediately before `InferenceObjects.to_netcdf`.
+Rename parameters through [`NETCDF_PARAMETER_NAMES`](@ref), immediately before
+`InferenceObjects.convert_to_inference_data` + `to_netcdf`.
 
 Unicode hyperparameter names (`Ωm`, `Ξ₀`, `γ`, …) stay put in Julia code, config TOML, and
 tests, where they are the physics notation the rest of the repo reads in; only the written
 file gets ASCII names, which is what makes a Julia netCDF and a Python `astrogwb` netCDF
-diffable variable-for-variable.
+diffable variable-for-variable. The live chain used for plots is left alone — rename a
+copy at the file boundary.
 
-Requires `InferenceObjects` to be loaded (this method lives in a package extension).
+Requires `FlexiChains` to be loaded (this method lives in a package extension).
 """
 function rename_posterior_for_netcdf end
 
 """
-    merge_into_posterior(idata::InferenceData, nt::NamedTuple) -> InferenceData
+    merge_into_posterior(chain::FlexiChain, nt::NamedTuple) -> FlexiChain
 
-Add the variables in `nt` to `idata`'s `posterior` group, reusing the group's own `draw`
-and `chain` dimensions so the new arrays align with the sampled ones by construction.
-Used to fold [`reconstruct_amplitude`](@ref)'s outputs into the chain before writing.
+Add the variables in `nt` to `chain`, requiring each value to match `size(chain)` so the
+new arrays align with the sampled ones by construction. Used to fold
+[`reconstruct_amplitude`](@ref)'s outputs into the chain before renaming and writing.
 
-Requires `InferenceObjects` to be loaded (this method lives in a package extension).
+Requires `FlexiChains` to be loaded (this method lives in a package extension).
 """
 function merge_into_posterior end
 

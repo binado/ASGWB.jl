@@ -396,19 +396,17 @@ md"""
 # ╔═╡ 9d3e2f1a-4b5c-4d6e-7f8a-9b0c1d2e3f4a
 begin
     if chain !== nothing
-        idata = InferenceObjects.convert_to_inference_data(chain)
-
+        write_chain = chain
         if amplitude !== nothing
             # Post-processing against the saved chain alone -- no catalog, no
             # (nfreq, nsamples) contraction. Seeded distinctly from the sampler because
             # these are fresh draws from the conditional.
             @info "reconstructing marginalized parameter" parameter = amplitude.name
-            posterior = idata.posterior
             reconstruction = reconstruct_amplitude(
                 Random.Xoshiro(seed + 1),
-                collect(posterior.amplitude_mle),
-                collect(posterior.template_optimal_snr),
-                collect(posterior.template_merger_rate);
+                Array(write_chain[Parameter(@varname(amplitude_mle))]),
+                Array(write_chain[Parameter(@varname(template_optimal_snr))]),
+                Array(write_chain[Parameter(@varname(template_merger_rate))]);
                 amplitude.amplitude_fn,
                 amplitude.merger_rate_fn,
                 prior = amplitude.prior,
@@ -418,8 +416,8 @@ begin
             min_nodes = minimum(reconstruction.quadrature_effective_nodes)
             min_nodes < 30 &&
                 @warn "quadrature grid may not resolve the conditional posterior; increase amplitude_num_nodes" min_effective_nodes=min_nodes threshold=30
-            idata = merge_into_posterior(
-                idata,
+            write_chain = merge_into_posterior(
+                write_chain,
                 merge(
                     NamedTuple{(amplitude.name,)}((reconstruction.parameter,)),
                     (;
@@ -433,7 +431,8 @@ begin
 
         @info "writing chain to netCDF" path = output_nc
         # Unicode hyperparameter names become ASCII at the file boundary only.
-        InferenceObjects.to_netcdf(rename_posterior_for_netcdf(idata), output_nc)
+        idata = InferenceObjects.convert_to_inference_data(rename_posterior_for_netcdf(write_chain))
+        InferenceObjects.to_netcdf(idata, output_nc)
         @info "writing run config to TOML" path = output_toml
         save_config(run_config, output_toml)
         @info "done"
@@ -514,7 +513,7 @@ begin
     using Random
     using Logging
     using FlexiChains
-    using FlexiChains: VNChain
+    using FlexiChains: VNChain, Parameter, @varname
     using PairPlots
     using CairoMakie
     using LaTeXStrings

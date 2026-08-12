@@ -47,7 +47,7 @@ using ADTypes: AutoForwardDiff, AutoEnzyme
 using Enzyme
 using AdvancedHMC: DenseEuclideanMetric
 using Distributions: Uniform
-using FlexiChains: VNChain
+using FlexiChains: VNChain, Parameter, @varname
 using Turing
 using Random
 using Logging
@@ -330,20 +330,17 @@ function run_mcmc(config_file::String)
     )
     @info "NUTS finished" chain_size = size(chain)
 
-    idata = InferenceObjects.convert_to_inference_data(chain)
-
     if amplitude !== nothing
         # Post-processing, against the saved chain alone: no catalog, no (nfreq, nsamples)
         # contraction, O(length(grid)) per draw. The RNG is seeded distinctly from the
         # sampler because these are fresh draws from the conditional, not a deterministic
         # function of the chain.
         @info "reconstructing marginalized parameter" parameter = amplitude.name
-        posterior = idata.posterior
         reconstruction = reconstruct_amplitude(
             Random.Xoshiro(cfg.seed + 1),
-            collect(posterior.amplitude_mle),
-            collect(posterior.template_optimal_snr),
-            collect(posterior.template_merger_rate);
+            Array(chain[Parameter(@varname(amplitude_mle))]),
+            Array(chain[Parameter(@varname(template_optimal_snr))]),
+            Array(chain[Parameter(@varname(template_merger_rate))]);
             amplitude.amplitude_fn,
             amplitude.merger_rate_fn,
             prior = amplitude.prior,
@@ -356,8 +353,8 @@ function run_mcmc(config_file::String)
         # log evidence, so this is the only symptom there is.
         min_nodes < 30 &&
             @warn "quadrature grid may not resolve the conditional posterior; increase amplitude_num_nodes" min_effective_nodes=min_nodes threshold=30
-        idata = merge_into_posterior(
-            idata,
+        chain = merge_into_posterior(
+            chain,
             merge(
                 NamedTuple{(amplitude.name,)}((reconstruction.parameter,)),
                 (;
@@ -372,7 +369,8 @@ function run_mcmc(config_file::String)
     @info "writing chain to netCDF" path = output_nc
     # Unicode hyperparameter names become ASCII at the file boundary only, so this netCDF
     # and a Python `astrogwb` one carry the same variable names.
-    InferenceObjects.to_netcdf(rename_posterior_for_netcdf(idata), output_nc)
+    idata = InferenceObjects.convert_to_inference_data(rename_posterior_for_netcdf(chain))
+    InferenceObjects.to_netcdf(idata, output_nc)
     @info "writing run config to TOML" path = output_toml
     save_config(cfg, output_toml)
     @info "done" output_nc output_toml

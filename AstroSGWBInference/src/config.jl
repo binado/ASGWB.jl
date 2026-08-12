@@ -18,7 +18,8 @@ const SUPPORTED_LIKELIHOODS = ("default", "amplitude_marginalized")
     NETCDF_PARAMETER_NAMES
 
 Unicode hyperparameter name → ASCII netCDF variable name, applied by
-`AstroSGWBInference.rename_posterior_for_netcdf` **on write only**.
+`AstroSGWBInference.rename_posterior_for_netcdf` on a `FlexiChain` **on write only**
+(before `convert_to_inference_data`).
 
 The Unicode names (`Ωm`, `Ξ₀`, `γ`, …) are the physics notation the Julia code, the config
 TOML, and the tests all use, and they stay put. Renaming happens at the file boundary so a
