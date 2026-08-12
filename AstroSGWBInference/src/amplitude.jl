@@ -230,7 +230,7 @@ dense re-mesh:
 function _fine_mesh(c::AmplitudeConditional)
     log_y = _log_integrand(c)
     shifted = exp.(log_y .- maximum(log_y))
-    cdf = cumtrapz(c.grid, shifted)
+    cdf = cumtrapz(shifted, c.grid)
     cdf ./= cdf[end]
 
     n = length(c.grid)
@@ -257,7 +257,7 @@ the MLE amplitude: the factor *is* the normalizing constant of the conditional t
 function log_normalizer(c::AmplitudeConditional)
     log_y = _log_integrand(c)
     log_y_max = maximum(log_y)
-    return log_y_max + log(trapz(c.grid, exp.(log_y .- log_y_max)))
+    return log_y_max + log(trapz(exp.(log_y .- log_y_max), c.grid))
 end
 
 """
@@ -312,7 +312,7 @@ the refined mesh.
 """
 function Distributions.quantile(c::AmplitudeConditional, q::Real)
     fine, fine_shifted = _fine_mesh(c)
-    cdf = cumtrapz(fine, fine_shifted)
+    cdf = cumtrapz(fine_shifted, fine)
     cdf ./= cdf[end]
     return _quantile_from_cdf(cdf, fine, q)
 end

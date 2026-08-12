@@ -41,14 +41,14 @@ end
                   source_frame_distribution(source_model, z_grid) / (1 + z_grid)
     @test distribution.dist.x == z_grid
     @test distribution.dist.y ≈ expected
-    @test normalizer(distribution) === trapz(distribution.dist.x, distribution.dist.y)
+    @test normalizer(distribution) === trapz(distribution.dist.y, distribution.dist.x)
 
     # Shape-only integral × amplitude recovers the same normalizer
     shape = madau_dickinson_source_frame_distribution.(
         z_grid; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
     shape_y = @. 4π * grid.differential_comoving_volume * shape / (1 + z_grid)
     @test normalizer(distribution) ≈
-          (1.0e-9 * Λ.R₀ / JULIAN_YEAR_SEC) * trapz(z_grid, shape_y)
+          (1.0e-9 * Λ.R₀ / JULIAN_YEAR_SEC) * trapz(shape_y, z_grid)
 
     # Wrap-inner constructor
     wrapped = RedshiftInterpolatedDistribution(Interpolated1DDistribution(z_grid, expected))

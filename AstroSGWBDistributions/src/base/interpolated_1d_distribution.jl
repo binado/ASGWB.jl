@@ -24,14 +24,14 @@ function Interpolated1DDistribution(x::AbstractVector, y::AbstractVector)
         "Interpolated1DDistribution grid and density must have the same length"))
     length(x) >= 2 || throw(ArgumentError(
         "Interpolated1DDistribution requires at least two grid points"))
-    Z = trapz(x, y)
+    Z = trapz(y, x)
     return Interpolated1DDistribution(x, y, LinearInterpolation(y, x), Z)
 end
 
 """
     normalizer(d::Interpolated1DDistribution) -> Real
 
-Cached trapezoid integral of the tabulated density (`trapz(d.x, d.y)`).
+Cached trapezoid integral of the tabulated density (`trapz(d.y, d.x)`).
 """
 normalizer(d::Interpolated1DDistribution) = d.Z
 
@@ -56,7 +56,7 @@ end
 
 function Random.rand(rng::AbstractRNG, d::Interpolated1DDistribution)
     target = rand(rng) * d.Z
-    cumulative = cumtrapz(d.x, d.y)
+    cumulative = cumtrapz(d.y, d.x)
     x = d.x
     n = length(cumulative)
     idx = searchsortedlast(cumulative, target)

@@ -3,12 +3,14 @@ module Trapezoid
 export trapz, cumtrapz
 
 """
-    cumtrapz(x, y) -> AbstractVector
+    cumtrapz(y, x) -> AbstractVector
 
 Cumulative trapezoidal integral of `y` over nodes `x`, evaluated at each node.
 `out[1] = 0` and `out[i+1] = out[i] + (x[i+1] - x[i]) * (y[i] + y[i+1]) / 2`.
+
+Argument order matches NumPy's `cumulative_trapezoid(y, x)`.
 """
-function cumtrapz(x::AbstractVector{<:Real}, y::AbstractVector)
+function cumtrapz(y::AbstractVector, x::AbstractVector{<:Real})
     n = length(x)
     length(y) == n || throw(ArgumentError("x and y must have the same length"))
     n >= 1 || throw(ArgumentError("cumtrapz requires at least one grid point"))
@@ -24,12 +26,14 @@ function cumtrapz(x::AbstractVector{<:Real}, y::AbstractVector)
 end
 
 """
-    trapz(x, y) -> Real
+    trapz(y, x) -> Real
 
 Trapezoidal integral of `y` over nodes `x`, using the same accumulation order as
 [`cumtrapz`](@ref).
+
+Argument order matches NumPy's `trapezoid(y, x)` / `trapz(y, x)`.
 """
-function trapz(x::AbstractVector{<:Real}, y::AbstractVector)
+function trapz(y::AbstractVector, x::AbstractVector{<:Real})
     n = length(x)
     length(y) == n || throw(ArgumentError("x and y must have the same length"))
     n >= 1 || throw(ArgumentError("trapz requires at least one grid point"))

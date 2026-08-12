@@ -44,7 +44,7 @@ function distance_and_volume_grid(c::AbstractCosmology, z_grid::AbstractVector{<
         "distance_and_volume_grid requires a strictly increasing grid"))
     inv_E = inv.(E.(z_grid, Ref(c)))
     d_h = SPEED_OF_LIGHT_KM_S / H0(c)
-    d_c = d_h .* cumtrapz(z_grid, inv_E)
+    d_c = d_h .* cumtrapz(inv_E, z_grid)
     return (;
         comoving_distance = d_c,
         luminosity_distance = (1 .+ z_grid) .* d_c,
