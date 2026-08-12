@@ -15,6 +15,7 @@ include("base/broken_power_law.jl")
 include("mass/uniform.jl")
 include("mass/broken_power_law_plus_two_peaks.jl")
 include("spins/aligned.jl")
-include("redshift.jl")
+include("redshift/base.jl")
+include("redshift/madau_dickinson.jl")
 
 end # module
