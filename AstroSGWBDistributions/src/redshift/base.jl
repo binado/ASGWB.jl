@@ -1,7 +1,7 @@
 using Distributions
 using Random
 
-export RedshiftPrior, redshift_integral, redshift_log_prob, merger_rate_per_sec,
+export RedshiftPrior, redshift_integral, merger_rate_per_sec,
        detector_frame_merger_rate_density, expected_number_of_events,
        build_redshift_prior,
        RedshiftInterpolatedDistribution,
@@ -123,14 +123,6 @@ end
     return log(max(pdf_at_value / max(norm, tiny), tiny))
 end
 
-function redshift_log_prob(prior::RedshiftPrior, value::Real)
-    norm = redshift_integral(prior)
-    T = promote_type(eltype(prior.y), typeof(norm))
-    tiny = floatmin(T)
-    pdf_at_value = prior.itp(value)
-    return _normalized_log_density(pdf_at_value, norm, tiny)
-end
-
 """
     redshift_logpdf_eltype(prior::RedshiftPrior) -> Type
 
@@ -158,7 +150,11 @@ end
 
 function Distributions.logpdf(d::RedshiftInterpolatedDistribution, value::Real)
     insupport(d, value) || return -Inf
-    return redshift_log_prob(d.prior, value)
+    norm = redshift_integral(d.prior)
+    T = promote_type(eltype(d.prior.y), typeof(norm))
+    tiny = floatmin(T)
+    pdf_at_value = d.prior.itp(value)
+    return _normalized_log_density(pdf_at_value, norm, tiny)
 end
 
 function Random.rand(rng::AbstractRNG, d::RedshiftInterpolatedDistribution)

@@ -112,7 +112,6 @@ export madau_dickinson_source_frame_distribution,
        MadauDickinsonSourceFrame,
        source_frame_distribution,
        DEFAULT_Z_GRID,
-       redshift_log_prob,
        redshift_integral,
        expected_number_of_events,
        merger_rate_per_sec
