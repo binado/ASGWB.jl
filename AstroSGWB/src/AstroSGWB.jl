@@ -105,7 +105,6 @@ export E,
 
 # Redshift & population
 export madau_dickinson_source_frame_distribution,
-       detector_frame_merger_rate_density,
        redshift_prior,
        MadauDickinsonSourceFrame,
        source_frame_distribution,

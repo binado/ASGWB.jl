@@ -33,25 +33,20 @@ end
         γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀)
     source_frame_fn = z -> source_frame_distribution(source_model, z)
 
-    # Cosmology-aware constructor
-    distribution = RedshiftInterpolatedDistribution(source_frame_fn, cosmo, z_grid)
+    # Volume-array constructor (cosmology-decoupled)
     grid = distance_and_volume_grid(cosmo, z_grid)
-    expected = detector_frame_merger_rate_density.(
-        z_grid,
-        grid.differential_comoving_volume,
-        source_frame_fn.(z_grid)
-    )
+    distribution = RedshiftInterpolatedDistribution(
+        source_frame_fn, grid.differential_comoving_volume, z_grid)
+    expected = @. 4π * grid.differential_comoving_volume *
+                  source_frame_fn(z_grid) / (1 + z_grid)
     @test distribution.dist.x == z_grid
     @test distribution.dist.y ≈ expected
     @test normalizer(distribution) === trapz(distribution.dist.x, distribution.dist.y)
 
     # Shape-only integral × amplitude recovers the same normalizer
-    shape_y = detector_frame_merger_rate_density.(
-        z_grid,
-        grid.differential_comoving_volume,
-        madau_dickinson_source_frame_distribution.(
-            z_grid; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
-    )
+    shape = madau_dickinson_source_frame_distribution.(
+        z_grid; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
+    shape_y = @. 4π * grid.differential_comoving_volume * shape / (1 + z_grid)
     @test normalizer(distribution) ≈
           (1.0e-9 * Λ.R₀ / JULIAN_YEAR_SEC) * trapz(z_grid, shape_y)
 

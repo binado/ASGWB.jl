@@ -6,8 +6,7 @@ import AstroSGWBCosmology: AbstractCosmology,
                            cumtrapz, distance_and_volume_grid, trapz
 
 export MadauDickinsonSourceFrame, source_frame_distribution, redshift_prior, DEFAULT_Z_GRID
-export Interpolated1DDistribution, normalizer, RedshiftInterpolatedDistribution,
-       detector_frame_merger_rate_density
+export Interpolated1DDistribution, normalizer, RedshiftInterpolatedDistribution
 export DefaultBBHPrimaryMass, DefaultBBHMassPair, planck_taper
 export JULIAN_YEAR_SEC, year_to_second, second_to_year
 

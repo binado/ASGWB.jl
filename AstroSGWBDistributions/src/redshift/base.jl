@@ -2,7 +2,6 @@ using Distributions
 using Random
 
 export RedshiftInterpolatedDistribution,
-       detector_frame_merger_rate_density,
        DEFAULT_Z_GRID
 
 """
@@ -16,14 +15,6 @@ enforces these requirements because its cumulative comoving-distance integral as
 `d_c(0) = 0`.
 """
 const DEFAULT_Z_GRID = collect(LinRange(0.0, 20.0, 256))
-
-function detector_frame_merger_rate_density(
-        z::Real,
-        differential_comoving_volume::Real,
-        source_frame_distribution::Real
-)
-    return 4π * differential_comoving_volume * source_frame_distribution / (1 + z)
-end
 
 """
     RedshiftInterpolatedDistribution
@@ -39,25 +30,25 @@ struct RedshiftInterpolatedDistribution{D <: Interpolated1DDistribution} <:
 end
 
 """
-    RedshiftInterpolatedDistribution(source_frame_fn, cosmology, z_grid)
+    RedshiftInterpolatedDistribution(source_frame_fn, differential_comoving_volume, z_grid)
 
-Tabulate the detector-frame redshift density on `z_grid` from `source_frame_fn` and the
-cosmology volume grid, then wrap it as an [`Interpolated1DDistribution`](@ref).
+Tabulate the detector-frame redshift density
+`4π · dV/dz · ψ(z) / (1 + z)` on `z_grid` from `source_frame_fn` and a precomputed
+differential-comoving-volume array, then wrap it as an [`Interpolated1DDistribution`](@ref).
+
+Cosmology-independent: callers supply `differential_comoving_volume` themselves (e.g. from
+[`distance_and_volume_grid`](@ref)). [`redshift_prior`](@ref) is the convenience that
+fetches the volume column from a cosmology.
 """
 function RedshiftInterpolatedDistribution(
         source_frame_fn,
-        cosmo::AbstractCosmology,
+        differential_comoving_volume::AbstractVector{<:Real},
         z_grid::AbstractVector{<:Real}
 )
+    length(differential_comoving_volume) == length(z_grid) || throw(DimensionMismatch(
+        "differential_comoving_volume and z_grid must have the same length"))
     z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
-    grid = distance_and_volume_grid(cosmo, z_grid_f)
-    y = map(eachindex(z_grid_f)) do i
-        @inbounds detector_frame_merger_rate_density(
-            z_grid_f[i],
-            grid.differential_comoving_volume[i],
-            source_frame_fn(z_grid_f[i])
-        )
-    end
+    y = @. 4π * differential_comoving_volume * source_frame_fn(z_grid_f) / (1 + z_grid_f)
     return RedshiftInterpolatedDistribution(Interpolated1DDistribution(z_grid_f, y))
 end
 

@@ -24,14 +24,12 @@ using AstroSGWBImportanceModels:
 using AstroSGWB:
                  spectral_density,
                  MadauDickinsonSourceFrame,
-                 Interpolated1DDistribution,
                  RedshiftInterpolatedDistribution,
                  normalizer,
                  redshift,
                  cosmology,
                  luminosity_distance,
                  distance_and_volume_grid,
-                 detector_frame_merger_rate_density,
                  source_frame_distribution,
                  load_catalog,
                  average_mode,
@@ -320,16 +318,15 @@ function _run(;
     # Intermediate values frozen at θ0 for stage-level benchmarks
     h = θ0
     c0 = cosmology(C, h)
-    # Mirrors the importance-model hot path: one cosmology pass, wrap density as
+    # Mirrors the importance-model hot path: one cosmology pass, volume-array
     # RedshiftInterpolatedDistribution so normalizer is events/sec.
     grid0 = distance_and_volume_grid(c0, model.z_grid)
     source_model0 = MadauDickinsonSourceFrame(
         γ = h.γ, κ = h.κ, zpeak = h.zpeak, R₀ = h.R₀)
-    sfd0 = source_frame_distribution.(Ref(source_model0), model.z_grid)
-    dN_dz0 = detector_frame_merger_rate_density.(
-        model.z_grid, grid0.differential_comoving_volume, sfd0)
     redshift_dist0 = RedshiftInterpolatedDistribution(
-        Interpolated1DDistribution(model.z_grid, dN_dz0))
+        z -> source_frame_distribution(source_model0, z),
+        grid0.differential_comoving_volume,
+        model.z_grid)
     rate0, log_weights0 = model(h, samples)
     weights0 = exp.(log_weights0)
     z_samples = redshift(samples)

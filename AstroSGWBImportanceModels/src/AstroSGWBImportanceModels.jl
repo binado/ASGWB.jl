@@ -13,10 +13,8 @@ module AstroSGWBImportanceModels
 
 using AstroSGWBDistributions:
                               DEFAULT_Z_GRID,
-                              Interpolated1DDistribution,
                               MadauDickinsonSourceFrame,
                               RedshiftInterpolatedDistribution,
-                              detector_frame_merger_rate_density,
                               normalizer,
                               source_frame_distribution
 using AstroSGWBCosmology:

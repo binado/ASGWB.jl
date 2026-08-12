@@ -189,14 +189,15 @@ function _bns_grid_terms(
     g = distance_and_volume_grid(cosmology(C, Λ), zg)
     source_model = MadauDickinsonSourceFrame(
         γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak, R₀ = Λ.R₀)
-    sfd = source_frame_distribution.(Ref(source_model), zg)
-    dN_dz = detector_frame_merger_rate_density.(zg, g.differential_comoving_volume, sfd)
-    # Wrap an already-built density so we reuse this cosmology grid for `d_L` below;
-    # the cosmology-aware `RedshiftInterpolatedDistribution(sfn, cosmo, zg)` constructor
-    # would recompute `distance_and_volume_grid`.
-    redshift_dist = RedshiftInterpolatedDistribution(Interpolated1DDistribution(zg, dN_dz))
+    # One cosmology pass: reuse `g` for `d_L` below; the volume-array constructor
+    # does not recompute `distance_and_volume_grid`.
+    redshift_dist = RedshiftInterpolatedDistribution(
+        z -> source_frame_distribution(source_model, z),
+        g.differential_comoving_volume,
+        zg
+    )
     Z = normalizer(redshift_dist)
-    p = _linear_interpolate(dN_dz, zg, z)
+    p = _linear_interpolate(redshift_dist.dist.y, zg, z)
     # No underflow floor, matching astrogwb's `logpdf = log(pdf) - log(integral)`. The
     # density is strictly positive for every z > 0 under a Madau–Dickinson rate, and
     # `prepare_bns_madau_dickinson_model` rejects samples outside the grid, so the only

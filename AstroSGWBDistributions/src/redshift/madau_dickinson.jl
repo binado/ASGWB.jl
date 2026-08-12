@@ -66,8 +66,9 @@ end
     redshift_prior(model, cosmology; z_grid) -> RedshiftInterpolatedDistribution
 
 Build the detector-frame redshift distribution on `z_grid` (default
-[`DEFAULT_Z_GRID`](@ref)). The cosmology package tabulates distance and volume; this
-module owns the redshift density, normalization, and inverse-CDF sampling state.
+[`DEFAULT_Z_GRID`](@ref)). Fetches the differential comoving volume from the cosmology
+via [`distance_and_volume_grid`](@ref), then forwards to the volume-array
+[`RedshiftInterpolatedDistribution`](@ref) constructor.
 """
 function redshift_prior(
         model::MadauDickinsonSourceFrame,
@@ -75,6 +76,10 @@ function redshift_prior(
         ;
         z_grid::AbstractVector{<:Real} = DEFAULT_Z_GRID
 )
-    sfn = z -> source_frame_distribution(model, z)
-    return RedshiftInterpolatedDistribution(sfn, cosmo, z_grid)
+    grid = distance_and_volume_grid(cosmo, z_grid)
+    return RedshiftInterpolatedDistribution(
+        z -> source_frame_distribution(model, z),
+        grid.differential_comoving_volume,
+        z_grid
+    )
 end
