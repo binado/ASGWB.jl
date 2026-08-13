@@ -2,11 +2,11 @@ using QuadGK
 using Test
 using ForwardDiff
 using BackgroundCosmology: hubble_constant_si, cosmology, cosmology_type,
-                          cosmology_config_name,
-                          SUPPORTED_COSMOLOGIES, comoving_distance, W0CDM, W0WaCDM,
-                          GR, ModifiedPropagation,
-                          propagation, propagation_type, propagation_config_name,
-                          SUPPORTED_PROPAGATIONS
+                           cosmology_config_name,
+                           SUPPORTED_COSMOLOGIES, comoving_distance, W0CDM, W0WaCDM,
+                           GR, ModifiedPropagation,
+                           propagation, propagation_type, propagation_config_name,
+                           SUPPORTED_PROPAGATIONS
 
 @testset "hubble_constant_si" begin
     H0 = 70.0

@@ -57,7 +57,8 @@ end
 
 Tabulate the detector-frame redshift density
 `4π · dV/dz · ψ(z) / (1 + z)` on `z_grid` from an [`AbstractSourceFrame`](@ref) and a
-precomputed differential-comoving-volume array, then wrap it as an
+precomputed, **solid-angle-integrated** differential-comoving-volume array (i.e. the
+`4π` is already included — see [`distance_and_volume_grid`](@ref)), then wrap it as an
 [`Interpolated1DDistribution`](@ref).
 
 Cosmology-independent: callers supply `differential_comoving_volume` themselves (e.g. from
@@ -71,7 +72,7 @@ function RedshiftInterpolatedDistribution(
     length(differential_comoving_volume) == length(z_grid) || throw(DimensionMismatch(
         "differential_comoving_volume and z_grid must have the same length"))
     z_grid_f = z_grid isa AbstractVector{Float64} ? z_grid : collect(Float64, z_grid)
-    y = @. 4π * differential_comoving_volume *
+    y = @. differential_comoving_volume *
            source_frame_distribution(sf, z_grid_f) / (1 + z_grid_f)
     return RedshiftInterpolatedDistribution(Interpolated1DDistribution(z_grid_f, y))
 end

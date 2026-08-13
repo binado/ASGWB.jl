@@ -37,7 +37,7 @@ end
     grid = distance_and_volume_grid(cosmo, z_grid)
     distribution = RedshiftInterpolatedDistribution(
         source_model, grid.differential_comoving_volume, z_grid)
-    expected = @. 4π * grid.differential_comoving_volume *
+    expected = @. grid.differential_comoving_volume *
                   source_frame_distribution(source_model, z_grid) / (1 + z_grid)
     @test distribution.dist.x == z_grid
     @test distribution.dist.y ≈ expected
@@ -46,7 +46,7 @@ end
     # Shape-only integral × amplitude recovers the same normalizer
     shape = madau_dickinson_source_frame_distribution.(
         z_grid; γ = Λ.γ, κ = Λ.κ, zpeak = Λ.zpeak)
-    shape_y = @. 4π * grid.differential_comoving_volume * shape / (1 + z_grid)
+    shape_y = @. grid.differential_comoving_volume * shape / (1 + z_grid)
     @test normalizer(distribution) ≈
           (1.0e-9 * Λ.R₀ / JULIAN_YEAR_SEC) * trapz(shape_y, z_grid)
 
