@@ -13,6 +13,16 @@ function luminosity_distance(z::Real, c::AbstractCosmology)
 end
 
 """
+    hubble_distance(c::AbstractCosmology) -> Real
+
+Hubble distance `d_h = c / H0` in Mpc. The `c` is the speed of light and `H0(c)` the
+present-day Hubble parameter.
+"""
+function hubble_distance(c::AbstractCosmology)
+    SPEED_OF_LIGHT_KM_S / H0(c)
+end
+
+"""
     differential_comoving_volume(z, c) -> Real
 
 Differential comoving volume element `4π · d_h · d_c(z)² / E(z)`, i.e. the
@@ -21,7 +31,7 @@ by the redshift-distribution consumers, so a tabulated grid from
 [`distance_and_volume_grid`](@ref) and this scalar function agree.
 """
 function differential_comoving_volume(z::Real, c::AbstractCosmology)
-    d_h = SPEED_OF_LIGHT_KM_S / H0(c)
+    d_h = hubble_distance(c)
     d_c = comoving_distance(z, c)
     return 4π * d_h * d_c^2 / E(z, c)
 end
@@ -55,7 +65,7 @@ function distance_and_volume_grid(c::AbstractCosmology, z::AbstractVector{<:Real
     all(diff(z) .> 0) || throw(ArgumentError(
         "distance_and_volume_grid requires a strictly increasing grid"))
     inv_E = inv.(E.(z, Ref(c)))
-    d_h = SPEED_OF_LIGHT_KM_S / H0(c)
+    d_h = hubble_distance(c)
     d_c = d_h .* cumtrapz(inv_E, z)
     return (;
         comoving_distance = d_c,

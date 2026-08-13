@@ -6,7 +6,7 @@ using BackgroundCosmology: hubble_constant_si, cosmology, cosmology_type,
                            SUPPORTED_COSMOLOGIES, comoving_distance, W0CDM, W0WaCDM,
                            GR, ModifiedPropagation,
                            propagation, propagation_type, propagation_config_name,
-                           SUPPORTED_PROPAGATIONS
+                           SUPPORTED_PROPAGATIONS, hubble_distance
 
 @testset "hubble_constant_si" begin
     H0 = 70.0
@@ -20,6 +20,9 @@ end
 
     @test E(0.0, c) ≈ 1.0
     @test comoving_distance(0.0, c) ≈ 0.0
+
+    # d_h = c / H0 in Mpc (speed of light in km/s over H0 in km/s/Mpc).
+    @test hubble_distance(c) ≈ 299792.458 / 67.0
 
     z = [0.0, 0.1, 0.2]
     d_l = luminosity_distance.(z, c)
